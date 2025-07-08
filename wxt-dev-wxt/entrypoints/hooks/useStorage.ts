@@ -1,12 +1,14 @@
 import {useState, useEffect} from "react";
+import {StorageValues} from "@/entrypoints/enums/storageValues.ts"
+import { storage } from '#imports';
 
-export function useStorage<T>(key: string, defaultValue: T, storage: storageValues = storageValues.LOCAL) {
+export function useStorage<T>(key: string, defaultValue: T, storageType: StorageValues = StorageValues.LOCAL) {
     const [value, setValue] = useState<T>(defaultValue);
-    const storageKey = `${storage}:${key}`;
+    const storageKey = `${storageType}:${key}`;
 
     useEffect(() => {
         storage.getItem(storageKey).then((storageValue) => {
-            if (storageValue !== undefined && storageValue !== defaultValue) setValue(storageValue);
+            setValue(storageValue ?? defaultValue);
         });
     }, [key]);
 

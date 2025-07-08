@@ -14,6 +14,14 @@
   -webkit-text-size-adjust: 100%;
 }
 
+.App {
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+}
+
+
 a {
   font-weight: 500;
   color: #646cff;
@@ -25,14 +33,12 @@ a:hover {
 
 body {
   margin: 0;
-  display: flex;
-  place-items: center;
-  min-width: 320px;
+  min-width: 350px;
   min-height: 100vh;
 }
 
 h1 {
-  font-size: 3.2em;
+  font-size: 2.2em;
   line-height: 1.1;
 }
 
@@ -69,8 +75,8 @@ button:focus-visible {
 }
 
 .on-button {
-  width: 50px;
-  height: 50px;
+  width: 100px;
+  height: 100px;
 }
 
 .on-button.active  {
@@ -85,8 +91,13 @@ button:focus-visible {
   cursor: pointer;
 }
 
-.centered {
+.inputs {
   display: flex;
-  justify-content: center;
-  align-items: center;
+  flex-direction: column;
+  gap: 1em;
+}
+
+.manual-btn {
+  align-self: center;
+  width: 10em;
 }
