@@ -67,3 +67,26 @@ button:focus-visible {
     background-color: #f9f9f9;
   }
 }
+
+.on-button {
+  width: 50px;
+  height: 50px;
+}
+
+.on-button.active  {
+  color: #60ea67;
+}
+
+.on-button:not(.active) {
+  color: #c0bbbb;
+}
+
+.on-button:hover {
+  cursor: pointer;
+}
+
+.centered {
+  display: flex;
+  justify-content: center;
+  align-items: center;
+}
