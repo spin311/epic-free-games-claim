@@ -1,38 +1,32 @@
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts"
-import {getStorageItems, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {getStorageItem, getStorageItems, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 
 export default defineBackground({
   async main() {
     browser.runtime.onStartup.addListener(() => this.handleStartup());
-    browser.runtime.onMessage.addListener((request) => this.handleMessage(request));
+    browser.runtime.onMessage.addListener((request: MessageRequest) => this.handleMessage(request));
   },
 
   async handleStartup() {
-
     const result =await getStorageItems(["active", "lastOpened", "day"]);
-    console.log(result);
     if (!result.active) return;
-    this.checkLastOpened(result.lastOpened, result.day);
+    this.checkAndClaimIfDue(result.lastOpened, result.day);
   },
 
-  checkLastOpened(lastOpened: string, day: string) {
-    console.log("lastOpened", lastOpened, day);
+  checkAndClaimIfDue(lastOpened: string, day: string) {
     const today = new Date().toLocaleDateString();
     const currentDayName = new Date().toLocaleDateString(undefined, { weekday: 'long' });
     if (lastOpened !== today && day === currentDayName) {
       this.claimGames();
-      setStorageItem(lastOpened, today);
+      void setStorageItem(lastOpened, today);
     }
   },
 
   incrementCounter() {
-    // Implementation here
   },
 
-  claimGames() {
-    console.log("claiming games...");
-    browser.tabs.create({ url: "https://www.epicgames.com" });
-    // Implementation here
+  async claimGames() {
+    browser.tabs.create({ url: "https://store.epicgames.com/" });
   },
 
   handleMessage(request: MessageRequest) {

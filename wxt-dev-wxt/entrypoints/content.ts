@@ -1,6 +1,6 @@
 export default defineContentScript({
-  matches: ['*://*.google.com/*'],
-  main() {
-    console.log('Hello content.');
-  },
+    matches: ['https://store.epicgames.com/*'],
+    main(ctx) {
+        ctx.addListener('message', (message) => {})
+    },
 });

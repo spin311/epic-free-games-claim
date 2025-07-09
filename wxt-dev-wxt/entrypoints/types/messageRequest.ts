@@ -1,3 +1,3 @@
-type MessageRequest = {
+export type MessageRequest = {
     action: string;
 }

@@ -13,23 +13,28 @@ export function useStorage<T>(key: string, defaultValue: T, storageType: Storage
     }, [key]);
 
     useEffect(() => {
-        storage.setItem(storageKey, value);
+        void storage.setItem(storageKey, value);
     }, [key, value]);
 
     return [value, setValue] as const;
 }
 
-export function getStorageItem(key: string, storageType: StorageValues = StorageValues.LOCAL) {
+export async function getStorageItem(key: string, storageType: StorageValues = StorageValues.LOCAL) {
     const storageKey = `${storageType}:${key}`;
     return storage.getItem(storageKey);
 }
 
 export function setStorageItem(key: string, value: any, storageType: StorageValues = StorageValues.LOCAL) {
     const storageKey = `${storageType}:${key}`;
-    storage.setItem(storageKey, value);
+    void storage.setItem(storageKey, value);
 }
 
-export function getStorageItems(keys: string[], storageType: StorageValues = StorageValues.LOCAL) {
+export async function getStorageItems(keys: string[], storageType: StorageValues = StorageValues.LOCAL) {
     const storageKeys: string[] = keys.map((key: string) => `${storageType}:${key}`);
-    return storage.getItems(storageKeys);
+    const items = await storage.getItems(storageKeys);
+    return items.reduce((acc, item) => {
+        const shortKey = item.key.split(":")[1];
+        acc[shortKey] = item.value;
+        return acc;
+    }, {});
 }

@@ -8,18 +8,18 @@ function App() {
     const [day, setDay] = useStorage<Days>("day" ,Days.Friday);
     const [counter, setCounter] = useStorage<number>("counter", 0);
 
-  return (
-    <div className="App">
-      <h1>Epic Free games claim</h1>
-        <p>Games claimed counter: {counter}</p>
-        <OnButton/>
+    return (
+        <div className="App">
+            <h1>Epic Free games claim</h1>
+            <p>Games claimed counter: {counter}</p>
+            <OnButton/>
 
-        <div className="inputs">
-            <button
-                className="manual-btn"
-                onClick={claimGames}
-            >Manually claim</button>
-            <span className="day-select">
+            <div className="inputs">
+                <button
+                    className="manual-btn"
+                    onClick={claimGames}
+                >Manually claim</button>
+                <span className="day-select">
                 <label htmlFor="day">Claim free games every: </label>
                 <select
                     id="day"
@@ -31,16 +31,16 @@ function App() {
                     })}
                 </select>
             </span>
+            </div>
         </div>
-    </div>
-  );
+    );
 
-  function sendMessage(request: MessageRequest) {
-      browser.runtime.sendMessage(request);
-  }
+    function sendMessage(request: MessageRequest) {
+        browser.runtime.sendMessage(request);
+    }
 
     function claimGames() {
-      sendMessage({action: 'claim'})
+        sendMessage({action: 'claim'})
     }
 
 
