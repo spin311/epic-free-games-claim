@@ -2,6 +2,7 @@ import './App.css';
 import OnButton from "@/entrypoints/components/OnButton.tsx";
 import {Days, daysArray} from "@/entrypoints/enums/days.ts";
 import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
+import {MessageRequest} from "@/entrypoints/types/messageRequest.ts"
 
 function App() {
     const [day, setDay] = useStorage<Days>("day" ,Days.Friday);
@@ -14,7 +15,10 @@ function App() {
         <OnButton/>
 
         <div className="inputs">
-            <button className="manual-btn">Manually claim</button>
+            <button
+                className="manual-btn"
+                onClick={claimGames}
+            >Manually claim</button>
             <span className="day-select">
                 <label htmlFor="day">Claim free games every: </label>
                 <select
@@ -30,6 +34,16 @@ function App() {
         </div>
     </div>
   );
+
+  function sendMessage(request: MessageRequest) {
+      browser.runtime.sendMessage(request);
+  }
+
+    function claimGames() {
+      sendMessage({action: 'claim'})
+    }
+
+
 }
 
 export default App;

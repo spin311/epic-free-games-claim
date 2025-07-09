@@ -18,3 +18,18 @@ export function useStorage<T>(key: string, defaultValue: T, storageType: Storage
 
     return [value, setValue] as const;
 }
+
+export function getStorageItem(key: string, storageType: StorageValues = StorageValues.LOCAL) {
+    const storageKey = `${storageType}:${key}`;
+    return storage.getItem(storageKey);
+}
+
+export function setStorageItem(key: string, value: any, storageType: StorageValues = StorageValues.LOCAL) {
+    const storageKey = `${storageType}:${key}`;
+    storage.setItem(storageKey, value);
+}
+
+export function getStorageItems(keys: string[], storageType: StorageValues = StorageValues.LOCAL) {
+    const storageKeys: string[] = keys.map((key: string) => `${storageType}:${key}`);
+    return storage.getItems(storageKeys);
+}
