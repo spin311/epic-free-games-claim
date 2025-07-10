@@ -3,30 +3,34 @@ import {StorageValues} from "@/entrypoints/enums/storageValues.ts"
 import { storage } from '#imports';
 
 export function useStorage<T>(key: string, defaultValue: T, storageType: StorageValues = StorageValues.LOCAL) {
-    const [value, setValue] = useState<T>(defaultValue);
     const storageKey = `${storageType}:${key}`;
+    const [value, setValue] = useState<T>(defaultValue);
+    const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
-        storage.getItem(storageKey).then((storageValue) => {
-            setValue(storageValue ?? defaultValue);
+        storage.getItem(storageKey).then((stored) => {
+            setValue(stored ?? defaultValue);
+            setIsInitialized(true);
         });
-    }, [key]);
+    }, [storageKey]);
 
     useEffect(() => {
-        void storage.setItem(storageKey, value);
-    }, [key, value]);
+        if (isInitialized) {
+            void storage.setItem(storageKey, value);
+        }
+    }, [storageKey, value, isInitialized]);
 
     return [value, setValue] as const;
 }
 
 export async function getStorageItem(key: string, storageType: StorageValues = StorageValues.LOCAL) {
     const storageKey = `${storageType}:${key}`;
-    return storage.getItem(storageKey);
+    return await storage.getItem(storageKey);
 }
 
-export function setStorageItem(key: string, value: any, storageType: StorageValues = StorageValues.LOCAL) {
+export async function setStorageItem(key: string, value: any, storageType: StorageValues = StorageValues.LOCAL) {
     const storageKey = `${storageType}:${key}`;
-    void storage.setItem(storageKey, value);
+    await storage.setItem(storageKey, value);
 }
 
 export async function getStorageItems(keys: string[], storageType: StorageValues = StorageValues.LOCAL) {

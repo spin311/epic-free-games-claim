@@ -1,5 +1,5 @@
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts"
-import {getStorageItem, getStorageItems, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {getStorageItems, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 
 export default defineBackground({
   async main() {
@@ -26,12 +26,37 @@ export default defineBackground({
   },
 
   async claimGames() {
-    browser.tabs.create({ url: "https://store.epicgames.com/" });
+    const tab = await browser.tabs.create({ url: "https://store.epicgames.com/" });
+    if (!tab || !tab.id) return;
+    await this.waitForTabToLoad(tab.id);
+    await browser.tabs.sendMessage(tab.id, { target: "content", action: "claim" });
   },
 
   handleMessage(request: MessageRequest) {
+    if (request.target !== 'background') return;
     if (request.action === 'claim') {
       this.claimGames();
     }
+  },
+  sendMessage(target, action) {
+    browser.runtime.sendMessage({target, action});
+  },
+  async waitForTabToLoad(tabId: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      async function checkTab() {
+        try {
+          const tab = await browser.tabs.get(tabId);
+          if (!tab) reject(new Error("tab not found"));
+          if (tab.status === 'complete') {
+            resolve();
+          } else {
+            setTimeout(checkTab, 100);
+          }
+        } catch (error) {
+          reject(error);
+        }
+      }
+      checkTab();
+    });
   }
 });
