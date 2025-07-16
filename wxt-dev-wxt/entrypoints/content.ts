@@ -1,26 +1,36 @@
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import { browser } from 'wxt/browser';
-import {setStorageItem, getStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun";
 
 export default defineContentScript({
     matches: ['https://store.epicgames.com/*'],
     main(ctx) {
+        if (!oncePerPageRun('_myEpicContentScriptInjected')) {
+            return;
+        }
         browser.runtime.onMessage.addListener((request: MessageRequest) => handleMessage(request));
 
         function handleMessage(request) {
             if (request.target !== 'content') return;
-            if (request.action === 'claim') {
-                void claimGames();
+            if (request.action === 'getFreeGames') {
+                void getFreeGamesList();
+            } else if (request.action === "claimGames") {
+                void claimFreeGames();
             }
         }
-        async function claimGames() {
-            console.log("claiming games");
+
+        async function waitForPageLoad() {
             if (!isDocumentReady) {
                 await new Promise<void>(resolve => {
                     document.addEventListener('DOMContentLoaded', () => resolve(), {once: true});
                 });
             }
+        }
+
+        async function getFreeGamesList() {
+            await waitForPageLoad();
             const games = document.querySelector('section.css-2u323');
             const freeGames = games?.querySelectorAll('a.css-g3jcms:has(div.css-82y1uz)');
             let gamesArr: FreeGame[] = [];
@@ -30,18 +40,82 @@ export default defineContentScript({
                     img: freeGame.getElementsByTagName('img')[0]?.dataset.image ?? '',
                     title: freeGame.getElementsByTagName('h6')[0]?.innerHTML ?? ''
                 };
+                //inside:
+                //<button type="button" data-testid="purchase-cta-button" class="eds_14hl3lj9 eds_14hl3ljb eds_14hl3ljh eds_1ypbntdc eds_14hl3lja eds_14hl3lj2 css-w3asa2"><span class="eds_14hl3lj6"><span>Get</span></span></button>
+                //<button class="payment-btn payment-order-confirm__btn payment-btn--primary"><div class="payment-loading"><div class="payment-loading__container"><span>Place Order</span></div></div></button>
+                //<button class="payment-btn payment-confirm__btn payment-btn--densed payment-btn--primary"><div class="payment-loading"><div class="payment-loading__container"><span>I Accept</span></div></div></button>
                 gamesArr.push(newFreeGame);
+                console.log(gamesArr);
             });
-            console.log(gamesArr);
-            void setStorageItem("freeGames", gamesArr);
+            await setStorageItem("freeGames", gamesArr);
+            await browser.runtime.sendMessage({
+                target: 'background',
+                action: 'freeGamesListCompleted',
+                data: gamesArr
+            });
+        }
+        async function claimFreeGames() {
+            await waitForPageLoad();
+            await clickWhenVisible('[data-testid="purchase-cta-button"]');
+            await clickWhenVisibleIframe('#webPurchaseContainer iframe', 'button.payment-btn.payment-order-confirm__btn');
+            await clickWhenVisibleIframe('#webPurchaseContainer iframe', 'button.payment-confirm__btn.payment-btn--primary');
+        }
 
-            const freeGamesStorage = await getStorageItem("freeGames");
-            console.log(freeGamesStorage);
+        function wait(ms: number) {
+            return new Promise((r) => setTimeout(r, ms));
+        }
+
+        function realClick(el) {
+            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
+            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
+            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
+        }
+
+        async function clickWhenVisible(selector: string, element = document) {
+            const el = await waitForElement(element, selector);
+            realClick(el);
+        }
+
+        async function clickWhenVisibleIframe(iframeSelector: string, buttonSelector: string) {
+            const iframe = await waitForElement(document, iframeSelector);
+            await new Promise<void>((resolve) => {
+                if (iframe.contentDocument?.readyState === 'complete') {
+                    resolve();
+                } else {
+                    iframe.addEventListener('load', () => resolve(), { once: true });
+                }
+            });
+            await wait(2000);
+            const iframeDoc = iframe?.contentDocument || iframe?.contentWindow?.document;
+            await clickWhenVisible(buttonSelector, iframeDoc);
+        }
+
+        async function waitForElement(element, selector: string, timeout = 500, maxRetry = 10) {
+            let retry = 0;
+            while (retry < maxRetry) {
+                const el = element.querySelector(selector) as HTMLElement | null;
+                console.log("waiting for element", el);
+                console.log(element);
+                if (el && isVisible(el)) {
+                    return el;
+                }
+                await wait(timeout);
+                retry++;
+                console.log(`Retry: ${retry}`);
+            }
+        }
+
+        function isVisible(el: HTMLElement) {
+            return el.style.visibility !== 'hidden' && el.style.display !== 'none';
         }
 
         function isDocumentReady() {
             const state = document.readyState;
             return state === 'complete' || state === 'interactive';
+        }
+
+        function getRndInteger(min, max) {
+            return Math.floor(Math.random() * (max - min + 1) ) + min;
         }
     },
 });
