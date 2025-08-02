@@ -6,7 +6,7 @@ import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun";
 
 export default defineContentScript({
     matches: ['https://store.epicgames.com/*'],
-    main(ctx) {
+    main(_) {
         if (!oncePerPageRun('_myEpicContentScriptInjected')) {
             return;
         }
@@ -40,10 +40,6 @@ export default defineContentScript({
                     img: freeGame.getElementsByTagName('img')[0]?.dataset.image ?? '',
                     title: freeGame.getElementsByTagName('h6')[0]?.innerHTML ?? ''
                 };
-                //inside:
-                //<button type="button" data-testid="purchase-cta-button" class="eds_14hl3lj9 eds_14hl3ljb eds_14hl3ljh eds_1ypbntdc eds_14hl3lja eds_14hl3lj2 css-w3asa2"><span class="eds_14hl3lj6"><span>Get</span></span></button>
-                //<button class="payment-btn payment-order-confirm__btn payment-btn--primary"><div class="payment-loading"><div class="payment-loading__container"><span>Place Order</span></div></div></button>
-                //<button class="payment-btn payment-confirm__btn payment-btn--densed payment-btn--primary"><div class="payment-loading"><div class="payment-loading__container"><span>I Accept</span></div></div></button>
                 gamesArr.push(newFreeGame);
                 console.log(gamesArr);
             });
@@ -56,8 +52,11 @@ export default defineContentScript({
         }
         async function claimFreeGames() {
             await waitForPageLoad();
+            await wait(getRndInteger(100, 500));
             await clickWhenVisible('[data-testid="purchase-cta-button"]');
+            await wait(getRndInteger(100, 500));
             await clickWhenVisibleIframe('#webPurchaseContainer iframe', 'button.payment-btn.payment-order-confirm__btn');
+            await wait(getRndInteger(100, 500));
             await clickWhenVisibleIframe('#webPurchaseContainer iframe', 'button.payment-confirm__btn.payment-btn--primary');
         }
 
@@ -73,6 +72,7 @@ export default defineContentScript({
 
         async function clickWhenVisible(selector: string, element = document) {
             const el = await waitForElement(element, selector);
+            await wait(getRndInteger(100, 500));
             realClick(el);
         }
 
