@@ -101,3 +101,33 @@ button:focus-visible {
   align-self: center;
   width: 10em;
 }
+
+.platform-select {
+  gap: 0.5em;
+  display: flex;
+  flex-direction: column;
+}
+
+.platform-select span {
+  display: flex;
+  align-items: center;
+  gap: 0.75em;
+  font-size: 1em;
+  color: #c0bbbb;
+  border-radius: 6px;
+  padding: 0.5em 1em;
+  transition: background 0.2s;
+}
+
+.platform-select input[type="checkbox"] {
+  accent-color: #60ea67;
+  width: 1.2em;
+  height: 1.2em;
+  cursor: pointer;
+}
+
+.platform-select label {
+  cursor: pointer;
+  font-weight: 500;
+  margin: 0;
+}
