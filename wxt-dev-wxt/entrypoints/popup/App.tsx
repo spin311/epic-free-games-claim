@@ -12,15 +12,13 @@ function App() {
     const [steamCheck, setSteamCheck] = useStorage<boolean>("steamCheck", true);
     const [epicCheck, setEpicCheck] = useStorage<boolean>("epicCheck", true);
 
-    console.log("freeGames from storage:", freeGames);
-
     return (
         <div className="App">
             <h1>Epic Free games claim</h1>
-            <p>Games claimed counter: {counter}</p>
+            <p>Games claimed: {counter}</p>
             <OnButton/>
 
-            {/*<GamesList games={freeGames}/>*/}
+            <GamesList games={freeGames}/>
 
             <div className="inputs">
                 <button

@@ -2,6 +2,7 @@ import {MessageRequest} from "@/entrypoints/types/messageRequest.ts"
 import {getStorageItems, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 const EPIC_GAMES_URL = "https://store.epicgames.com/";
+const STEAM_GAMES_URL = "https://store.steampowered.com/search/?sort_by=Price_ASC&maxprice=free&category1=998&specials=1&ndl=1";
 
 export default defineBackground({
   async main() {
@@ -28,7 +29,10 @@ export default defineBackground({
   },
 
   async getFreeGamesList() {
-    await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
+    await setStorageItem("freeGames", []);
+    const { steamCheck, epicCheck } = await getStorageItems(["steamCheck", "epicCheck"]);
+    if (epicCheck) await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
+    if (steamCheck) await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
   },
 
   async claimGames(games: FreeGame[]) {
@@ -49,9 +53,8 @@ export default defineBackground({
     if (request.target !== 'background') return;
     if (request.action === 'claim') {
       this.getFreeGamesList();
-    } else if (request.action === 'freeGamesListCompleted') {
+    } else if (request.action === 'claimFreeGames') {
       const games: FreeGame[] = request.data;
-      if (games.length === 0) return;
       this.claimGames(games);
     }
   },

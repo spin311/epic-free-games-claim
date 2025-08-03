@@ -42,3 +42,23 @@ export async function getStorageItems(keys: string[], storageType: StorageValues
         return acc;
     }, {});
 }
+
+export async function mergeIntoStorageItem(
+    key: string,
+    newValue: any,
+    storageType: StorageValues = StorageValues.LOCAL
+) {
+    const storageKey = `${storageType}:${key}`;
+    const existingValue = await storage.getItem(storageKey);
+    let updatedValue;
+    if (Array.isArray(existingValue)) {
+        updatedValue = [...existingValue, newValue];
+    } else if (typeof existingValue === 'string' || typeof existingValue === 'number') {
+        updatedValue = existingValue + newValue;
+    } else if (existingValue == null) {
+        updatedValue = Array.isArray(newValue) ? newValue : [newValue];
+    } else {
+        throw new Error("mergeIntoStorageItem: Unsupported data type for appending.");
+    }
+    await storage.setItem(storageKey, updatedValue);
+}

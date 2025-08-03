@@ -1,8 +1,17 @@
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import { browser } from 'wxt/browser';
-import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {mergeIntoStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun";
+import {Platforms} from "@/entrypoints/enums/platforms.ts";
+import {
+    getRndInteger,
+    wait,
+    clickWhenVisibleIframe,
+    clickWhenVisible,
+    waitForPageLoad,
+    incrementCounter
+} from "@/entrypoints/utils/helpers.ts";
 
 export default defineContentScript({
     matches: ['https://store.epicgames.com/*'],
@@ -17,15 +26,7 @@ export default defineContentScript({
             if (request.action === 'getFreeGames') {
                 void getFreeGamesList();
             } else if (request.action === "claimGames") {
-                void claimFreeGames();
-            }
-        }
-
-        async function waitForPageLoad() {
-            if (!isDocumentReady) {
-                await new Promise<void>(resolve => {
-                    document.addEventListener('DOMContentLoaded', () => resolve(), {once: true});
-                });
+                void claimCurrentFreeGame();
             }
         }
 
@@ -38,19 +39,22 @@ export default defineContentScript({
                 const newFreeGame = {
                     link: freeGame.href ?? '',
                     img: freeGame.getElementsByTagName('img')[0]?.dataset.image ?? '',
-                    title: freeGame.getElementsByTagName('h6')[0]?.innerHTML ?? ''
+                    title: freeGame.getElementsByTagName('h6')[0]?.innerHTML ?? '',
+                    platform: Platforms.Epic
                 };
                 gamesArr.push(newFreeGame);
-                console.log(gamesArr);
             });
-            await setStorageItem("freeGames", gamesArr);
-            await browser.runtime.sendMessage({
-                target: 'background',
-                action: 'freeGamesListCompleted',
-                data: gamesArr
-            });
+            if (gamesArr.length > 0) {
+                await mergeIntoStorageItem("freeGames", gamesArr);
+                await browser.runtime.sendMessage({
+                    target: 'background',
+                    action: 'claimFreeGames',
+                    data: gamesArr
+                });
+            }
         }
-        async function claimFreeGames() {
+
+        async function claimCurrentFreeGame() {
             await waitForPageLoad();
             await wait(getRndInteger(100, 500));
             await clickWhenVisible('[data-testid="purchase-cta-button"]');
@@ -58,64 +62,7 @@ export default defineContentScript({
             await clickWhenVisibleIframe('#webPurchaseContainer iframe', 'button.payment-btn.payment-order-confirm__btn');
             await wait(getRndInteger(100, 500));
             await clickWhenVisibleIframe('#webPurchaseContainer iframe', 'button.payment-confirm__btn.payment-btn--primary');
-        }
-
-        function wait(ms: number) {
-            return new Promise((r) => setTimeout(r, ms));
-        }
-
-        function realClick(el) {
-            el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
-            el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
-            el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
-        }
-
-        async function clickWhenVisible(selector: string, element = document) {
-            const el = await waitForElement(element, selector);
-            await wait(getRndInteger(100, 500));
-            realClick(el);
-        }
-
-        async function clickWhenVisibleIframe(iframeSelector: string, buttonSelector: string) {
-            const iframe = await waitForElement(document, iframeSelector);
-            await new Promise<void>((resolve) => {
-                if (iframe.contentDocument?.readyState === 'complete') {
-                    resolve();
-                } else {
-                    iframe.addEventListener('load', () => resolve(), { once: true });
-                }
-            });
-            await wait(2000);
-            const iframeDoc = iframe?.contentDocument || iframe?.contentWindow?.document;
-            await clickWhenVisible(buttonSelector, iframeDoc);
-        }
-
-        async function waitForElement(element, selector: string, timeout = 500, maxRetry = 10) {
-            let retry = 0;
-            while (retry < maxRetry) {
-                const el = element.querySelector(selector) as HTMLElement | null;
-                console.log("waiting for element", el);
-                console.log(element);
-                if (el && isVisible(el)) {
-                    return el;
-                }
-                await wait(timeout);
-                retry++;
-                console.log(`Retry: ${retry}`);
-            }
-        }
-
-        function isVisible(el: HTMLElement) {
-            return el.style.visibility !== 'hidden' && el.style.display !== 'none';
-        }
-
-        function isDocumentReady() {
-            const state = document.readyState;
-            return state === 'complete' || state === 'interactive';
-        }
-
-        function getRndInteger(min, max) {
-            return Math.floor(Math.random() * (max - min + 1) ) + min;
+            await incrementCounter();
         }
     },
 });
