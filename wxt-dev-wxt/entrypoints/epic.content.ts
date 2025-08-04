@@ -45,6 +45,7 @@ export default defineContentScript({
                 gamesArr.push(newFreeGame);
             });
             if (gamesArr.length > 0) {
+                console.log(gamesArr);
                 await mergeIntoStorageItem("freeGames", gamesArr);
                 await browser.runtime.sendMessage({
                     target: 'background',

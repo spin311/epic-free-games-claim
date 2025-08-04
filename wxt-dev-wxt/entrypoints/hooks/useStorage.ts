@@ -51,14 +51,15 @@ export async function mergeIntoStorageItem(
     const storageKey = `${storageType}:${key}`;
     const existingValue = await storage.getItem(storageKey);
     let updatedValue;
-    if (Array.isArray(existingValue)) {
-        updatedValue = [...existingValue, newValue];
+    if (existingValue == null || existingValue.length <= 0) {
+        updatedValue = Array.isArray(newValue) ? newValue : [newValue];
     } else if (typeof existingValue === 'string' || typeof existingValue === 'number') {
         updatedValue = existingValue + newValue;
-    } else if (existingValue == null) {
-        updatedValue = Array.isArray(newValue) ? newValue : [newValue];
+    } else if (Array.isArray(existingValue)) {
+        updatedValue = [...existingValue, newValue];
     } else {
         throw new Error("mergeIntoStorageItem: Unsupported data type for appending.");
     }
+    console.log("Merging into storage item:", storageKey, updatedValue);
     await storage.setItem(storageKey, updatedValue);
 }
