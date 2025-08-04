@@ -14,9 +14,7 @@ import {
 export default defineContentScript({
     matches: ['https://store.steampowered.com/*'],
     main(_) {
-        console.log("Running on steam");
         if (!oncePerPageRun('_mySteamContentScriptInjected')) {
-            console.log("Already registered!");
             return;
         }
         browser.runtime.onMessage.addListener((request: MessageRequest) => handleMessage(request));
@@ -58,8 +56,6 @@ export default defineContentScript({
             if (!buyOptions) return;
             for (const buyOption of buyOptions) {
                 if (buyOption && isCurrentGameFree(buyOption)) {
-                    console.log("free game found");
-                    console.log(buyOption);
                     await clickWhenVisible('div.btn_addtocart a', buyOption);
                     await incrementCounter();
                     break;
@@ -69,11 +65,7 @@ export default defineContentScript({
 
         function isCurrentGameFree(el): boolean {
             let gamePrice = el?.querySelector('div.game_purchase_action_bg');
-            console.log(gamePrice);
-            console.log("inner html:");
-            console.log(gamePrice?.querySelector('div.discount_pct')?.innerHTML);
             const shouldReturn = gamePrice?.querySelector('div.discount_pct')?.innerHTML === '-100%';
-            console.log("should return: " + shouldReturn);
             return gamePrice?.querySelector('div.discount_pct')?.innerHTML === '-100%';
         }
     },

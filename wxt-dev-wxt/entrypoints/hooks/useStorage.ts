@@ -60,6 +60,5 @@ export async function mergeIntoStorageItem(
     } else {
         throw new Error("mergeIntoStorageItem: Unsupported data type for appending.");
     }
-    console.log("Merging into storage item:", storageKey, updatedValue);
     await storage.setItem(storageKey, updatedValue);
 }
