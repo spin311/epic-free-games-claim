@@ -3,6 +3,7 @@ import {browser} from "wxt/browser";
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
+import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
 import {mergeIntoStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {
     clickWhenVisible,
@@ -32,6 +33,7 @@ export default defineContentScript({
             await waitForPageLoad();
             const games = document.querySelector('div#search_result_container');
             const freeGames = games?.querySelectorAll('a.search_result_row:not(.ds_owned)');
+            const isLoggedIn: boolean = !!document.querySelector('div#global_actions #account_pulldown');
             let gamesArr: FreeGame[] = [];
             freeGames.forEach((freeGame) => {
                 const newFreeGame = {
@@ -43,10 +45,16 @@ export default defineContentScript({
                 gamesArr.push(newFreeGame);
             });
             await mergeIntoStorageItem("freeGames", gamesArr);
+            if (gamesArr.length === 0) return;
+            const freeGamesResponse: FreeGamesResponse = {
+                freeGames: gamesArr,
+                loggedIn: isLoggedIn
+            };
+            console.log(freeGamesResponse);
             await browser.runtime.sendMessage({
                 target: 'background',
                 action: 'claimFreeGames',
-                data: gamesArr
+                data: freeGamesResponse
             });
         }
 

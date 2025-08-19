@@ -38,8 +38,16 @@ body {
 }
 
 h1 {
-  font-size: 2.2em;
-  line-height: 1.1;
+  font-size: 1.8em;
+  margin: 0.2em 0;
+  text-align: center;
+}
+
+p {
+  margin: 0.5em 0 1em 0;
+  text-align: center;
+  font-size: 1em;
+  color: #c0bbbb;
 }
 
 button {
@@ -94,7 +102,9 @@ button:focus-visible {
 .inputs {
   display: flex;
   flex-direction: column;
-  gap: 1em;
+  align-items: center;
+  gap: 1.5em;
+  width: 100%;
 }
 
 .manual-btn {
@@ -103,20 +113,25 @@ button:focus-visible {
 }
 
 .platform-select {
-  gap: 0.5em;
   display: flex;
   flex-direction: column;
+  gap: 0.75em;
+  width: 100%;
 }
 
 .platform-select span {
   display: flex;
   align-items: center;
-  gap: 0.75em;
-  font-size: 1em;
-  color: #c0bbbb;
+  gap: 0.5em;
+  padding: 0.4em 0.75em;
   border-radius: 6px;
-  padding: 0.5em 1em;
-  transition: background 0.2s;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.platform-select label {
+  flex: 1;
+  font-weight: 500;
+  color: #c0bbbb;
 }
 
 .platform-select input[type="checkbox"] {
@@ -126,8 +141,88 @@ button:focus-visible {
   cursor: pointer;
 }
 
-.platform-select label {
-  cursor: pointer;
+.tabs {
+  display: flex;
+  justify-content: space-around;
+  margin: 1em 0;
+  width: 100%;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+}
+
+.tabs button {
+  flex: 1;
+  padding: 0.6em 1em;
+  border: none;
+  background: transparent;
+  color: rgba(255, 255, 255, 0.7);
+  font-size: 1em;
   font-weight: 500;
+  border-radius: 0;
+  border-bottom: 3px solid transparent;
+  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+}
+
+.tabs button:hover {
+  color: #ffffff;
+  background-color: rgba(255, 255, 255, 0.05);
+}
+
+.tabs button.active {
+  color: #60ea67;
+  border-bottom: 3px solid #60ea67;
+  font-weight: 600;
+}
+
+.tab-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 1em;
+  overflow-y: auto;
+  max-height: 350px;
+  width: 100%;
+  box-sizing: border-box;
+  gap: 1em;
+}
+
+.card {
+  border: 1px solid #ccc;
+  border-radius: 4px;
+  margin-bottom: 10px;
+  padding: 10px;
+  display: flex;
+  align-items: center;
+}
+
+.card img {
+  width: 86px;
+  height: 86px;
+  object-fit: cover;
+  margin-right: 10px;
+}
+
+.card p {
   margin: 0;
+  font-size: 14px;
+}
+
+.day-select {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+  font-size: 1em;
+  color: #c0bbbb;
+  width: 95%;
+  padding: 0.4em 0.75em;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 6px;
+}
+
+.day-select select {
+  padding: 0.3em 0.6em;
+  border-radius: 4px;
+  border: none;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  font-family: inherit;
 }

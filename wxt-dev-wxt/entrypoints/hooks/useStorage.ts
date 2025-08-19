@@ -43,22 +43,40 @@ export async function getStorageItems(keys: string[], storageType: StorageValues
     }, {});
 }
 
-export async function mergeIntoStorageItem(
+function asAppendItems<T>(v: T | T[]): T[] {
+    return Array.isArray(v) ? v : [v];
+}
+
+export async function mergeIntoStorageItem<T>(
     key: string,
-    newValue: any,
+    newValue: T | T[],
     storageType: StorageValues = StorageValues.LOCAL
 ) {
     const storageKey = `${storageType}:${key}`;
     const existingValue = await storage.getItem(storageKey);
-    let updatedValue;
-    if (existingValue == null || existingValue.length <= 0) {
-        updatedValue = Array.isArray(newValue) ? newValue : [newValue];
-    } else if (typeof existingValue === 'string' || typeof existingValue === 'number') {
-        updatedValue = existingValue + newValue;
+
+    let updatedValue: unknown;
+
+    // 1) Nothing stored yet → make an array from newValue
+    if (existingValue == null) {
+        updatedValue = asAppendItems(newValue);
+
+        // 2) Existing is an array → append (deconstruct only if newValue is an array)
     } else if (Array.isArray(existingValue)) {
-        updatedValue = [...existingValue, newValue];
+        updatedValue = existingValue.concat(asAppendItems(newValue));
+
+        // 3) Existing is a string → concat as string
+    } else if (typeof existingValue === 'string') {
+        updatedValue = existingValue + String(newValue);
+
+        // 4) (Optional) keep number-concat like your original
+    } else if (typeof existingValue === 'number') {
+        // This mirrors your previous behavior; switch to String(...) if you prefer string concatenation.
+        updatedValue = (existingValue as number) + (newValue as any);
+
     } else {
-        throw new Error("mergeIntoStorageItem: Unsupported data type for appending.");
+        throw new Error('mergeIntoStorageItem: Unsupported data type for appending.');
     }
+
     await storage.setItem(storageKey, updatedValue);
 }

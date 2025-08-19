@@ -4,6 +4,7 @@ import { browser } from 'wxt/browser';
 import {mergeIntoStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
+import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
 import {
     getRndInteger,
     wait,
@@ -34,6 +35,7 @@ export default defineContentScript({
             await waitForPageLoad();
             const games = document.querySelector('section.css-2u323');
             const freeGames = games?.querySelectorAll('a.css-g3jcms:has(div.css-82y1uz)');
+            const isLoggedIn: boolean = document.querySelector('egs-navigation').getAttribute('isloggedin');
             let gamesArr: FreeGame[] = [];
             freeGames.forEach((freeGame) => {
                 const newFreeGame = {
@@ -45,12 +47,15 @@ export default defineContentScript({
                 gamesArr.push(newFreeGame);
             });
             if (gamesArr.length > 0) {
-                console.log(gamesArr);
+                const freeGamesResponse: FreeGamesResponse = {
+                    freeGames: gamesArr,
+                    loggedIn: isLoggedIn
+                }
                 await mergeIntoStorageItem("freeGames", gamesArr);
                 await browser.runtime.sendMessage({
                     target: 'background',
                     action: 'claimFreeGames',
-                    data: gamesArr
+                    data: freeGamesResponse
                 });
             }
         }

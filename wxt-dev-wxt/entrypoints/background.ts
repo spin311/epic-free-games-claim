@@ -21,11 +21,8 @@ export default defineBackground({
     const currentDayName = new Date().toLocaleDateString(undefined, { weekday: 'long' });
     if (lastOpened !== today && day === currentDayName) {
       this.getFreeGamesList();
-      void setStorageItem(lastOpened, today);
+      void setStorageItem("lastOpened", today);
     }
-  },
-
-  incrementCounter() {
   },
 
   async getFreeGamesList() {
@@ -54,7 +51,8 @@ export default defineBackground({
     if (request.action === 'claim') {
       this.getFreeGamesList();
     } else if (request.action === 'claimFreeGames') {
-      const games: FreeGame[] = request.data;
+      if (request.data?.loggedIn === 'false') return;
+      const games: FreeGame[] = request.data.freeGames;
       this.claimGames(games);
     }
   },
