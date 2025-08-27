@@ -24,11 +24,11 @@
 
 a {
   font-weight: 500;
-  color: #646cff;
+  color: #60ea67;
   text-decoration: inherit;
 }
 a:hover {
-  color: #535bf2;
+  color: #a3ed72;
 }
 
 body {
@@ -83,8 +83,8 @@ button:focus-visible {
 }
 
 .on-button {
-  width: 100px;
-  height: 100px;
+  width: 70px;
+  height: 70px;
 }
 
 .on-button.active  {
@@ -179,7 +179,6 @@ button:focus-visible {
   align-items: center;
   padding: 1em;
   overflow-y: auto;
-  max-height: 350px;
   width: 100%;
   box-sizing: border-box;
   gap: 1em;
@@ -190,20 +189,42 @@ button:focus-visible {
   border-radius: 4px;
   margin-bottom: 10px;
   padding: 10px;
-  display: flex;
   align-items: center;
+}
+.card a {
+  display: grid;
+  grid-template-columns: 1fr 2fr;
+  grid-template-rows: auto auto auto;
+  grid-template-areas:
+    "img title"
+    "img platform"
+    "img .";
+  align-items: center;
+  column-gap: 15px;
+  row-gap: 15px;
 }
 
 .card img {
-  width: 86px;
-  height: 86px;
+    grid-area: img;
+  width: 100%;
+  height: auto;
   object-fit: cover;
   margin-right: 10px;
 }
 
 .card p {
+  justify-self: flex-start;
   margin: 0;
   font-size: 14px;
+}
+
+.card .game-title {
+  grid-area: title;
+  font-weight: bold;
+}
+
+.card .game-platform {
+  grid-area: platform;
 }
 
 .day-select {

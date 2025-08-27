@@ -23,7 +23,7 @@ function App() {
 
             {activeTab === 'main' && (
                 <div className="tab-content">
-                    <h1>Epic Free Games Claim</h1>
+                    <h1>Free Games for Steam & Epic</h1>
                     <p>Games claimed: {counter}</p>
                     <OnButton />
 
@@ -52,7 +52,7 @@ function App() {
                             </span>
                         </div>
                         <span className="day-select">
-                            <label htmlFor="day">Claim free games every: </label>
+                            <label htmlFor="day">Claim games automatically every: </label>
                             <select
                                 id="day"
                                 value={day}

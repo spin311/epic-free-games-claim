@@ -5,8 +5,8 @@ function GameCard({game}: {game: FreeGame}) {
         <div className="card">
             <a href={game.link} target="_blank" rel="noopener noreferrer">
                 <img src={game.img} alt="game"/>
-                <p>{game.title}</p>
-                <p>Platform: {game.platform}</p>
+                <p className="game-title">{game.title}</p>
+                <p className="game-platform">Platform: {game.platform}</p>
             </a>
 
         </div>
