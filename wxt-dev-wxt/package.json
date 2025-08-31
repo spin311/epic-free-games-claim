@@ -2,7 +2,7 @@
   "name": "free-game-claimer-for-steam-epic",
   "description": "script to claim free games on Epic Games Store",
   "private": false,
-  "version": "1.0.0",
+  "version": "1.0.1",
   "type": "module",
   "scripts": {
     "dev": "wxt",

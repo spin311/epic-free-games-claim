@@ -5,6 +5,9 @@ export default defineConfig({
   modules: ['@wxt-dev/module-react'],
   manifest: {
     name: "Free Game Claimer for Steam & Epic",
-    permissions: ['storage', "tabs"],
+    permissions: ['storage', "tabs", "scripting"],
+    host_permissions: [
+      'https://store.steampowered.com/*'
+    ],
   },
 });

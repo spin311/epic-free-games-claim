@@ -60,11 +60,30 @@ export default defineContentScript({
 
         async function claimCurrentFreeGame() {
             await waitForPageLoad();
-            const buyOptions = await waitForElement(document, 'div.game_area_purchase_game', true);
+            const buyOptions = await waitForElement(document, "div.game_area_purchase_game", true);
             if (!buyOptions) return;
+
             for (const buyOption of buyOptions) {
                 if (buyOption && isCurrentGameFree(buyOption)) {
-                    await clickWhenVisible('div.btn_addtocart a', buyOption);
+                    // Find the "Add to Account" anchor
+                    const anchor = await waitForElement(buyOption, "div.btn_addtocart a");
+                    if (!anchor) continue;
+
+                    const href = (anchor as HTMLAnchorElement).getAttribute("href") || "";
+
+                    // Special-case Steam's javascript: URL to avoid CSP violation
+                    const m = href.match(/^javascript:\s*addToCart\(\s*(\d+)\s*\)\s*;?\s*$/i);
+                    if (m) {
+                        const appid = parseInt(m[1], 10);
+                        await browser.runtime.sendMessage({
+                            target: "background",
+                            action: "steamAddToCart",
+                            data: { appid }
+                        });
+                    } else {
+                        await clickWhenVisible("div.btn_addtocart a", buyOption);
+                    }
+
                     await incrementCounter();
                     break;
                 }
