@@ -1,4 +1,5 @@
 export enum Days {
+    Everyday = 'Everyday',
     Monday = 'Monday',
     Tuesday = 'Tuesday',
     Wednesday = 'Wednesday',

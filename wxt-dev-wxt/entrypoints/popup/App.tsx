@@ -1,12 +1,14 @@
 import './App.css';
-import { useState } from 'react';
+import {useState} from 'react';
 import OnButton from "@/entrypoints/components/OnButton.tsx";
-import { Days, daysArray } from "@/entrypoints/enums/days.ts";
-import { useStorage } from "@/entrypoints/hooks/useStorage.ts";
-import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
+import {Days, daysArray} from "@/entrypoints/enums/days.ts";
+import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
 import GamesList from "@/entrypoints/components/GamesList.tsx";
+import {ManualClaimBtn} from "@/entrypoints/components/ManualClaimBtn.tsx";
+
 
 function App() {
+    clearBadge();
     const [activeTab, setActiveTab] = useState<'main' | 'games'>('main');
     const [day, setDay] = useStorage<Days>("day", Days.Friday);
     const [counter] = useStorage<number>("counter", 0);
@@ -25,12 +27,13 @@ function App() {
                 <div className="tab-content">
                     <h1>Free Games for Steam & Epic</h1>
                     <p>Games claimed: {counter}</p>
-                    <OnButton />
+                    <OnButton/>
 
                     <div className="inputs">
-                        <button className="manual-btn" onClick={claimGames}>Manually claim</button>
-                            <span>Log in on <a href="https://store.steampowered.com/login/" target="_blank">Steam</a> and <a
-                                href="https://www.epicgames.com/id/login" target="_blank">Epic games</a> to get free games</span>
+                        <ManualClaimBtn />
+                        <span>Log in on <a href="https://store.steampowered.com/login/" target="_blank">Steam</a> and <a
+                            href="https://www.epicgames.com/id/login"
+                            target="_blank">Epic games</a> to get free games</span>
                         <div className="platform-select">
                             <span>
                                 <input
@@ -52,7 +55,7 @@ function App() {
                             </span>
                         </div>
                         <span className="day-select">
-                            <label htmlFor="day">Claim games automatically every: </label>
+                            <label htmlFor="day">Claim games on: </label>
                             <select
                                 id="day"
                                 value={day}
@@ -75,12 +78,8 @@ function App() {
         </div>
     );
 
-    function sendMessage(request: MessageRequest) {
-        browser.runtime.sendMessage(request);
-    }
-
-    function claimGames() {
-        sendMessage({ action: 'claim', target: 'background' });
+    function clearBadge() {
+        browser.action.setBadgeText({});
     }
 }
 

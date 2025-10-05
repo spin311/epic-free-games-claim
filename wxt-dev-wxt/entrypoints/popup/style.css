@@ -177,11 +177,11 @@ button:focus-visible {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 1em;
   overflow-y: auto;
   width: 100%;
   box-sizing: border-box;
   gap: 1em;
+  padding: 0 1em 1em;
 }
 
 .card {
@@ -246,4 +246,11 @@ button:focus-visible {
   background-color: #1a1a1a;
   color: #ffffff;
   font-family: inherit;
+}
+
+.center {
+  display: flex;
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
 }

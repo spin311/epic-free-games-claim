@@ -10,10 +10,12 @@ const STEAM_GAMES_URL =
 export default defineBackground({
   async main() {
     browser.runtime.onStartup.addListener(() => this.handleStartup());
-    // pass `sender`
+
     browser.runtime.onMessage.addListener((request: MessageRequest, sender) =>
         this.handleMessage(request, sender)
     );
+
+    browser.runtime.onInstalled.addListener((r) => this.handleInstall(r));
   },
 
   async handleStartup() {
@@ -25,7 +27,7 @@ export default defineBackground({
   checkAndClaimIfDue(lastOpened: string, day: string) {
     const today = new Date().toLocaleDateString();
     const currentDayName = new Date().toLocaleDateString(undefined, { weekday: "long" });
-    if (lastOpened !== today && day === currentDayName) {
+    if (lastOpened !== today && (day === currentDayName || day === "Everyday")) {
       this.getFreeGamesList();
       void setStorageItem("lastOpened", today);
     }
@@ -59,7 +61,7 @@ export default defineBackground({
 
         if (typeof fn === "function") {
           try {
-            fn(Number(appId));
+            fn(appId);
             return true;
           } catch (e) {
             console.error("addToCart call failed:", e);
@@ -97,14 +99,13 @@ export default defineBackground({
     if (request.action === "claim") {
       await this.getFreeGamesList();
     } else if (request.action === "claimFreeGames") {
-      if (request.data?.loggedIn === false) return; // boolean, not string
+      if (request.data?.loggedIn === false) return;
       const games: FreeGame[] = request.data.freeGames;
       await this.claimGames(games);
     } else if (request.action === "steamAddToCart") {
       const appId = Number(request.data?.appId ?? request.data?.appid);
       const tabId = sender?.tab?.id;
       if (tabId != null && Number.isFinite(appId)) {
-        // use `this.` and await
         return this.steamAddToCart(tabId, appId);
       } else {
         console.warn("Missing tabId or appId", { tabId, appId, sender });
@@ -138,4 +139,11 @@ export default defineBackground({
       void checkTab();
     });
   },
+
+  handleInstall(r: browser.runtime.InstalledDetails) {
+    if (r.reason === "update") {
+      browser.action.setBadgeBackgroundColor({ color: "#50ca26" });
+      void browser.action.setBadgeText({ text: "NEW" });
+    }
+  }
 });

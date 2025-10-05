@@ -1,4 +1,5 @@
 import GameCard from "@/entrypoints/components/GameCard.tsx";
+import {ManualClaimBtn} from "@/entrypoints/components/ManualClaimBtn.tsx";
 
 function GamesList({ games }: { games: FreeGame[] }): JSX.Element {
     return (
@@ -6,6 +7,9 @@ function GamesList({ games }: { games: FreeGame[] }): JSX.Element {
             {!games || games.length === 0 ? (
                 <div className="no-games">
                     <p>No free games available at the moment. Manually claim games so they appear here.</p>
+                    <span className="center">
+                        <ManualClaimBtn />
+                    </span>
                 </div>
             ) : (
                 <div>
