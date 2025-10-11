@@ -1,4 +1,4 @@
 export enum Platforms {
-    Steam = "steam",
+    Steam = "Steam",
     Epic = "Epic Games"
 }

@@ -51,6 +51,7 @@ export function realClick(el) {
 
 export async function clickWhenVisibleIframe(iframeSelector: string, buttonSelector: string) {
     const iframe = await waitForElement(document, iframeSelector);
+    if (!iframe) return;
     await new Promise<void>((resolve) => {
         if (iframe.contentDocument?.readyState === 'complete') {
             resolve();

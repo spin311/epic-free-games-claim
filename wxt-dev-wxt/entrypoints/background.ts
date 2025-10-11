@@ -1,7 +1,10 @@
 import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
-import { getStorageItems, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
+import {getStorageItem, getStorageItems, mergeIntoStorageItem, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
+import {Platforms} from "@/entrypoints/enums/platforms.ts";
+import { parse } from 'node-html-parser';
 
+const EPIC_API_URL = "https://store-site-backend-static-ipv4.ak.epicgames.com/freeGamesPromotions?locale=en-US";
 const EPIC_GAMES_URL =
     "https://store.epicgames.com/";
 const STEAM_GAMES_URL =
@@ -19,15 +22,14 @@ export default defineBackground({
   },
 
   async handleStartup() {
-    const result = await getStorageItems(["active", "lastOpened", "day"]);
-    if (!result.active) return;
-    this.checkAndClaimIfDue(result.lastOpened, result.day);
+    const result = await getStorageItems(["active", "lastOpened"]);
+    if (!result?.active) return;
+    this.checkAndClaimIfDue(result.lastOpened);
   },
 
-  checkAndClaimIfDue(lastOpened: string, day: string) {
+  checkAndClaimIfDue(lastOpened: string) {
     const today = new Date().toLocaleDateString();
-    const currentDayName = new Date().toLocaleDateString(undefined, { weekday: "long" });
-    if (lastOpened !== today && (day === currentDayName || day === "Everyday")) {
+    if (lastOpened !== today) {
       this.getFreeGamesList();
       void setStorageItem("lastOpened", today);
     }
@@ -36,8 +38,18 @@ export default defineBackground({
   async getFreeGamesList() {
     await setStorageItem("freeGames", []);
     const { steamCheck, epicCheck } = await getStorageItems(["steamCheck", "epicCheck"]);
-    if (epicCheck) await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
-    if (steamCheck) await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
+    try {
+      if (epicCheck) void this.getEpicGamesList();
+    } catch (e) {
+      console.error("getEpicGamesList failed:", e);
+      await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
+    }
+    try {
+      if (steamCheck) void this.getSteamGamesList();
+    } catch (e) {
+      console.error("openTabAndSendActionToContent failed:", e);
+      await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
+    }
   },
 
   async claimGames(games: FreeGame[]) {
@@ -110,6 +122,8 @@ export default defineBackground({
       } else {
         console.warn("Missing tabId or appId", { tabId, appId, sender });
       }
+    } else if (request.action === "getEpicGamesList") {
+        await this.getSteamGamesList();
     }
   },
 
@@ -143,7 +157,100 @@ export default defineBackground({
   handleInstall(r: browser.runtime.InstalledDetails) {
     if (r.reason === "update") {
       browser.action.setBadgeBackgroundColor({ color: "#50ca26" });
-      void browser.action.setBadgeText({ text: "NEW" });
+      void browser.action.setBadgeText({ text: "New" });
     }
+  },
+  async getEpicGamesList() {
+    const response = await fetch(EPIC_API_URL);
+    if (!response.ok) {
+      console.error("Failed to fetch Epic Games data:", response.statusText);
+      return;
+    }
+
+    const data = await response.json();
+    const games = data?.data?.Catalog?.searchStore?.elements || [];
+    const freeGames = games.filter(game =>
+        game.price.totalPrice.discountPrice === 0 &&
+        game.promotions?.promotionalOffers?.length > 0
+    );
+    const futureFreeGames = games.filter(game =>
+        game.promotions?.upcomingPromotionalOffers?.length > 0
+    );
+
+    const currFreeGames: FreeGame[] = await getStorageItem("freeGames");
+    const newGames = freeGames.filter(game =>
+        !currFreeGames.some(g => g.title === game.title)
+    );
+
+    if (newGames.length > 0) {
+      const formattedNewGames: FreeGame[] = newGames.map(game => ({
+        title: game.title,
+        platform: Platforms.Epic,
+        link: `https://www.epicgames.com/store/en-US/p/${game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug}`,
+        img: game.keyImages.find(img => img.type === "Thumbnail")?.url || "",
+        description:game.description,
+        startDate: new Date(game.promotions.promotionalOffers?.[0].promotionalOffers?.[0].startDate).toISOString(),
+        endDate: new Date(game.promotions.promotionalOffers?.[0].promotionalOffers?.[0].endDate).toISOString(),
+        future: false
+      }));
+      this.claimGames(formattedNewGames);
+      await mergeIntoStorageItem("freeGames", formattedNewGames);
+    }
+
+    if (futureFreeGames.length > 0) {
+      const formattedFutureGames = futureFreeGames.map(game => ({
+        title: game.title,
+        link: `https://www.epicgames.com/store/en-US/p/${game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug}`,
+        img: game.keyImages.find(img => img.type === "Thumbnail")?.url || "",
+        platform: Platforms.Epic,
+        description:game.description,
+        startDate: new Date(game.promotions.upcomingPromotionalOffers?.[0].promotionalOffers?.[0].startDate).toISOString(),
+        endDate: new Date(game.promotions.upcomingPromotionalOffers?.[0].promotionalOffers?.[0].endDate).toISOString(),
+        future: true
+      }));
+      await setStorageItem("futureGames", formattedFutureGames);
+    }
+  },
+
+  async getSteamGamesList() {
+    const html = await fetch(STEAM_GAMES_URL).then(r => r.text());
+
+    const root = parse(html);
+
+    const resolveUrl = (u: string) =>
+        u ? new URL(u, 'https://store.steampowered.com').toString() : '';
+
+    const container = root.querySelector('div#search_result_container');
+    const freeGameNodes = container
+        ? container.querySelectorAll('a.search_result_row')
+        : [];
+    if (freeGameNodes.length === 0) return;
+
+    const gamesArr: FreeGame[] = [];
+
+    for (const node of freeGameNodes) {
+      const href = node.getAttribute('href') ?? '';
+      const title = node.querySelector('span.title')?.text?.trim() ?? '';
+
+      const imgEl = node.querySelector('img');
+      const imgRaw =
+          imgEl?.getAttribute('src')?.trim() ||
+          imgEl?.getAttribute('data-src')?.trim() ||
+          imgEl?.getAttribute('data-lazy')?.trim() ||
+          '';
+
+      if (href && title) {
+        gamesArr.push({
+          link: resolveUrl(href),
+          img: imgRaw ? resolveUrl(imgRaw) : '',
+          title,
+          platform: Platforms.Steam,
+        });
+      }
+    }
+
+    if (gamesArr.length === 0) return;
+    this.claimGames(gamesArr);
+    await mergeIntoStorageItem('freeGames', gamesArr);
   }
 });

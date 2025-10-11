@@ -5,4 +5,8 @@ export type FreeGame = {
     platform: Platforms;
     link: string;
     img: string;
+    description?: string;
+    startDate?: string;
+    endDate?: string;
+    future?: boolean;
 }

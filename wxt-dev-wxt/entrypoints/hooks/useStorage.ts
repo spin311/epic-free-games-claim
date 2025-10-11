@@ -33,6 +33,14 @@ export async function setStorageItem(key: string, value: any, storageType: Stora
     await storage.setItem(storageKey, value);
 }
 
+export async function setStorageItems(items: Record<string, any>, storageType: StorageValues = StorageValues.LOCAL) {
+    const storageItems = Object.entries(items).map(([key, value]) => ({
+        key: `${storageType}:${key}`,
+        value
+    }));
+    await storage.setItems(storageItems);
+}
+
 export async function getStorageItems(keys: string[], storageType: StorageValues = StorageValues.LOCAL) {
     const storageKeys: string[] = keys.map((key: string) => `${storageType}:${key}`);
     const items = await storage.getItems(storageKeys);

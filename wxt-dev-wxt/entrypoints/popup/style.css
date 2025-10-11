@@ -34,7 +34,7 @@ a:hover {
 body {
   margin: 0;
   min-width: 350px;
-  min-height: 100vh;
+  min-height: 80vh;
 }
 
 h1 {
@@ -112,29 +112,34 @@ button:focus-visible {
   width: 10em;
 }
 
-.platform-select {
+.checkboxes {
   display: flex;
   flex-direction: column;
   gap: 0.75em;
   width: 100%;
 }
 
-.platform-select span {
+.checkboxes-row {
+  flex-direction: row;
+}
+
+.checkboxes span {
   display: flex;
   align-items: center;
   gap: 0.5em;
   padding: 0.4em 0.75em;
   border-radius: 6px;
   background-color: rgba(255, 255, 255, 0.05);
+  flex-grow: 1;
 }
 
-.platform-select label {
+.checkboxes label {
   flex: 1;
   font-weight: 500;
   color: #c0bbbb;
 }
 
-.platform-select input[type="checkbox"] {
+.checkboxes input[type="checkbox"] {
   accent-color: #60ea67;
   width: 1.2em;
   height: 1.2em;
@@ -185,11 +190,15 @@ button:focus-visible {
 }
 
 .card {
-  border: 1px solid #ccc;
+  border: 1px solid #60ea67;
   border-radius: 4px;
   margin-bottom: 10px;
   padding: 10px;
   align-items: center;
+}
+
+.future {
+  border-color: #ea9a60;
 }
 .card a {
   display: grid;
@@ -198,7 +207,8 @@ button:focus-visible {
   grid-template-areas:
     "img title"
     "img platform"
-    "img .";
+    "img desc"
+    "date-start date-end";
   align-items: center;
   column-gap: 15px;
   row-gap: 15px;
@@ -227,6 +237,27 @@ button:focus-visible {
   grid-area: platform;
 }
 
+.card .game-description {
+  grid-area: desc;
+  font-size: 0.95em;
+  color: #555;
+  margin-top: 6px;
+}
+
+.card .game-date {
+  font-size: 1.0em;
+  color: #888;
+  margin-top: 2px;
+}
+
+.card .date-start {
+    grid-area: date-start;
+}
+
+.card .date-end {
+    grid-area: date-end;
+}
+
 .day-select {
   display: flex;
   align-items: center;
@@ -253,4 +284,8 @@ button:focus-visible {
     flex-direction: column;
     justify-content: center;
     align-items: center;
+}
+
+.mb-2 {
+    margin-bottom: 0.5em;
 }
