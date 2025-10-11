@@ -211,7 +211,7 @@ button:focus-visible {
     "date-start date-end";
   align-items: center;
   column-gap: 15px;
-  row-gap: 15px;
+  row-gap: 5px;
 }
 
 .card img {
@@ -229,6 +229,7 @@ button:focus-visible {
 }
 
 .card .game-title {
+  margin-bottom: 5px;
   grid-area: title;
   font-weight: bold;
 }
@@ -242,6 +243,7 @@ button:focus-visible {
   font-size: 0.95em;
   color: #555;
   margin-top: 6px;
+  text-align: left;
 }
 
 .card .game-date {

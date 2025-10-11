@@ -14,10 +14,7 @@ function freeGamesList() {
     
     return (
         <div>
-            <div className="checkboxes checkboxes-row mb-2">
-            <Checkbox checked={showFutureGames} onChange={e => setShowFutureGames(e.target.checked)} name="Future Games"/>
-            <Checkbox checked={showDesc} onChange={e => setShowDesc(e.target.checked)} name="Descriptions"/>
-            </div>
+
             {!allGames || allGames.length === 0 ? (
                 <div className="no-games">
                     <p>No free games available at the moment. Manually claim games so they appear here.</p>
@@ -27,6 +24,10 @@ function freeGamesList() {
                 </div>
             ) : (
                 <div>
+                    <div className="checkboxes checkboxes-row mb-2">
+                        <Checkbox checked={showFutureGames} onChange={e => setShowFutureGames(e.target.checked)} name="Future Games"/>
+                        <Checkbox checked={showDesc} onChange={e => setShowDesc(e.target.checked)} name="Descriptions"/>
+                    </div>
                     {allGames.map((game, index) => (
                         <GameCard game={game} showDesc={showDesc} key={index} />
                     ))}
