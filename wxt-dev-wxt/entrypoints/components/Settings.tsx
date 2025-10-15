@@ -25,6 +25,7 @@ function Settings() {
                     <Checkbox checked={epicCheck} onChange={e => setEpicCheck(e.target.checked)} name="Epic Games"/>
                 </div>
             </div>
+            <span>Free games are claimed every day on browser start</span>
         </div>
     );
 }
