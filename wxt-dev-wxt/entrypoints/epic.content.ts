@@ -1,7 +1,7 @@
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import { browser } from 'wxt/browser';
-import {mergeIntoStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {mergeIntoStorageItem, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
@@ -51,7 +51,7 @@ export default defineContentScript({
                     freeGames: gamesArr,
                     loggedIn: isLoggedIn
                 }
-                await mergeIntoStorageItem("freeGames", gamesArr);
+                await setStorageItem("epicGames", gamesArr);
                 await browser.runtime.sendMessage({
                     target: 'background',
                     action: 'claimFreeGames',

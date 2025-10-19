@@ -4,7 +4,7 @@ import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
-import {mergeIntoStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {mergeIntoStorageItem, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {
     clickWhenVisible,
     incrementCounter,
@@ -44,8 +44,8 @@ export default defineContentScript({
                 };
                 gamesArr.push(newFreeGame);
             });
-            await mergeIntoStorageItem("freeGames", gamesArr);
             if (gamesArr.length === 0) return;
+            await setStorageItem("steamGames", gamesArr);
             const freeGamesResponse: FreeGamesResponse = {
                 freeGames: gamesArr,
                 loggedIn: isLoggedIn

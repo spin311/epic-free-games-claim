@@ -5,7 +5,9 @@ import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import Checkbox from "@/entrypoints/components/Checkbox.tsx";
 
 function freeGamesList() {
-    const [freeGames] = useStorage<FreeGame[]>("freeGames", []);
+    const [steamGames] = useStorage<FreeGame[]>("steamGames", []);
+    const [EpicGames] = useStorage<FreeGame[]>("epicGames", []);
+    const freeGames = [...steamGames, ...EpicGames];
     const [futureGames] = useStorage<FreeGame[]>("futureGames", []);
     const [showFutureGames, setShowFutureGames] = useStorage<boolean>("showFutureGames", true);
     const [showDesc, setShowDesc] = useStorage<boolean>("showDesc", true);

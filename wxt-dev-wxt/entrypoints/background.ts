@@ -36,7 +36,6 @@ export default defineBackground({
   },
 
   async getFreeGamesList() {
-    await setStorageItem("freeGames", []);
     const { steamCheck, epicCheck } = await getStorageItems(["steamCheck", "epicCheck"]);
     try {
       if (epicCheck) void this.getEpicGamesList();
@@ -174,12 +173,12 @@ export default defineBackground({
         game.promotions?.promotionalOffers?.length > 0
     );
     const futureFreeGames = games.filter(game =>
-        game.promotions?.upcomingPromotionalOffers?.length > 0
+        game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]?.discountSetting?.discountPercentage === 0
     );
 
-    const currFreeGames: FreeGame[] = await getStorageItem("freeGames");
+    const currFreeGames: FreeGame[] = await getStorageItem("epicGames");
     const newGames = freeGames.filter(game =>
-        !currFreeGames.some(g => g.title === game.title)
+        !currFreeGames.some(g => g?.title === game?.title)
     );
 
     if (newGames.length > 0) {
@@ -193,8 +192,8 @@ export default defineBackground({
         endDate: new Date(game.promotions.promotionalOffers?.[0].promotionalOffers?.[0].endDate).toISOString(),
         future: false
       }));
+      void setStorageItem("epicGames", [...currFreeGames, ...formattedNewGames]);
       this.claimGames(formattedNewGames);
-      await mergeIntoStorageItem("freeGames", formattedNewGames);
     }
 
     if (futureFreeGames.length > 0) {
@@ -249,8 +248,13 @@ export default defineBackground({
       }
     }
 
-    if (gamesArr.length === 0) return;
-    this.claimGames(gamesArr);
-    await mergeIntoStorageItem('freeGames', gamesArr);
+    const currFreeGames: FreeGame[] = await getStorageItem("steamGames");
+    const newGames: FreeGame[] = gamesArr.filter(game =>
+        !currFreeGames.some(g => g?.title === game?.title)
+    );
+    if (newGames.length === 0) return;
+
+    this.claimGames(newGames);
+    await setStorageItem('steamGames', newGames);
   }
 });
