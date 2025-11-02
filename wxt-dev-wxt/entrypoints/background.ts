@@ -38,20 +38,21 @@ export default defineBackground({
   async getFreeGamesList() {
     const { steamCheck, epicCheck } = await getStorageItems(["steamCheck", "epicCheck"]);
     try {
-      if (epicCheck) void this.getEpicGamesList();
+      void this.getEpicGamesList(epicCheck);
     } catch (e) {
       console.error("getEpicGamesList failed:", e);
-      await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
+      if (epicCheck) await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
     }
     try {
-      if (steamCheck) void this.getSteamGamesList();
+      void this.getSteamGamesList(steamCheck);
     } catch (e) {
       console.error("openTabAndSendActionToContent failed:", e);
-      await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
+      if (steamCheck) await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
     }
   },
 
   async claimGames(games: FreeGame[]) {
+    void this.setBadgeText(games.length.toString());
     for (const game of games) {
       await this.openTabAndSendActionToContent(game.link, "claimGames");
       await this.wait(10_000);
@@ -108,6 +109,7 @@ export default defineBackground({
     if (request.target !== "background") return;
 
     if (request.action === "claim") {
+      await this.clearGamesList();
       await this.getFreeGamesList();
     } else if (request.action === "claimFreeGames") {
       if (request.data?.loggedIn === false) return;
@@ -121,8 +123,6 @@ export default defineBackground({
       } else {
         console.warn("Missing tabId or appId", { tabId, appId, sender });
       }
-    } else if (request.action === "getEpicGamesList") {
-        await this.getSteamGamesList();
     }
   },
 
@@ -156,10 +156,10 @@ export default defineBackground({
   handleInstall(r: browser.runtime.InstalledDetails) {
     if (r.reason === "update") {
       browser.action.setBadgeBackgroundColor({ color: "#50ca26" });
-      void browser.action.setBadgeText({ text: "New" });
+      void this.setBadgeText("New");
     }
   },
-  async getEpicGamesList() {
+  async getEpicGamesList(shouldClaim: boolean = true) {
     const response = await fetch(EPIC_API_URL);
     if (!response.ok) {
       console.error("Failed to fetch Epic Games data:", response.statusText);
@@ -193,7 +193,7 @@ export default defineBackground({
         future: false
       }));
       void setStorageItem("epicGames", [...currFreeGames, ...formattedNewGames]);
-      this.claimGames(formattedNewGames);
+      if (shouldClaim) this.claimGames(formattedNewGames);
     }
 
     if (futureFreeGames.length > 0) {
@@ -211,7 +211,7 @@ export default defineBackground({
     }
   },
 
-  async getSteamGamesList() {
+  async getSteamGamesList(shouldClaim: boolean = true) {
     const html = await fetch(STEAM_GAMES_URL).then(r => r.text());
 
     const root = parse(html);
@@ -254,7 +254,17 @@ export default defineBackground({
     );
     if (newGames.length === 0) return;
 
-    this.claimGames(newGames);
+    if (shouldClaim) this.claimGames(newGames);
     await setStorageItem('steamGames', newGames);
+  },
+
+  async clearGamesList() {
+    await setStorageItem("epicGames", []);
+    await setStorageItem("futureGames", []);
+    await setStorageItem("steamGames", []);
+  },
+
+  async setBadgeText(text: string) {
+    await browser.action.setBadgeText({ text });
   }
 });

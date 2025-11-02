@@ -3,7 +3,7 @@ import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
 import GamesList from "@/entrypoints/components/GamesList.tsx";
 import {ActiveTabs} from "@/entrypoints/enums/activeTabs.ts";
 import Settings from "@/entrypoints/components/Settings.tsx";
-
+import Footer from "@/entrypoints/components/Footer.tsx";
 
 function App() {
     clearBadge();
@@ -12,18 +12,23 @@ function App() {
     return (
         <div className="App">
             <div className="tabs">
-                <button onClick={() => setActiveTab(ActiveTabs.MAIN)} className={activeTab === ActiveTabs.MAIN ? 'active' : ''}>Settings</button>
-                <button onClick={() => setActiveTab(ActiveTabs.FREE_GAMES)} className={activeTab === ActiveTabs.FREE_GAMES ? 'active' : ''}>Free Games</button>
+                <button onClick={() => setActiveTab(ActiveTabs.MAIN)}
+                        className={activeTab === ActiveTabs.MAIN ? 'active' : ''}>Settings
+                </button>
+                <button onClick={() => setActiveTab(ActiveTabs.FREE_GAMES)}
+                        className={activeTab === ActiveTabs.FREE_GAMES ? 'active' : ''}>Free Games
+                </button>
             </div>
-        {activeTab === ActiveTabs.MAIN && (
+            {activeTab === ActiveTabs.MAIN && (
                 <Settings/>
-        )}
+            )}
 
-        {activeTab === ActiveTabs.FREE_GAMES && (
-            <div className="tab-content">
-                <GamesList />
-            </div>
-        )}
+            {activeTab === ActiveTabs.FREE_GAMES && (
+                <div className="tab-content">
+                    <GamesList/>
+                </div>
+            )}
+            <Footer/>
         </div>
     );
 

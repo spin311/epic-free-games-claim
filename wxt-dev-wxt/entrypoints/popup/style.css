@@ -291,3 +291,14 @@ button:focus-visible {
 .mb-2 {
     margin-bottom: 0.5em;
 }
+
+.footer {
+  width: 100%;
+  display: flex;
+  justify-content: space-around;
+}
+
+.footer span {
+  padding: 0.5em;
+  font-size: 1.2em;
+}
