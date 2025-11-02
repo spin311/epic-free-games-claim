@@ -63,6 +63,18 @@ export default defineContentScript({
         async function claimCurrentFreeGame() {
             await waitForPageLoad();
             await wait(getRndInteger(100, 500));
+
+            // Handle "Device not supported" modal safely
+            const modal = document.querySelector('.ReactModal__Content');
+            if (modal) {
+                const continueBtn = Array.from(modal.querySelectorAll('button'))
+                    .find(btn => btn.textContent?.trim() === 'Continue');
+                if (continueBtn) {
+                    (continueBtn as HTMLButtonElement).click();
+                    await wait(getRndInteger(100, 500));
+                }
+            }
+            
             await clickWhenVisible('[data-testid="purchase-cta-button"]');
             await wait(getRndInteger(100, 500));
             await clickWhenVisibleIframe('#webPurchaseContainer iframe', 'button.payment-btn.payment-order-confirm__btn');
