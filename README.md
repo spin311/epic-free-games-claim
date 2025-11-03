@@ -45,7 +45,7 @@ git clone https://github.com/spin311/epic-free-games-claim.git cd epic-free-game
 
 4. Build for production:
 
-`npx wxt build --browser=chrome` or `wxt build -b firefox --mv3 ` 
+`npx wxt build --browser=chrome` or `npx wxt build -b firefox --mv3 ` 
 
 ### Load Extension
 
