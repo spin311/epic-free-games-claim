@@ -1,4 +1,5 @@
 import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
+import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
 
 function OnButton() {
     const [active, setActive] = useStorage<boolean>("active", true);
@@ -25,6 +26,11 @@ function OnButton() {
 
     function toggleActive() {
         setActive(!active);
+        sendMessage({ action: "updateActive", target: "background" });
+    }
+
+    function sendMessage(request: MessageRequest) {
+        browser.runtime.sendMessage(request);
     }
 }
 

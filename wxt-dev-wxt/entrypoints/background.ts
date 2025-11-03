@@ -2,6 +2,7 @@ import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
 import {getStorageItem, getStorageItems, mergeIntoStorageItem, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
+import { ClaimFrequency, ClaimFrequencyMinutes } from "@/entrypoints/enums/claimFrequency.ts";
 import { parse } from 'node-html-parser';
 
 const EPIC_API_URL = "https://store-site-backend-static-ipv4.ak.epicgames.com/freeGamesPromotions?locale=en-US";
@@ -9,6 +10,8 @@ const EPIC_GAMES_URL =
     "https://store.epicgames.com/";
 const STEAM_GAMES_URL =
     "https://store.steampowered.com/search/?sort_by=Price_ASC&maxprice=free&category1=998&specials=1&ndl=1";
+
+const ALARM_NAME = "checkFreeGames";
 
 export default defineBackground({
   async main() {
@@ -19,19 +22,103 @@ export default defineBackground({
     );
 
     browser.runtime.onInstalled.addListener((r) => this.handleInstall(r));
+
+    browser.alarms.onAlarm.addListener((alarm) => {
+      if (alarm.name === ALARM_NAME) {
+        void this.handleAlarmTriggered();
+      }
+    });
+
+    // Initialize alarms on startup
+    await this.initializeAlarms();
   },
 
   async handleStartup() {
-    const result = await getStorageItems(["active", "lastOpened"]);
+    const result = await getStorageItems(["active", "claimFrequency"]);
     if (!result?.active) return;
-    this.checkAndClaimIfDue(result.lastOpened);
+
+    const frequency = result.claimFrequency || ClaimFrequency.DAILY;
+    
+    // Always check on startup, regardless of frequency setting
+    // The checkAndClaimIfDue method handles the frequency-specific logic
+    await this.checkAndClaimIfDue(frequency);
   },
 
-  checkAndClaimIfDue(lastOpened: string) {
+  async handleAlarmTriggered() {
+    const result = await getStorageItems(["active", "claimFrequency"]);
+    if (!result?.active) return;
+
+    const frequency = result.claimFrequency || ClaimFrequency.DAILY;
+    await this.checkAndClaimIfDue(frequency);
+  },
+
+  async checkAndClaimIfDue(frequency: ClaimFrequency) {
     const today = new Date().toLocaleDateString();
-    if (lastOpened !== today) {
+    
+    if (frequency === ClaimFrequency.DAILY) {
+      // For daily, only check if date changed
+      const lastOpened = await getStorageItem("lastOpened");
+      if (lastOpened !== today) {
+        this.getFreeGamesList();
+        void setStorageItem("lastOpened", today);
+      }
+    } else if (frequency === ClaimFrequency.BROWSER_START) {
+      // For browser start only, check if date changed
+      const lastOpened = await getStorageItem("lastOpened");
+      if (lastOpened !== today) {
+        this.getFreeGamesList();
+        void setStorageItem("lastOpened", today);
+      }
+    } else {
+      // For hourly/6h/12h, always check when alarm fires
+      // Update timestamp to track last check
+      const now = new Date().toISOString();
       this.getFreeGamesList();
-      void setStorageItem("lastOpened", today);
+      void setStorageItem("lastChecked", now);
+    }
+  },
+
+  async initializeAlarms() {
+    const result = await getStorageItems(["active", "claimFrequency"]);
+    if (!result?.active) {
+      // Clear alarm if extension is disabled
+      try {
+        await browser.alarms.clear(ALARM_NAME);
+      } catch (e) {
+        // Alarm might not exist, ignore error
+      }
+      return;
+    }
+
+    const frequency = result.claimFrequency || ClaimFrequency.DAILY;
+    
+    if (frequency === ClaimFrequency.BROWSER_START) {
+      // Clear alarm if set to browser start only
+      try {
+        await browser.alarms.clear(ALARM_NAME);
+      } catch (e) {
+        // Alarm might not exist, ignore error
+      }
+      return;
+    }
+
+    const minutes = ClaimFrequencyMinutes[frequency];
+    if (minutes > 0) {
+      // Check if alarm already exists with correct period
+      try {
+        const existingAlarm = await browser.alarms.get(ALARM_NAME);
+        if (existingAlarm && existingAlarm.periodInMinutes === minutes) {
+          // Alarm already set correctly, no need to update
+          return;
+        }
+      } catch (e) {
+        // Alarm doesn't exist, will create it
+      }
+
+      // Create or update alarm
+      await browser.alarms.create(ALARM_NAME, {
+        periodInMinutes: minutes
+      });
     }
   },
 
@@ -123,6 +210,12 @@ export default defineBackground({
       } else {
         console.warn("Missing tabId or appId", { tabId, appId, sender });
       }
+    } else if (request.action === "updateFrequency") {
+      // Frequency setting changed, reinitialize alarms
+      await this.initializeAlarms();
+    } else if (request.action === "updateActive") {
+      // Active toggle changed, reinitialize alarms
+      await this.initializeAlarms();
     }
   },
 
@@ -176,7 +269,7 @@ export default defineBackground({
         game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]?.discountSetting?.discountPercentage === 0
     );
 
-    const currFreeGames: FreeGame[] = await getStorageItem("epicGames");
+    const currFreeGames: FreeGame[] = await getStorageItem("epicGames") || [];
     const newGames = freeGames.filter(game =>
         !currFreeGames.some(g => g?.title === game?.title)
     );
@@ -248,7 +341,7 @@ export default defineBackground({
       }
     }
 
-    const currFreeGames: FreeGame[] = await getStorageItem("steamGames");
+    const currFreeGames: FreeGame[] = await getStorageItem("steamGames") || [];
     const newGames: FreeGame[] = gamesArr.filter(game =>
         !currFreeGames.some(g => g?.title === game?.title)
     );
