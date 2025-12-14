@@ -191,7 +191,7 @@ export default defineBackground({
         title: game.title ?? "",
         platform: Platforms.Epic,
         link: `https://www.epicgames.com/store/en-US/p/${
-            game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug || ""
+            game.productSlug || game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug || ""
         }`,
         img: game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ?? "",
         description: game.description ?? "",
@@ -211,7 +211,7 @@ export default defineBackground({
     if (futureFreeGames.length > 0) {
       const formattedFutureGames: FreeGame[] = futureFreeGames.map(game => ({
         title: game.title ?? "",
-        link: `https://www.epicgames.com/store/en-US/p/${game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug}`,
+        link: `https://www.epicgames.com/store/en-US/p/${game.productSlug || game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug}`,
         img: game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ?? "",
         platform: Platforms.Epic,
         description:game.description,

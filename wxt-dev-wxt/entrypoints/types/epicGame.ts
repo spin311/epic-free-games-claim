@@ -9,6 +9,7 @@ export type EpicPromotionOffer = {
 export type EpicElement = {
     title?: string;
     description?: string;
+    productSlug?: string;
 
     price?: {
         totalPrice?: {
