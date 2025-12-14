@@ -4,23 +4,23 @@ import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
-import {mergeIntoStorageItem, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {
     clickWhenVisible,
-    incrementCounter,
+    incrementCounter, waitForAllElements,
     waitForElement,
     waitForPageLoad
 } from "@/entrypoints/utils/helpers.ts";
 
 export default defineContentScript({
     matches: ['https://store.steampowered.com/*'],
-    main(_) {
-        if (!oncePerPageRun('_mySteamContentScriptInjected')) {
+    main(_: any) {
+        if (!oncePerPageRun('_mySteamContentScriptInjected' as keyof Window)) {
             return;
         }
         browser.runtime.onMessage.addListener((request: MessageRequest) => handleMessage(request));
 
-        function handleMessage(request) {
+        function handleMessage(request: MessageRequest) {
             if (request.target !== 'content') return;
             if (request.action === 'getFreeGames') {
                 void getFreeGamesList();
@@ -32,10 +32,10 @@ export default defineContentScript({
         async function getFreeGamesList() {
             await waitForPageLoad();
             const games = document.querySelector('div#search_result_container');
-            const freeGames = games?.querySelectorAll('a.search_result_row:not(.ds_owned)');
+            const freeGames = games?.querySelectorAll('a.search_result_row:not(.ds_owned)') as NodeListOf<HTMLAnchorElement>;
             const isLoggedIn: boolean = !!document.querySelector('div#global_actions #account_pulldown');
             let gamesArr: FreeGame[] = [];
-            freeGames.forEach((freeGame) => {
+            freeGames?.forEach((freeGame) => {
                 const newFreeGame = {
                     link: freeGame.href ?? '',
                     img: freeGame.getElementsByTagName('img')[0]?.src ?? '',
@@ -60,7 +60,7 @@ export default defineContentScript({
 
         async function claimCurrentFreeGame() {
             await waitForPageLoad();
-            const buyOptions = await waitForElement(document, "div.game_area_purchase_game", true);
+            const buyOptions = await waitForAllElements(document, "div.game_area_purchase_game");
             if (!buyOptions) return;
 
             for (const buyOption of buyOptions) {
@@ -90,9 +90,8 @@ export default defineContentScript({
             }
         }
 
-        function isCurrentGameFree(el): boolean {
+        function isCurrentGameFree(el: { querySelector: (arg0: string) => any; }): boolean {
             let gamePrice = el?.querySelector('div.game_purchase_action_bg');
-            const shouldReturn = gamePrice?.querySelector('div.discount_pct')?.innerHTML === '-100%';
             return gamePrice?.querySelector('div.discount_pct')?.innerHTML === '-100%';
         }
     },

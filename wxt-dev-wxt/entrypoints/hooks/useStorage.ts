@@ -1,6 +1,7 @@
 import {useState, useEffect} from "react";
 import {StorageValues} from "@/entrypoints/enums/storageValues.ts"
 import { storage } from '#imports';
+import {StorageItem} from "@/entrypoints/types/storageItem.ts";
 
 export function useStorage<T>(key: string, defaultValue: T, storageType: StorageValues = StorageValues.LOCAL) {
     const storageKey = `${storageType}:${key}`;
@@ -8,7 +9,7 @@ export function useStorage<T>(key: string, defaultValue: T, storageType: Storage
     const [isInitialized, setIsInitialized] = useState(false);
 
     useEffect(() => {
-        storage.getItem(storageKey).then((stored) => {
+        storage.getItem(storageKey).then((stored: any) => {
             setValue(stored ?? defaultValue);
             setIsInitialized(true);
         });
@@ -34,7 +35,7 @@ export async function setStorageItem(key: string, value: any, storageType: Stora
 }
 
 export async function setStorageItems(items: Record<string, any>, storageType: StorageValues = StorageValues.LOCAL) {
-    const storageItems = Object.entries(items).map(([key, value]) => ({
+    const storageItems: StorageItem[] = Object.entries(items).map(([key, value]) => ({
         key: `${storageType}:${key}`,
         value
     }));
@@ -44,7 +45,7 @@ export async function setStorageItems(items: Record<string, any>, storageType: S
 export async function getStorageItems(keys: string[], storageType: StorageValues = StorageValues.LOCAL) {
     const storageKeys: string[] = keys.map((key: string) => `${storageType}:${key}`);
     const items = await storage.getItems(storageKeys);
-    return items.reduce((acc, item) => {
+    return items.reduce((acc: { [x: string]: any; }, item: StorageItem) => {
         const shortKey = item.key.split(":")[1];
         acc[shortKey] = item.value;
         return acc;
