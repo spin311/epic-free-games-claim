@@ -7,7 +7,7 @@ This project helps users discover and claim free games with minimal effort.
 
 ## Features
 
-- **Automatic Claiming:** Claims free games on a chosen day of the week.
+- **Automatic Claiming:** Configurable frequency options - claim games every hour, 6 hours, 12 hours, daily, or only on browser start.
 - **Manual Claim:** Instantly claim available free games with a button.
 - **Platform Selection:** Enable/disable Steam or Epic Games checks.
 - **Games List:** View all currently available free games.
@@ -19,7 +19,7 @@ This project helps users discover and claim free games with minimal effort.
 - TypeScript & JavaScript
 - React 19
 - WXT (Web Extension Toolkit)
-- Browser APIs (storage, tabs, scripting)
+- Browser APIs (storage, tabs, scripting, alarms)
 
 ## Getting Started
 
@@ -41,11 +41,11 @@ git clone https://github.com/spin311/epic-free-games-claim.git cd epic-free-game
 
 3. Start development mode:
 
-`run dev -- --browser=chrome` or `run dev -- --browser=firefox`
+`npm run dev -- --browser=chrome` or `npm run dev -- --browser=firefox`
 
 4. Build for production:
 
-`npx wxt build --browser=chrome` or `wxt build -b firefox --mv3 ` 
+`npx wxt build --browser=chrome` or `npx wxt build -b firefox --mv3 ` 
 
 ### Load Extension
 
@@ -54,7 +54,12 @@ git clone https://github.com/spin311/epic-free-games-claim.git cd epic-free-game
 ## Usage
 
 - Open the extension popup.
-- Configure your preferred platforms and claim day.
+- Configure your preferred platforms and claim frequency:
+  - **On Browser Start Only:** Only checks when the browser is fully restarted
+  - **Every Hour:** Checks for new games every hour
+  - **Every 6 Hours:** Checks every 6 hours
+  - **Every 12 Hours:** Checks every 12 hours
+  - **Once Daily:** Checks once per day (default)
 - Click "Manually claim" to fetch and claim free games instantly.
 - Switch to the "Free Games" tab to view all available free games.
 
