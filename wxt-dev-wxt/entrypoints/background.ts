@@ -1,9 +1,9 @@
-import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
-import {getStorageItem, getStorageItems, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
-import { FreeGame } from "@/entrypoints/types/freeGame.ts";
+import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
+import {getStorageItem, getStorageItems, setStorageItem, setStorageItems} from "@/entrypoints/hooks/useStorage.ts";
+import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
-import { ClaimFrequency, ClaimFrequencyMinutes } from "@/entrypoints/enums/claimFrequency.ts";
-import { parse } from 'node-html-parser';
+import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFrequency.ts";
+import {parse} from 'node-html-parser';
 import {browser} from "wxt/browser";
 import {EpicElement, EpicKeyImage, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
 
@@ -14,6 +14,7 @@ const STEAM_GAMES_URL =
     "https://store.steampowered.com/search/?sort_by=Price_ASC&maxprice=free&category1=998&specials=1&ndl=1";
 
 const ALARM_NAME = "checkFreeGames";
+let isChecking = false;
 
 export default defineBackground({
   async main() {
@@ -56,52 +57,50 @@ export default defineBackground({
   },
 
   async checkAndClaimIfDue(frequency: ClaimFrequency) {
-    const today = new Date().toLocaleDateString();
-    
-    if (frequency === ClaimFrequency.DAILY) {
-      // For daily, only check if date changed
+    if (isChecking) return;
+    isChecking = true;
+    try {
+      const today = new Date().toISOString();
       const lastOpened = await getStorageItem("lastOpened");
-      if (lastOpened !== today) {
-        this.getFreeGamesList();
-        void setStorageItem("lastOpened", today);
+      if (!lastOpened) {
+        this.getFreeGamesAndSetOpenedFlag(today);
+        return;
       }
-    } else if (frequency === ClaimFrequency.BROWSER_START) {
-      // For browser start only, check if date changed
-      const lastOpened = await getStorageItem("lastOpened");
-      if (lastOpened !== today) {
-        this.getFreeGamesList();
-        void setStorageItem("lastOpened", today);
-      }
-    } else {
-      // For hourly/6h/12h, check if enough time has passed since last check
-      const requiredMinutes = ClaimFrequencyMinutes[frequency];
-      const lastChecked = await getStorageItem("lastChecked") as string | null | undefined;
-      
-      if (!lastChecked) {
-        // First time checking, proceed immediately
-        const now = new Date().toISOString();
-        this.getFreeGamesList();
-        void setStorageItem("lastChecked", now);
-      } else {
-        // Check if enough time has passed
-        const lastCheckedDate = new Date(lastChecked);
-        const now = new Date();
-        const minutesElapsed = (now.getTime() - lastCheckedDate.getTime()) / (1000 * 60);
-        
-        if (minutesElapsed >= requiredMinutes) {
-          // Enough time has passed, proceed with check
-          this.getFreeGamesList();
-          void setStorageItem("lastChecked", now.toISOString());
+      if (frequency === ClaimFrequency.DAILY || frequency === ClaimFrequency.BROWSER_START) {
+        if (this.areDatesDifferent(lastOpened, today)) {
+          this.getFreeGamesAndSetOpenedFlag(today);
         }
-        // If not enough time has passed, do nothing
+      } else {
+        const requiredMinutes = ClaimFrequencyMinutes[frequency];
+          if (this.didEnoughTimePass(lastOpened, requiredMinutes)) {
+            this.getFreeGamesAndSetOpenedFlag(today);
+          }
       }
+    } finally {
+      isChecking = false;
     }
+
+  },
+
+  areDatesDifferent(date1: string, date2: string): boolean {
+    return !!date1  && new Date(date1).toDateString() !== new Date(date2).toDateString();
+  },
+
+  getFreeGamesAndSetOpenedFlag(opened: string) {
+    this.getFreeGamesList();
+    void setStorageItem("lastOpened", opened);
+  },
+
+  didEnoughTimePass(lastOpened: string, requiredMinutes: number): boolean {
+    const lastDate = new Date(lastOpened);
+    const now = new Date();
+    const minutesElapsed = (now.getTime() - lastDate.getTime()) / (1000 * 60);
+    return minutesElapsed >= requiredMinutes;
   },
 
   async initializeAlarms() {
     const result = await getStorageItems(["active", "claimFrequency"]);
     if (!result?.active) {
-      // Clear alarm if extension is disabled
       try {
         await browser.alarms.clear(ALARM_NAME);
       } catch (e) {
@@ -113,7 +112,6 @@ export default defineBackground({
     const frequency = result.claimFrequency || ClaimFrequency.DAILY;
     
     if (frequency === ClaimFrequency.BROWSER_START) {
-      // Clear alarm if set to browser start only
       try {
         await browser.alarms.clear(ALARM_NAME);
       } catch (e) {
@@ -145,13 +143,13 @@ export default defineBackground({
   async getFreeGamesList() {
     const { steamCheck, epicCheck } = await getStorageItems(["steamCheck", "epicCheck"]);
     try {
-      void this.getEpicGamesList(epicCheck);
+      await this.getEpicGamesList(epicCheck);
     } catch (e) {
       console.error("getEpicGamesList failed:", e);
       if (epicCheck) await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
     }
     try {
-      void this.getSteamGamesList(steamCheck);
+      await this.getSteamGamesList(steamCheck);
     } catch (e) {
       console.error("openTabAndSendActionToContent failed:", e);
       if (steamCheck) await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
@@ -230,11 +228,7 @@ export default defineBackground({
       } else {
         console.warn("Missing tabId or appId", { tabId, appId, sender });
       }
-    } else if (request.action === "updateFrequency") {
-      // Frequency setting changed, reinitialize alarms
-      await this.initializeAlarms();
-    } else if (request.action === "updateActive") {
-      // Active toggle changed, reinitialize alarms
+    } else if (request.action === "updateFrequency" || request.action === "updateActive") {
       await this.initializeAlarms();
     }
   },
@@ -270,6 +264,8 @@ export default defineBackground({
     if (r.reason === "update") {
       browser.action.setBadgeBackgroundColor({ color: "#50ca26" });
       void this.setBadgeText("New");
+    } else if (r.reason === "install") {
+
     }
   },
   async getEpicGamesList(shouldClaim: boolean = true) {
@@ -315,7 +311,7 @@ export default defineBackground({
         future: false,
       }));
 
-      void setStorageItem("epicGames", [...currFreeGames, ...formattedNewGames]);
+      void setStorageItem("epicGames", formattedNewGames);
       if (shouldClaim) this.claimGames(formattedNewGames);
     }
 
