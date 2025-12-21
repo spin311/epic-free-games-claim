@@ -25,7 +25,7 @@ export default defineBackground({
 
     browser.runtime.onInstalled.addListener((r: browser.runtime.InstalledDetails) => this.handleInstall(r));
 
-    browser.alarms.onAlarm.addListener((alarm) => {
+    browser.alarms.onAlarm.addListener((alarm: browser.alarms.Alarm) => {
       if (alarm.name === ALARM_NAME) {
         void this.handleAlarmTriggered();
       }
@@ -73,11 +73,28 @@ export default defineBackground({
         void setStorageItem("lastOpened", today);
       }
     } else {
-      // For hourly/6h/12h, always check when alarm fires
-      // Update timestamp to track last check
-      const now = new Date().toISOString();
-      this.getFreeGamesList();
-      void setStorageItem("lastChecked", now);
+      // For hourly/6h/12h, check if enough time has passed since last check
+      const requiredMinutes = ClaimFrequencyMinutes[frequency];
+      const lastChecked = await getStorageItem("lastChecked") as string | null | undefined;
+      
+      if (!lastChecked) {
+        // First time checking, proceed immediately
+        const now = new Date().toISOString();
+        this.getFreeGamesList();
+        void setStorageItem("lastChecked", now);
+      } else {
+        // Check if enough time has passed
+        const lastCheckedDate = new Date(lastChecked);
+        const now = new Date();
+        const minutesElapsed = (now.getTime() - lastCheckedDate.getTime()) / (1000 * 60);
+        
+        if (minutesElapsed >= requiredMinutes) {
+          // Enough time has passed, proceed with check
+          this.getFreeGamesList();
+          void setStorageItem("lastChecked", now.toISOString());
+        }
+        // If not enough time has passed, do nothing
+      }
     }
   },
 
@@ -105,7 +122,7 @@ export default defineBackground({
       return;
     }
 
-    const minutes = ClaimFrequencyMinutes[frequency];
+    const minutes = ClaimFrequencyMinutes[frequency as ClaimFrequency];
     if (minutes > 0) {
       // Check if alarm already exists with correct period
       try {
