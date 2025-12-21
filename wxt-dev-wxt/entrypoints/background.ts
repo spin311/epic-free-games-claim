@@ -193,7 +193,7 @@ export default defineBackground({
         link: `https://www.epicgames.com/store/en-US/p/${
             game.productSlug || game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug || ""
         }`,
-        img: game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ?? "",
+        img: game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url || game.keyImages?.[0]?.url || "/icon/128.png",
         description: game.description ?? "",
         startDate: new Date(
             game.promotions?.promotionalOffers?.[0]?.promotionalOffers?.[0]?.startDate ?? 0
@@ -212,7 +212,7 @@ export default defineBackground({
       const formattedFutureGames: FreeGame[] = futureFreeGames.map(game => ({
         title: game.title ?? "",
         link: `https://www.epicgames.com/store/en-US/p/${game.productSlug || game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug}`,
-        img: game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ?? "",
+        img: game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url || game.keyImages?.[0]?.url || "/icon/128.png",
         platform: Platforms.Epic,
         description:game.description,
         startDate: new Date(game.promotions?.upcomingPromotionalOffers?.[0].promotionalOffers?.[0]?.startDate ?? 0).toISOString(),
