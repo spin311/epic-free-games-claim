@@ -1,28 +1,20 @@
 import {mergeIntoStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 
-export function getRndInteger(min, max) {
+export function getRndInteger(min: number, max: number) {
     return Math.floor(Math.random() * (max - min + 1) ) + min;
 }
 
-export function isVisible(el: HTMLElement | NodeListOf<HTMLElement>) {
-    if (el instanceof NodeList) {
-        el = el[0];
-    }
+export function isVisible(el: HTMLElement) {
     return el && el.style && el.style.visibility !== 'hidden' && el.style.display !== 'none';
 }
 
-export async function waitForElement(element, selector: string, all: boolean = false, timeout = 500, maxRetry = 10) {
+export async function waitForElement(document: Document | HTMLElement, selector: string, timeout = 500, maxRetry = 10): Promise<HTMLElement | null> {
     let retry = 0;
     let el;
     let visible = false;
     while (retry < maxRetry) {
-        if (all) {
-            el = element.querySelectorAll(selector) as HTMLElement[] | null;
-            visible = Array.from(el).every(e => isVisible(e));
-        } else {
-            el = element.querySelector(selector) as HTMLElement | null;
+            el = document.querySelector(selector) as HTMLElement;
             visible = isVisible(el);
-        }
         if (el && visible) {
             return el;
         }
@@ -32,25 +24,42 @@ export async function waitForElement(element, selector: string, all: boolean = f
     return null;
 }
 
+export async function waitForAllElements(document: Document, selector: string, timeout = 500, maxRetry = 10): Promise<NodeListOf<HTMLElement> | null> {
+    let retry = 0;
+    let el;
+    let visible = false;
+    while (retry < maxRetry) {
+            el = document.querySelectorAll(selector) as NodeListOf<HTMLElement>;
+            visible = Array.from(el).every(e => isVisible(e));
+        if (el && visible) {
+            return el;
+        }
+        await wait(timeout);
+        retry++;
+    }
+    return null;
+}
+
+
 export function wait(ms: number) {
     return new Promise((r) => setTimeout(r, ms));
 }
 
-export async function clickWhenVisible(selector: string, element = document) {
-    const el = await waitForElement(element, selector);
-    console.log(el);
+export async function clickWhenVisible(selector: string, doc: Document | HTMLElement = document) {
+    const el = await waitForElement(doc, selector);
     await wait(getRndInteger(100, 500));
     realClick(el);
 }
 
-export function realClick(el) {
+export function realClick(el: HTMLElement | null) {
+    if (el === null) return;
     el.dispatchEvent(new MouseEvent('mousedown', { bubbles: true, cancelable: true }));
     el.dispatchEvent(new MouseEvent('mouseup', { bubbles: true, cancelable: true }));
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 }
 
 export async function clickWhenVisibleIframe(iframeSelector: string, buttonSelector: string) {
-    const iframe = await waitForElement(document, iframeSelector);
+    const iframe = await waitForElement(document, iframeSelector) as HTMLIFrameElement;
     if (!iframe) return;
     await new Promise<void>((resolve) => {
         if (iframe.contentDocument?.readyState === 'complete') {

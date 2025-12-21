@@ -1,9 +1,11 @@
 import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
-import {getStorageItem, getStorageItems, mergeIntoStorageItem, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {getStorageItem, getStorageItems, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import { ClaimFrequency, ClaimFrequencyMinutes } from "@/entrypoints/enums/claimFrequency.ts";
 import { parse } from 'node-html-parser';
+import {browser} from "wxt/browser";
+import {EpicElement, EpicKeyImage, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
 
 const EPIC_API_URL = "https://store-site-backend-static-ipv4.ak.epicgames.com/freeGamesPromotions?locale=en-US";
 const EPIC_GAMES_URL =
@@ -17,11 +19,11 @@ export default defineBackground({
   async main() {
     browser.runtime.onStartup.addListener(() => this.handleStartup());
 
-    browser.runtime.onMessage.addListener((request: MessageRequest, sender) =>
+    browser.runtime.onMessage.addListener((request: MessageRequest, sender: browser.runtime.MessageSender) =>
         this.handleMessage(request, sender)
     );
 
-    browser.runtime.onInstalled.addListener((r) => this.handleInstall(r));
+    browser.runtime.onInstalled.addListener((r: browser.runtime.InstalledDetails) => this.handleInstall(r));
 
     browser.alarms.onAlarm.addListener((alarm) => {
       if (alarm.name === ALARM_NAME) {
@@ -31,6 +33,7 @@ export default defineBackground({
 
     // Initialize alarms on startup
     await this.initializeAlarms();
+
   },
 
   async handleStartup() {
@@ -151,7 +154,7 @@ export default defineBackground({
       target: { tabId },
       world: "MAIN",
       args: [appId],
-      func: (appId) => {
+      func: (appId: any) => {
         const fn =
             (window as any).addToCart ||
             (window as any).AddToCart ||
@@ -223,7 +226,7 @@ export default defineBackground({
     return new Promise((r) => setTimeout(r, ms));
   },
 
-  sendMessage(target, action) {
+  sendMessage(target: any, action: any) {
     browser.runtime.sendMessage({ target, action });
   },
 
@@ -259,45 +262,55 @@ export default defineBackground({
       return;
     }
 
-    const data = await response.json();
-    const games = data?.data?.Catalog?.searchStore?.elements || [];
-    const freeGames = games.filter(game =>
-        game.price.totalPrice.discountPrice === 0 &&
-        game.promotions?.promotionalOffers?.length > 0
+    const data = (await response.json()) as EpicSearchResponse;
+
+    const games: EpicElement[] = data?.data?.Catalog?.searchStore?.elements ?? [];
+
+    const freeGames = games.filter((game) =>
+        game.price?.totalPrice?.discountPrice === 0 &&
+        (game.promotions?.promotionalOffers?.length ?? 0) > 0
     );
-    const futureFreeGames = games.filter(game =>
+
+    const futureFreeGames = games.filter((game) =>
         game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]?.discountSetting?.discountPercentage === 0
     );
 
-    const currFreeGames: FreeGame[] = await getStorageItem("epicGames") || [];
-    const newGames = freeGames.filter(game =>
-        !currFreeGames.some(g => g?.title === game?.title)
+    const currFreeGames: FreeGame[] = await getStorageItem("epicGames");
+    const newGames = freeGames.filter((game) =>
+        !currFreeGames.some((g) => g?.title === game?.title)
     );
 
     if (newGames.length > 0) {
-      const formattedNewGames: FreeGame[] = newGames.map(game => ({
-        title: game.title,
+      const formattedNewGames: FreeGame[] = newGames.map((game) => ({
+        title: game.title ?? "",
         platform: Platforms.Epic,
-        link: `https://www.epicgames.com/store/en-US/p/${game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug}`,
-        img: game.keyImages.find(img => img.type === "Thumbnail")?.url || "",
-        description:game.description,
-        startDate: new Date(game.promotions.promotionalOffers?.[0].promotionalOffers?.[0].startDate).toISOString(),
-        endDate: new Date(game.promotions.promotionalOffers?.[0].promotionalOffers?.[0].endDate).toISOString(),
-        future: false
+        link: `https://www.epicgames.com/store/en-US/p/${
+            game.productSlug || game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug || ""
+        }`,
+        img: game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ?? "",
+        description: game.description ?? "",
+        startDate: new Date(
+            game.promotions?.promotionalOffers?.[0]?.promotionalOffers?.[0]?.startDate ?? 0
+        ).toISOString(),
+        endDate: new Date(
+            game.promotions?.promotionalOffers?.[0]?.promotionalOffers?.[0]?.endDate ?? 0
+        ).toISOString(),
+        future: false,
       }));
+
       void setStorageItem("epicGames", [...currFreeGames, ...formattedNewGames]);
       if (shouldClaim) this.claimGames(formattedNewGames);
     }
 
     if (futureFreeGames.length > 0) {
-      const formattedFutureGames = futureFreeGames.map(game => ({
-        title: game.title,
-        link: `https://www.epicgames.com/store/en-US/p/${game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug}`,
-        img: game.keyImages.find(img => img.type === "Thumbnail")?.url || "",
+      const formattedFutureGames: FreeGame[] = futureFreeGames.map(game => ({
+        title: game.title ?? "",
+        link: `https://www.epicgames.com/store/en-US/p/${game.productSlug || game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug}`,
+        img: game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ?? "",
         platform: Platforms.Epic,
         description:game.description,
-        startDate: new Date(game.promotions.upcomingPromotionalOffers?.[0].promotionalOffers?.[0].startDate).toISOString(),
-        endDate: new Date(game.promotions.upcomingPromotionalOffers?.[0].promotionalOffers?.[0].endDate).toISOString(),
+        startDate: new Date(game.promotions?.upcomingPromotionalOffers?.[0].promotionalOffers?.[0]?.startDate ?? 0).toISOString(),
+        endDate: new Date(game.promotions?.upcomingPromotionalOffers?.[0].promotionalOffers?.[0]?.endDate ?? 0).toISOString(),
         future: true
       }));
       await setStorageItem("futureGames", formattedFutureGames);

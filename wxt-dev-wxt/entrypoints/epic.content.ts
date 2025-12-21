@@ -1,7 +1,7 @@
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import { browser } from 'wxt/browser';
-import {mergeIntoStorageItem, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
@@ -16,13 +16,13 @@ import {
 
 export default defineContentScript({
     matches: ['https://store.epicgames.com/*'],
-    main(_) {
+    main(_: any) {
         if (!oncePerPageRun('_myEpicContentScriptInjected')) {
             return;
         }
         browser.runtime.onMessage.addListener((request: MessageRequest) => handleMessage(request));
 
-        function handleMessage(request) {
+        function handleMessage(request: MessageRequest) {
             if (request.target !== 'content') return;
             if (request.action === 'getFreeGames') {
                 void getFreeGamesList();
@@ -34,10 +34,10 @@ export default defineContentScript({
         async function getFreeGamesList() {
             await waitForPageLoad();
             const games = document.querySelector('section.css-2u323');
-            const freeGames = games?.querySelectorAll('a.css-g3jcms:has(div.css-82y1uz)');
-            const isLoggedIn: boolean = document.querySelector('egs-navigation').getAttribute('isloggedin');
+            const freeGames = games?.querySelectorAll('a.css-g3jcms:has(div.css-82y1uz)') as NodeListOf<HTMLAnchorElement>;
+            const isLoggedIn: boolean = document.querySelector('egs-navigation')?.getAttribute('isloggedin') === 'true';
             let gamesArr: FreeGame[] = [];
-            freeGames.forEach((freeGame) => {
+            freeGames?.forEach((freeGame) => {
                 const newFreeGame = {
                     link: freeGame.href ?? '',
                     img: freeGame.getElementsByTagName('img')[0]?.dataset.image ?? '',
