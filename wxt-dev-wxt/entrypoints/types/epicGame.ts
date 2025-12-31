@@ -10,6 +10,7 @@ export type EpicElement = {
     title?: string;
     description?: string;
     productSlug?: string;
+    categories?: { path?: string }[];
 
     price?: {
         totalPrice?: {

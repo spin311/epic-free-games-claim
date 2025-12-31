@@ -294,40 +294,51 @@ export default defineBackground({
     );
 
     if (newGames.length > 0) {
-      const formattedNewGames: FreeGame[] = newGames.map((game) => ({
-        title: game.title ?? "",
-        platform: Platforms.Epic,
-        link: `https://www.epicgames.com/store/en-US/p/${
-            game.productSlug || game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug || ""
-        }`,
-        img: game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url || game.keyImages?.[0]?.url || "/icon/128.png",
-        description: game.description ?? "",
-        startDate: new Date(
-            game.promotions?.promotionalOffers?.[0]?.promotionalOffers?.[0]?.startDate ?? 0
-        ).toISOString(),
-        endDate: new Date(
-            game.promotions?.promotionalOffers?.[0]?.promotionalOffers?.[0]?.endDate ?? 0
-        ).toISOString(),
-        future: false,
-      }));
+      const formattedNewGames = newGames.map(g => this.formatEpicFreeGame(g, false));
 
       void setStorageItem("epicGames", formattedNewGames);
       if (shouldClaim) this.claimGames(formattedNewGames);
     }
 
     if (futureFreeGames.length > 0) {
-      const formattedFutureGames: FreeGame[] = futureFreeGames.map(game => ({
-        title: game.title ?? "",
-        link: `https://www.epicgames.com/store/en-US/p/${game.productSlug || game.catalogNs?.mappings?.[0]?.pageSlug || game.offerMappings?.[0]?.pageSlug}`,
-        img: game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url || game.keyImages?.[0]?.url || "/icon/128.png",
-        platform: Platforms.Epic,
-        description:game.description,
-        startDate: new Date(game.promotions?.upcomingPromotionalOffers?.[0].promotionalOffers?.[0]?.startDate ?? 0).toISOString(),
-        endDate: new Date(game.promotions?.upcomingPromotionalOffers?.[0].promotionalOffers?.[0]?.endDate ?? 0).toISOString(),
-        future: true
-      }));
+      const formattedFutureGames = futureFreeGames.map(g => this.formatEpicFreeGame(g, true));
+
       await setStorageItem("futureGames", formattedFutureGames);
     }
+  },
+
+  formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame {
+    const epicSlug =
+        game.productSlug ||
+        game.catalogNs?.mappings?.[0]?.pageSlug ||
+        game.offerMappings?.[0]?.pageSlug ||
+        "";
+
+    const isEpicBundle =
+        Array.isArray(game.categories) &&
+        game.categories.some((c) => c?.path === "bundles");
+
+    const slug = epicSlug;
+    const path = isEpicBundle ? "bundle" : "p";
+
+    const promo =
+        (future
+            ? game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]
+            : game.promotions?.promotionalOffers?.[0]?.promotionalOffers?.[0]) ?? {};
+
+    return {
+      title: game.title ?? "",
+      platform: Platforms.Epic,
+      link: `https://www.epicgames.com/store/en-US/${path}/${slug}`,
+      img:
+          game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ||
+          game.keyImages?.[0]?.url ||
+          "/icon/128.png",
+      description: game.description ?? "",
+      startDate: new Date(promo.startDate ?? 0).toISOString(),
+      endDate: new Date(promo.endDate ?? 0).toISOString(),
+      future,
+    };
   },
 
   async getSteamGamesList(shouldClaim: boolean = true) {
