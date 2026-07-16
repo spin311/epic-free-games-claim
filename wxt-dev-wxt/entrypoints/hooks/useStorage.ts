@@ -3,8 +3,12 @@ import {StorageValues} from "@/entrypoints/enums/storageValues.ts"
 import { storage } from '#imports';
 import {StorageItem} from "@/entrypoints/types/storageItem.ts";
 
+// Matches WXT's branded storage-key type. StorageValues values are exactly
+// local/session/sync/managed, so the runtime string always satisfies this shape.
+type StorageItemKey = `local:${string}` | `session:${string}` | `sync:${string}` | `managed:${string}`;
+
 export function useStorage<T>(key: string, defaultValue: T, storageType: StorageValues = StorageValues.LOCAL) {
-    const storageKey = `${storageType}:${key}`;
+    const storageKey = `${storageType}:${key}` as StorageItemKey;
     const [value, setValue] = useState<T>(defaultValue);
     const [isInitialized, setIsInitialized] = useState(false);
 
@@ -24,26 +28,26 @@ export function useStorage<T>(key: string, defaultValue: T, storageType: Storage
     return [value, setValue] as const;
 }
 
-export async function getStorageItem(key: string, storageType: StorageValues = StorageValues.LOCAL) {
-    const storageKey = `${storageType}:${key}`;
-    return await storage.getItem(storageKey);
+export async function getStorageItem<T = any>(key: string, storageType: StorageValues = StorageValues.LOCAL): Promise<T | null> {
+    const storageKey = `${storageType}:${key}` as StorageItemKey;
+    return await storage.getItem<T>(storageKey);
 }
 
 export async function setStorageItem(key: string, value: any, storageType: StorageValues = StorageValues.LOCAL) {
-    const storageKey = `${storageType}:${key}`;
+    const storageKey = `${storageType}:${key}` as StorageItemKey;
     await storage.setItem(storageKey, value);
 }
 
 export async function setStorageItems(items: Record<string, any>, storageType: StorageValues = StorageValues.LOCAL) {
-    const storageItems: StorageItem[] = Object.entries(items).map(([key, value]) => ({
-        key: `${storageType}:${key}`,
+    const storageItems = Object.entries(items).map(([key, value]) => ({
+        key: `${storageType}:${key}` as StorageItemKey,
         value
     }));
     await storage.setItems(storageItems);
 }
 
 export async function getStorageItems(keys: string[], storageType: StorageValues = StorageValues.LOCAL) {
-    const storageKeys: string[] = keys.map((key: string) => `${storageType}:${key}`);
+    const storageKeys: StorageItemKey[] = keys.map((key: string) => `${storageType}:${key}` as StorageItemKey);
     const items = await storage.getItems(storageKeys);
     return items.reduce((acc: { [x: string]: any; }, item: StorageItem) => {
         const shortKey = item.key.split(":")[1];
@@ -61,7 +65,7 @@ export async function mergeIntoStorageItem<T>(
     newValue: T | T[],
     storageType: StorageValues = StorageValues.LOCAL
 ) {
-    const storageKey = `${storageType}:${key}`;
+    const storageKey = `${storageType}:${key}` as StorageItemKey;
     const existingValue = await storage.getItem(storageKey);
 
     let updatedValue: unknown;

@@ -1,13 +1,14 @@
 import {oncePerPageRun} from "@/entrypoints/utils/oncePerPageRun.ts";
 import {browser} from "wxt/browser";
-import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
 import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {
     clickWhenVisible,
-    incrementCounter, waitForAllElements,
+    incrementCounter,
+    waitForAllElements,
     waitForElement,
     waitForPageLoad
 } from "@/entrypoints/utils/helpers.ts";
@@ -18,16 +19,7 @@ export default defineContentScript({
         if (!oncePerPageRun('_mySteamContentScriptInjected' as keyof Window)) {
             return;
         }
-        browser.runtime.onMessage.addListener((request: MessageRequest) => handleMessage(request));
-
-        function handleMessage(request: MessageRequest) {
-            if (request.target !== 'content') return;
-            if (request.action === 'getFreeGames') {
-                void getFreeGamesList();
-            } else if (request.action === "claimGames") {
-                void claimCurrentFreeGame();
-            }
-        }
+        onClaimMessage({ getFreeGames: getFreeGamesList, claimGames: claimCurrentFreeGame });
 
         async function getFreeGamesList() {
             await waitForPageLoad();
@@ -50,7 +42,6 @@ export default defineContentScript({
                 freeGames: gamesArr,
                 loggedIn: isLoggedIn
             };
-            console.log(freeGamesResponse);
             await browser.runtime.sendMessage({
                 target: 'background',
                 action: 'claimFreeGames',
