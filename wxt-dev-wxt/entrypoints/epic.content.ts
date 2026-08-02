@@ -13,7 +13,8 @@ import {
     incrementCounter,
     realClick,
     findButtonByText,
-    findDeviceNotSupportedContinue
+    findDeviceNotSupportedContinue,
+    findAgeGateContinue
 } from "@/entrypoints/utils/helpers.ts";
 import {defineContentScript} from "wxt/utils/define-content-script";
 
@@ -61,6 +62,7 @@ export default defineContentScript({
         async function claimCurrentFreeGame() {
             await waitForPageLoad();
             await wait(getRndInteger(100, 500));
+            await dismissAgeGate();
             await clickWhenVisible('[data-testid="purchase-cta-button"]');
             console.log('[claimer] Clicked "Get"; completing claim');
 
@@ -71,6 +73,25 @@ export default defineContentScript({
             } else {
                 console.warn('[claimer] Could not complete claim within timeout');
                 logClaimDiagnostics();
+            }
+        }
+
+        // Mature-content games open behind an age-gate modal that blocks the
+        // purchase flow. Click its (enabled) "Continue" button before starting
+        // the claim. No-op when the game has no gate, so it's safe to always run.
+        async function dismissAgeGate(timeoutMs = 2500): Promise<void> {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+                const button = findAgeGateContinue(document);
+                // getClientRects() is a reliable visibility check that also works
+                // for the modal's position:fixed layout (offsetParent would be null).
+                if (button && button.getClientRects().length > 0) {
+                    console.log('[claimer] Dismissing age-gate modal');
+                    await wait(getRndInteger(200, 400));
+                    realClick(button);
+                    return;
+                }
+                await wait(250);
             }
         }
 

@@ -80,6 +80,16 @@ export function findDeviceNotSupportedContinue(root: Document | HTMLElement): HT
     return null;
 }
 
+// Mature-content games open with an age-gate modal exposing a stable
+// #btn_age_continue "Continue" button. Return it only when present AND enabled
+// — logged-in, age-verified accounts get a plain acknowledgment (enabled),
+// while anonymous/unverified users get a date-of-birth variant that keeps the
+// button disabled until a birthday is entered (which we can't auto-fill).
+export function findAgeGateContinue(root: Document | HTMLElement): HTMLButtonElement | null {
+    const button = root.querySelector<HTMLButtonElement>('#btn_age_continue');
+    return button && !button.disabled ? button : null;
+}
+
 export async function waitForPageLoad() {
     if (!isDocumentReady()) {
         await new Promise<void>(resolve => {

@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { getRndInteger, isVisible, waitForPageLoad, findButtonByText, findDeviceNotSupportedContinue } from './helpers';
+import { getRndInteger, isVisible, waitForPageLoad, findButtonByText, findDeviceNotSupportedContinue, findAgeGateContinue } from './helpers';
 
 describe('getRndInteger', () => {
   it('returns a value within [min, max] inclusive', () => {
@@ -109,6 +109,31 @@ describe('findDeviceNotSupportedContinue', () => {
     const root = document.createElement('div');
     root.innerHTML = '<div role="dialog"><button>Continue</button></div>';
     expect(findDeviceNotSupportedContinue(root)).toBeNull();
+  });
+});
+
+describe('findAgeGateContinue', () => {
+  // Real markup: the age-gate Continue button carries a stable id.
+  const AGE_GATE = (disabled = false) =>
+    `<div role="dialog"><button type="button" id="btn_age_continue"${disabled ? ' disabled' : ''}>` +
+    '<span><span>Continue</span></span></button></div>';
+
+  it('returns the enabled #btn_age_continue button (logged-in acknowledgment)', () => {
+    const root = document.createElement('div');
+    root.innerHTML = AGE_GATE(false);
+    expect(findAgeGateContinue(root)?.id).toBe('btn_age_continue');
+  });
+
+  it('returns null for the disabled date-of-birth variant', () => {
+    const root = document.createElement('div');
+    root.innerHTML = AGE_GATE(true);
+    expect(findAgeGateContinue(root)).toBeNull();
+  });
+
+  it('returns null when there is no age gate', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<button id="something-else">Continue</button>';
+    expect(findAgeGateContinue(root)).toBeNull();
   });
 });
 
