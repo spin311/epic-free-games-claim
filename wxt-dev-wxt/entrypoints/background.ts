@@ -1,10 +1,10 @@
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
-import {getStorageItem, getStorageItems, setStorageItem, setStorageItems} from "@/entrypoints/hooks/useStorage.ts";
+import {getStorageItem, getStorageItems, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFrequency.ts";
 import {parse} from 'node-html-parser';
-import {browser} from "wxt/browser";
+import {browser, type Browser} from "wxt/browser";
 import {EpicElement, EpicKeyImage, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
 
 const EPIC_API_URL = "https://store-site-backend-static-ipv4.ak.epicgames.com/freeGamesPromotions?locale=en-US";
@@ -16,17 +16,80 @@ const STEAM_GAMES_URL =
 const ALARM_NAME = "checkFreeGames";
 let isChecking = false;
 
-export default defineBackground({
+// --- Pure helpers (module-level and exported so they're unit-testable) ---
+
+export function areDatesDifferent(date1: string, date2: string): boolean {
+  return !!date1 && new Date(date1).toDateString() !== new Date(date2).toDateString();
+}
+
+export function didEnoughTimePass(lastOpened: string, requiredMinutes: number): boolean {
+  const lastDate = new Date(lastOpened);
+  const now = new Date();
+  const minutesElapsed = (now.getTime() - lastDate.getTime()) / (1000 * 60);
+  return minutesElapsed >= requiredMinutes;
+}
+
+// Force Epic claim pages into English (?lang=en-US) so the content script can match
+// confirmation buttons ("Add to library", etc.) by text regardless of the user's
+// account language. Non-Epic URLs (e.g. Steam) are returned unchanged.
+export function withEpicEnglishLocale(url: string): string {
+  try {
+    const parsed = new URL(url);
+    if (parsed.hostname.endsWith("epicgames.com")) {
+      parsed.searchParams.set("lang", "en-US");
+      return parsed.toString();
+    }
+  } catch {
+    // Not an absolute URL — leave it as-is.
+  }
+  return url;
+}
+
+export function formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame {
+  const epicSlug =
+      game.productSlug ||
+      game.catalogNs?.mappings?.[0]?.pageSlug ||
+      game.offerMappings?.[0]?.pageSlug ||
+      "";
+
+  const isEpicBundle =
+      Array.isArray(game.categories) &&
+      game.categories.some((c) => c?.path === "bundles");
+
+  const slug = epicSlug;
+  const path = isEpicBundle ? "bundle" : "p";
+
+  const promo =
+      (future
+          ? game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]
+          : game.promotions?.promotionalOffers?.[0]?.promotionalOffers?.[0]) ?? {};
+
+  return {
+    title: game.title ?? "",
+    platform: Platforms.Epic,
+    link: `https://www.epicgames.com/store/en-US/${path}/${slug}`,
+    img:
+        game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ||
+        game.keyImages?.[0]?.url ||
+        "/icon/128.png",
+    description: game.description ?? "",
+    startDate: new Date(promo.startDate ?? 0).toISOString(),
+    endDate: new Date(promo.endDate ?? 0).toISOString(),
+    future,
+  };
+}
+
+const background = {
   async main() {
     browser.runtime.onStartup.addListener(() => this.handleStartup());
 
-    browser.runtime.onMessage.addListener((request: MessageRequest, sender: browser.runtime.MessageSender) =>
+    browser.runtime.onMessage.addListener((request: MessageRequest, sender: Browser.runtime.MessageSender) =>
         this.handleMessage(request, sender)
     );
 
-    browser.runtime.onInstalled.addListener((r: browser.runtime.InstalledDetails) => this.handleInstall(r));
+    browser.runtime.onInstalled.addListener((r: Browser.runtime.InstalledDetails) => this.handleInstall(r));
 
-    browser.alarms.onAlarm.addListener((alarm: browser.alarms.Alarm) => {
+    browser.alarms.onAlarm.addListener((alarm: Browser.alarms.Alarm) => {
       if (alarm.name === ALARM_NAME) {
         void this.handleAlarmTriggered();
       }
@@ -63,17 +126,17 @@ export default defineBackground({
       const today = new Date().toISOString();
       const lastOpened = await getStorageItem("lastOpened");
       if (!lastOpened) {
-        this.getFreeGamesAndSetOpenedFlag(today);
+        await this.getFreeGamesAndSetOpenedFlag(today);
         return;
       }
       if (frequency === ClaimFrequency.DAILY || frequency === ClaimFrequency.BROWSER_START) {
-        if (this.areDatesDifferent(lastOpened, today)) {
-          this.getFreeGamesAndSetOpenedFlag(today);
+        if (areDatesDifferent(lastOpened, today)) {
+          await this.getFreeGamesAndSetOpenedFlag(today);
         }
       } else {
         const requiredMinutes = ClaimFrequencyMinutes[frequency];
-          if (this.didEnoughTimePass(lastOpened, requiredMinutes)) {
-            this.getFreeGamesAndSetOpenedFlag(today);
+          if (didEnoughTimePass(lastOpened, requiredMinutes)) {
+            await this.getFreeGamesAndSetOpenedFlag(today);
           }
       }
     } finally {
@@ -82,20 +145,9 @@ export default defineBackground({
 
   },
 
-  areDatesDifferent(date1: string, date2: string): boolean {
-    return !!date1  && new Date(date1).toDateString() !== new Date(date2).toDateString();
-  },
-
-  getFreeGamesAndSetOpenedFlag(opened: string) {
-    this.getFreeGamesList();
-    void setStorageItem("lastOpened", opened);
-  },
-
-  didEnoughTimePass(lastOpened: string, requiredMinutes: number): boolean {
-    const lastDate = new Date(lastOpened);
-    const now = new Date();
-    const minutesElapsed = (now.getTime() - lastDate.getTime()) / (1000 * 60);
-    return minutesElapsed >= requiredMinutes;
+  async getFreeGamesAndSetOpenedFlag(opened: string) {
+    await this.getFreeGamesList();
+    await setStorageItem("lastOpened", opened);
   },
 
   async initializeAlarms() {
@@ -151,7 +203,7 @@ export default defineBackground({
     try {
       await this.getSteamGamesList(steamCheck);
     } catch (e) {
-      console.error("openTabAndSendActionToContent failed:", e);
+      console.error("getSteamGamesList failed:", e);
       if (steamCheck) await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
     }
   },
@@ -159,7 +211,7 @@ export default defineBackground({
   async claimGames(games: FreeGame[]) {
     void this.setBadgeText(games.length.toString());
     for (const game of games) {
-      await this.openTabAndSendActionToContent(game.link, "claimGames");
+      await this.openTabAndSendActionToContent(withEpicEnglishLocale(game.link), "claimGames");
       await this.wait(10_000);
     }
   },
@@ -169,7 +221,7 @@ export default defineBackground({
       target: { tabId },
       world: "MAIN",
       args: [appId],
-      func: (appId: any) => {
+      func: (appId: number) => {
         const fn =
             (window as any).addToCart ||
             (window as any).AddToCart ||
@@ -207,10 +259,33 @@ export default defineBackground({
     const tab = await browser.tabs.create({ url });
     if (!tab || !tab.id) return;
     await this.waitForTabToLoad(tab.id);
-    await browser.tabs.sendMessage(tab.id, { target: "content", action });
+    await this.sendMessageWithRetry(tab.id, { target: "content", action });
   },
 
-  async handleMessage(request: MessageRequest, sender?: browser.runtime.MessageSender) {
+  // The content script registers its onMessage listener at document_idle, which
+  // can land slightly after tab status reaches "complete". Retry until the
+  // receiver is ready rather than losing the claim on the first
+  // "Could not establish connection" rejection.
+  async sendMessageWithRetry(
+      tabId: number,
+      message: { target: string; action: string },
+      maxRetries = 10,
+      delayMs = 300
+  ) {
+    for (let attempt = 0; attempt < maxRetries; attempt++) {
+      try {
+        return await browser.tabs.sendMessage(tabId, message);
+      } catch (e) {
+        if (attempt === maxRetries - 1) {
+          console.error(`sendMessageWithRetry: content script unreachable in tab ${tabId}`, e);
+          throw e;
+        }
+        await this.wait(delayMs);
+      }
+    }
+  },
+
+  async handleMessage(request: MessageRequest, sender?: Browser.runtime.MessageSender) {
     if (request.target !== "background") return;
 
     if (request.action === "claim") {
@@ -237,10 +312,6 @@ export default defineBackground({
     return new Promise((r) => setTimeout(r, ms));
   },
 
-  sendMessage(target: any, action: any) {
-    browser.runtime.sendMessage({ target, action });
-  },
-
   async waitForTabToLoad(tabId: number): Promise<void> {
     return new Promise((resolve, reject) => {
       async function checkTab() {
@@ -260,12 +331,10 @@ export default defineBackground({
     });
   },
 
-  handleInstall(r: browser.runtime.InstalledDetails) {
+  handleInstall(r: Browser.runtime.InstalledDetails) {
     if (r.reason === "update") {
       browser.action.setBadgeBackgroundColor({ color: "#50ca26" });
       void this.setBadgeText("New");
-    } else if (r.reason === "install") {
-
     }
   },
   async getEpicGamesList(shouldClaim: boolean = true) {
@@ -288,57 +357,23 @@ export default defineBackground({
         game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]?.discountSetting?.discountPercentage === 0
     );
 
-    const currFreeGames: FreeGame[] = await getStorageItem("epicGames");
+    const currFreeGames: FreeGame[] = await getStorageItem("epicGames") || [];
     const newGames = freeGames.filter((game) =>
         !currFreeGames.some((g) => g?.title === game?.title)
     );
 
     if (newGames.length > 0) {
-      const formattedNewGames = newGames.map(g => this.formatEpicFreeGame(g, false));
+      const formattedNewGames = newGames.map(g => formatEpicFreeGame(g, false));
 
-      void setStorageItem("epicGames", formattedNewGames);
-      if (shouldClaim) this.claimGames(formattedNewGames);
+      await setStorageItem("epicGames", formattedNewGames);
+      if (shouldClaim) await this.claimGames(formattedNewGames);
     }
 
     if (futureFreeGames.length > 0) {
-      const formattedFutureGames = futureFreeGames.map(g => this.formatEpicFreeGame(g, true));
+      const formattedFutureGames = futureFreeGames.map(g => formatEpicFreeGame(g, true));
 
       await setStorageItem("futureGames", formattedFutureGames);
     }
-  },
-
-  formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame {
-    const epicSlug =
-        game.productSlug ||
-        game.catalogNs?.mappings?.[0]?.pageSlug ||
-        game.offerMappings?.[0]?.pageSlug ||
-        "";
-
-    const isEpicBundle =
-        Array.isArray(game.categories) &&
-        game.categories.some((c) => c?.path === "bundles");
-
-    const slug = epicSlug;
-    const path = isEpicBundle ? "bundle" : "p";
-
-    const promo =
-        (future
-            ? game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]
-            : game.promotions?.promotionalOffers?.[0]?.promotionalOffers?.[0]) ?? {};
-
-    return {
-      title: game.title ?? "",
-      platform: Platforms.Epic,
-      link: `https://www.epicgames.com/store/en-US/${path}/${slug}`,
-      img:
-          game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ||
-          game.keyImages?.[0]?.url ||
-          "/icon/128.png",
-      description: game.description ?? "",
-      startDate: new Date(promo.startDate ?? 0).toISOString(),
-      endDate: new Date(promo.endDate ?? 0).toISOString(),
-      future,
-    };
   },
 
   async getSteamGamesList(shouldClaim: boolean = true) {
@@ -384,7 +419,7 @@ export default defineBackground({
     );
     if (newGames.length === 0) return;
 
-    if (shouldClaim) this.claimGames(newGames);
+    if (shouldClaim) await this.claimGames(newGames);
     await setStorageItem('steamGames', newGames);
   },
 
@@ -397,4 +432,6 @@ export default defineBackground({
   async setBadgeText(text: string) {
     await browser.action.setBadgeText({ text });
   }
-});
+};
+
+export default defineBackground(background);

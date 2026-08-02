@@ -1,0 +1,5 @@
+# pnpm 11 blocks dependency install/build scripts by default. esbuild links its
+# native binary in a postinstall; allow it (and spawn-sync) so the build works.
+allowBuilds:
+  esbuild: true
+  spawn-sync: true

@@ -58,23 +58,40 @@ export function realClick(el: HTMLElement | null) {
     el.dispatchEvent(new MouseEvent('click', { bubbles: true, cancelable: true }));
 }
 
-export async function clickWhenVisibleIframe(iframeSelector: string, buttonSelector: string) {
-    const iframe = await waitForElement(document, iframeSelector) as HTMLIFrameElement;
-    if (!iframe) return;
-    await new Promise<void>((resolve) => {
-        if (iframe.contentDocument?.readyState === 'complete') {
-            resolve();
-        } else {
-            iframe.addEventListener('load', () => resolve(), { once: true });
+// Find a <button> by its visible text (case-insensitive, trimmed). More robust
+// than positional or hashed-class selectors on Epic's frequently-churning DOM.
+export function findButtonByText(root: Document | HTMLElement, text: string): HTMLButtonElement | null {
+    const target = text.trim().toLowerCase();
+    const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>('button'));
+    return buttons.find((btn) => (btn.textContent ?? '').trim().toLowerCase() === target) ?? null;
+}
+
+// Epic's page can have MULTIPLE role="dialog" elements at once, so we must scan
+// them all (not just the first) to find the "Device not supported" modal — matched
+// by its text — and return its "Continue" button.
+export function findDeviceNotSupportedContinue(root: Document | HTMLElement): HTMLButtonElement | null {
+    const dialogs = Array.from(root.querySelectorAll<HTMLElement>('[role="dialog"]'));
+    for (const dialog of dialogs) {
+        if (/not\s+(supported|compatible)/i.test(dialog.textContent ?? '')) {
+            const button = findButtonByText(dialog, 'Continue');
+            if (button) return button;
         }
-    });
-    await wait(2000);
-    const iframeDoc = iframe?.contentDocument || iframe?.contentWindow?.document;
-    await clickWhenVisible(buttonSelector, iframeDoc);
+    }
+    return null;
+}
+
+// Mature-content games open with an age-gate modal exposing a stable
+// #btn_age_continue "Continue" button. Return it only when present AND enabled
+// — logged-in, age-verified accounts get a plain acknowledgment (enabled),
+// while anonymous/unverified users get a date-of-birth variant that keeps the
+// button disabled until a birthday is entered (which we can't auto-fill).
+export function findAgeGateContinue(root: Document | HTMLElement): HTMLButtonElement | null {
+    const button = root.querySelector<HTMLButtonElement>('#btn_age_continue');
+    return button && !button.disabled ? button : null;
 }
 
 export async function waitForPageLoad() {
-    if (!isDocumentReady) {
+    if (!isDocumentReady()) {
         await new Promise<void>(resolve => {
             document.addEventListener('DOMContentLoaded', () => resolve(), {once: true});
         });
