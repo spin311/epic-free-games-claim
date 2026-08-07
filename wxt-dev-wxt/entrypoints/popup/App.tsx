@@ -1,4 +1,6 @@
 import './App.css';
+import {useEffect} from "react";
+import {setBadgeText} from "@/entrypoints/utils/badge.ts";
 import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
 import GamesList from "@/entrypoints/components/GamesList.tsx";
 import {ActiveTabs} from "@/entrypoints/enums/activeTabs.ts";
@@ -6,8 +8,13 @@ import Settings from "@/entrypoints/components/Settings.tsx";
 import Footer from "@/entrypoints/components/Footer.tsx";
 
 function App() {
-    clearBadge();
     const [activeTab, setActiveTab] = useStorage<ActiveTabs>("activeTab", ActiveTabs.MAIN);
+
+    // In an effect, not the render body: a throw here used to take the whole
+    // popup down with it, and clearing the badge is a side effect either way.
+    useEffect(() => {
+        void setBadgeText("");
+    }, []);
 
     return (
         <div className="App">
@@ -31,10 +38,6 @@ function App() {
             <Footer/>
         </div>
     );
-
-    function clearBadge() {
-        browser.action.setBadgeText({ text: "" });
-    }
 }
 
 export default App;
