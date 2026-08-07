@@ -8,6 +8,7 @@ import {
   setBadgeBackgroundColor as setActionBadgeBackgroundColor,
   setBadgeText as setActionBadgeText,
 } from "@/entrypoints/utils/badge.ts";
+import {shouldClaimSteamGame} from "@/entrypoints/utils/steamReviews.ts";
 import {browser, type Browser} from "wxt/browser";
 import {EpicElement, EpicKeyImage, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
 
@@ -268,8 +269,13 @@ export const background = {
   },
 
   async claimGames(games: FreeGame[]) {
-    void this.setBadgeText(games.length.toString());
-    for (const game of games) {
+    // Filter BEFORE the badge and the tab loop: each game costs a tab plus a
+    // 10s wait, and the badge must count what we actually claim.
+    const claimable = await this.filterByReviewThreshold(games);
+    if (claimable.length === 0) return;
+
+    void this.setBadgeText(claimable.length.toString());
+    for (const game of claimable) {
       // One unreachable tab (404 product page, content script never injected,
       // navigation error) must not cancel the remaining claims.
       try {
@@ -279,6 +285,22 @@ export const background = {
       }
       await this.wait(10_000);
     }
+  },
+
+  // Applies the optional Steam positive-review gate. Epic games are never
+  // filtered — the setting is Steam-only — and a blank setting is a no-op.
+  async filterByReviewThreshold(games: FreeGame[]): Promise<FreeGame[]> {
+    const threshold = await getStorageItem<number>("steamMinPositivePercent");
+    if (threshold == null) return games;
+
+    const verdicts = await Promise.all(
+        games.map((game) =>
+            game.platform === Platforms.Steam
+                ? shouldClaimSteamGame(game.link, threshold)
+                : Promise.resolve(true)
+        )
+    );
+    return games.filter((_, index) => verdicts[index]);
   },
 
   steamAddToCart(tabId: number, appId: number) {
