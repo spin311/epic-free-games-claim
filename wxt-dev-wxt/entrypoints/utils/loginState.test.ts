@@ -121,6 +121,24 @@ describe('recordLoginState', () => {
   });
 
   it('uses distinct keys per platform', () => {
-    expect(LOGIN_STATE_KEYS[Platforms.Epic]).not.toBe(LOGIN_STATE_KEYS[Platforms.Steam]);
+    const keys = Object.values(Platforms).map((platform) => LOGIN_STATE_KEYS[platform]);
+    expect(new Set(keys).size).toBe(keys.length);
+  });
+
+  it('has a key for every platform, including GOG', () => {
+    for (const platform of Object.values(Platforms)) {
+      expect(LOGIN_STATE_KEYS[platform]).toBeTruthy();
+    }
+  });
+
+  // GOG's session is proven by the giveaway API answering 401 or not, so its
+  // content script records the state directly. Reading the DOM must stay
+  // inconclusive rather than falling through to Steam's selectors.
+  it('reports no DOM signal for GOG instead of applying another store\'s selectors', () => {
+    const doc = new DOMParser().parseFromString(
+      '<div id="global_actions"><div id="account_pulldown"></div></div>',
+      'text/html'
+    );
+    expect(readLoginState(Platforms.GOG, doc)).toBeNull();
   });
 });

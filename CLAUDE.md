@@ -44,14 +44,15 @@ avoid an esbuild/jsdom `TextEncoder` clash. Test files live next to sources as `
 
 ## Project structure (`wxt-dev-wxt/entrypoints/`)
 
-- `background.ts` — service worker: Epic/Steam fetching, alarms-based scheduling, claim logic
-- `epic.content.ts` / `steam.content.ts` — content scripts injected on store pages
+- `background.ts` — service worker: Epic/Steam/GOG fetching, alarms-based scheduling, claim logic
+- `epic.content.ts` / `steam.content.ts` / `gog.content.ts` — content scripts injected on store pages
 - `popup/` — React popup UI (`App.tsx`, `main.tsx`)
 - `components/` — React components (Settings, GamesList, GameCard, FrequencySelect, …)
 - `hooks/useStorage.ts` — typed wrapper over `browser.storage`
 - `types/` — shared TypeScript types
 - `enums/` — `claimFrequency`, `platforms`, `activeTabs`, `storageValues`
-- `utils/` — `helpers.ts`, `oncePerPageRun.ts`
+- `utils/` — `helpers.ts`, `oncePerPageRun.ts`, `contentMessaging.ts`, `badge.ts`,
+  `loginState.ts`, `steamReviews.ts`, `gogGiveaway.ts`
 - `wxt.config.ts` — manifest, permissions, browser targets. `@/*` aliases the project root.
 
 ## Conventions

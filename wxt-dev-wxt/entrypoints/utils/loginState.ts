@@ -11,6 +11,7 @@ export type LoginState = boolean | null;
 export const LOGIN_STATE_KEYS: Record<Platforms, string> = {
     [Platforms.Epic]: "epicLoggedIn",
     [Platforms.Steam]: "steamLoggedIn",
+    [Platforms.GOG]: "gogLoggedIn",
 };
 
 const POLL_INTERVAL_MS = 250;
@@ -35,8 +36,20 @@ export function readSteamLoginState(doc: Document): LoginState {
     return !!actions.querySelector('#account_pulldown');
 }
 
+// GOG is deliberately absent: its session is proven by /giveaway/status
+// answering 401 or not, so the GOG content script calls recordLoginState
+// directly instead of reading the DOM. Returning null here keeps
+// detectAndRecordLoginState a no-op for GOG rather than silently applying
+// Steam's selectors to a gog.com page.
 export function readLoginState(platform: Platforms, doc: Document): LoginState {
-    return platform === Platforms.Epic ? readEpicLoginState(doc) : readSteamLoginState(doc);
+    switch (platform) {
+        case Platforms.Epic:
+            return readEpicLoginState(doc);
+        case Platforms.Steam:
+            return readSteamLoginState(doc);
+        default:
+            return null;
+    }
 }
 
 // Both signals depend on rendering we don't control, so poll briefly rather

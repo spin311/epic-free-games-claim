@@ -4,6 +4,7 @@ import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFrequency.ts";
 import {parse} from 'node-html-parser';
+import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {
   setBadgeBackgroundColor as setActionBadgeBackgroundColor,
   setBadgeText as setActionBadgeText,
@@ -253,7 +254,10 @@ export const background = {
   },
 
   async getFreeGamesList() {
-    const { steamCheck, epicCheck } = await getStorageItems(["steamCheck", "epicCheck"]);
+    const { steamCheck, epicCheck, gogCheck } = await getStorageItems(["steamCheck", "epicCheck", "gogCheck"]);
+    // The GOG checkbox defaults to on, so an unset key means "enabled" — only an
+    // explicit false disables it.
+    const claimGog = gogCheck !== false;
     try {
       await this.getEpicGamesList(epicCheck);
     } catch (e) {
@@ -265,6 +269,12 @@ export const background = {
     } catch (e) {
       console.error("getSteamGamesList failed:", e);
       if (steamCheck) await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
+    }
+    try {
+      await this.getGogGamesList(claimGog);
+    } catch (e) {
+      console.error("getGogGamesList failed:", e);
+      if (claimGog) await this.openTabAndSendActionToContent(GOG_HOME_URL, "getFreeGames");
     }
   },
 
@@ -501,10 +511,30 @@ export const background = {
     await setStorageItem('steamGames', newGames);
   },
 
+  // GOG runs one giveaway at a time and only exposes it to a signed-in session.
+  // A 401 here is ambiguous — the service worker may simply not have attached
+  // the cookie — so it is thrown rather than recorded as "signed out", letting
+  // getFreeGamesList retry the whole lookup from a real gog.com tab.
+  async getGogGamesList(shouldClaim: boolean = true) {
+    const lookup = await fetchGiveaway();
+    if (lookup.unauthorized) {
+      throw new Error("GOG giveaway status requires a signed-in session");
+    }
+    const game = lookup.game;
+    if (!game) return;
+
+    const currFreeGames: FreeGame[] = await getStorageItem("gogGames") || [];
+    if (currFreeGames.some((g) => g?.title === game.title)) return;
+
+    await setStorageItem("gogGames", [game]);
+    if (shouldClaim) await this.claimGames([game]);
+  },
+
   async clearGamesList() {
     await setStorageItem("epicGames", []);
     await setStorageItem("futureGames", []);
     await setStorageItem("steamGames", []);
+    await setStorageItem("gogGames", []);
   },
 
   async setBadgeText(text: string) {
