@@ -10,6 +10,12 @@ import {EpicElement, EpicKeyImage, EpicSearchResponse} from "@/entrypoints/types
 const EPIC_API_URL = "https://store-site-backend-static-ipv4.ak.epicgames.com/freeGamesPromotions?locale=en-US";
 const EPIC_GAMES_URL =
     "https://store.epicgames.com/";
+// Product pages are built on store.epicgames.com rather than
+// www.epicgames.com/store/...: the www form is a redirect, and Epic bounces
+// some slugs onto /site/... paths that 404 *and* fall outside the Epic content
+// script's match patterns, so the claim tab ends up with no script injected.
+const EPIC_PRODUCT_BASE = "https://store.epicgames.com/en-US";
+export const EPIC_FREE_GAMES_URL = "https://store.epicgames.com/en-US/free-games";
 const STEAM_GAMES_URL =
     "https://store.steampowered.com/search/?sort_by=Price_ASC&maxprice=free&category1=998&specials=1&ndl=1";
 
@@ -45,18 +51,65 @@ export function withEpicEnglishLocale(url: string): string {
   return url;
 }
 
+// Epic exposes the same product under several slug fields and they are not
+// interchangeable. `productSlug` is a legacy *path* that often carries a
+// "/home" suffix (e.g. "cardpocalypse/home"), which produces a 404 product URL;
+// the page-mapping tables carry the bare slug ("cardpocalypse"). Prefer those,
+// and normalise whatever we get so a stray path segment can never leak into the
+// URL again.
+export function resolveEpicSlug(game: EpicElement): string {
+  const candidates = [
+    ...(game.catalogNs?.mappings ?? []).map((m) => m?.pageSlug),
+    ...(game.offerMappings ?? []).map((m) => m?.pageSlug),
+    game.productSlug,
+  ];
+
+  for (const candidate of candidates) {
+    const slug = normalizeEpicSlug(candidate);
+    if (slug) return slug;
+  }
+  return "";
+}
+
+function normalizeEpicSlug(raw: string | undefined | null): string {
+  const trimmed = (raw ?? "").trim().replace(/^\/+|\/+$/g, "");
+  if (!trimmed) return "";
+  // "cardpocalypse/home" -> "cardpocalypse". Any other multi-segment slug is
+  // reduced to its first segment for the same reason: /p/ takes one segment.
+  return trimmed.split("/")[0] ?? "";
+}
+
+// Splits an Epic search payload into the games that are free right now and the
+// ones announced as free next. A game must appear in exactly one bucket — Epic
+// can report both a current and an upcoming free offer for the same title
+// during the weekly changeover, and listing it twice made the popup show
+// duplicates.
+export function partitionEpicPromotions(games: EpicElement[]): {
+  current: EpicElement[];
+  future: EpicElement[];
+} {
+  const current = games.filter((game) =>
+      game.price?.totalPrice?.discountPrice === 0 &&
+      (game.promotions?.promotionalOffers?.length ?? 0) > 0
+  );
+  const currentTitles = new Set(current.map((game) => game.title));
+
+  const future = games.filter((game) =>
+      !currentTitles.has(game.title) &&
+      game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]
+          ?.discountSetting?.discountPercentage === 0
+  );
+
+  return { current, future };
+}
+
 export function formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame {
-  const epicSlug =
-      game.productSlug ||
-      game.catalogNs?.mappings?.[0]?.pageSlug ||
-      game.offerMappings?.[0]?.pageSlug ||
-      "";
+  const slug = resolveEpicSlug(game);
 
   const isEpicBundle =
       Array.isArray(game.categories) &&
       game.categories.some((c) => c?.path === "bundles");
 
-  const slug = epicSlug;
   const path = isEpicBundle ? "bundle" : "p";
 
   const promo =
@@ -67,7 +120,9 @@ export function formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame
   return {
     title: game.title ?? "",
     platform: Platforms.Epic,
-    link: `https://www.epicgames.com/store/en-US/${path}/${slug}`,
+    // No resolvable slug would mean a bare "/p/" 404, so fall back to the
+    // free-games hub: still claimable, and the content script runs there.
+    link: slug ? `${EPIC_PRODUCT_BASE}/${path}/${slug}` : EPIC_FREE_GAMES_URL,
     img:
         game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ||
         game.keyImages?.[0]?.url ||
@@ -79,7 +134,7 @@ export function formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame
   };
 }
 
-const background = {
+export const background = {
   async main() {
     browser.runtime.onStartup.addListener(() => this.handleStartup());
 
@@ -211,7 +266,13 @@ const background = {
   async claimGames(games: FreeGame[]) {
     void this.setBadgeText(games.length.toString());
     for (const game of games) {
-      await this.openTabAndSendActionToContent(withEpicEnglishLocale(game.link), "claimGames");
+      // One unreachable tab (404 product page, content script never injected,
+      // navigation error) must not cancel the remaining claims.
+      try {
+        await this.openTabAndSendActionToContent(withEpicEnglishLocale(game.link), "claimGames");
+      } catch (e) {
+        console.error(`claimGames: failed to claim "${game.title}" (${game.link})`, e);
+      }
       await this.wait(10_000);
     }
   },
@@ -348,31 +409,22 @@ const background = {
 
     const games: EpicElement[] = data?.data?.Catalog?.searchStore?.elements ?? [];
 
-    const freeGames = games.filter((game) =>
-        game.price?.totalPrice?.discountPrice === 0 &&
-        (game.promotions?.promotionalOffers?.length ?? 0) > 0
-    );
-
-    const futureFreeGames = games.filter((game) =>
-        game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]?.discountSetting?.discountPercentage === 0
-    );
+    const { current: freeGames, future: futureFreeGames } = partitionEpicPromotions(games);
 
     const currFreeGames: FreeGame[] = await getStorageItem("epicGames") || [];
     const newGames = freeGames.filter((game) =>
         !currFreeGames.some((g) => g?.title === game?.title)
     );
 
-    if (newGames.length > 0) {
-      const formattedNewGames = newGames.map(g => formatEpicFreeGame(g, false));
+    // Both lists are persisted before any claiming happens, and both are written
+    // unconditionally. Claiming used to sit between the two writes, so a failed
+    // claim aborted the futureGames refresh and left last week's "upcoming"
+    // entry next to this week's free entry in the popup.
+    await setStorageItem("epicGames", freeGames.map(g => formatEpicFreeGame(g, false)));
+    await setStorageItem("futureGames", futureFreeGames.map(g => formatEpicFreeGame(g, true)));
 
-      await setStorageItem("epicGames", formattedNewGames);
-      if (shouldClaim) await this.claimGames(formattedNewGames);
-    }
-
-    if (futureFreeGames.length > 0) {
-      const formattedFutureGames = futureFreeGames.map(g => formatEpicFreeGame(g, true));
-
-      await setStorageItem("futureGames", formattedFutureGames);
+    if (shouldClaim && newGames.length > 0) {
+      await this.claimGames(newGames.map(g => formatEpicFreeGame(g, false)));
     }
   },
 
