@@ -4,6 +4,10 @@ import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFrequency.ts";
 import {parse} from 'node-html-parser';
+import {
+  setBadgeBackgroundColor as setActionBadgeBackgroundColor,
+  setBadgeText as setActionBadgeText,
+} from "@/entrypoints/utils/badge.ts";
 import {browser, type Browser} from "wxt/browser";
 import {EpicElement, EpicKeyImage, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
 
@@ -394,7 +398,7 @@ export const background = {
 
   handleInstall(r: Browser.runtime.InstalledDetails) {
     if (r.reason === "update") {
-      browser.action.setBadgeBackgroundColor({ color: "#50ca26" });
+      void setActionBadgeBackgroundColor("#50ca26");
       void this.setBadgeText("New");
     }
   },
@@ -482,7 +486,7 @@ export const background = {
   },
 
   async setBadgeText(text: string) {
-    await browser.action.setBadgeText({ text });
+    await setActionBadgeText(text);
   }
 };
 
