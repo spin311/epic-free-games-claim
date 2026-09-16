@@ -39,7 +39,7 @@ function Settings() {
 
     return (
         <div className="tab-content">
-            <h1>Free Games for Steam, Epic & GOG</h1>
+            <h1>Free Games for Steam, Epic, GOG, IndieGala & Prime Gaming</h1>
             <p>Games claimed: {counter}</p>
             <OnButton/>
 

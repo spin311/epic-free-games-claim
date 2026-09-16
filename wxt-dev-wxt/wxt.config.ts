@@ -7,7 +7,7 @@ export default defineConfig({
     '@': '.',
   },
   manifest: {
-    name: "Free Game Claimer for Steam, Epic & GOG",
+    name: "Free Game Claimer for Steam, Epic, GOG, IndieGala & Prime Gaming",
     permissions: ['storage', "tabs", "scripting", "alarms"],
     host_permissions: [
       'https://store.steampowered.com/*',
