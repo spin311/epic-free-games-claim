@@ -49,7 +49,7 @@ function Settings() {
                     href="https://www.epicgames.com/id/login"
                     target="_blank">Epic games</a>, <a href="https://www.gog.com/en"
                     target="_blank">GOG</a>, <a href="https://www.indiegala.com/login"
-                    target="_blank">IndieGala</a> and <a href="https://www.amazon.com/ap/signin"
+                    target="_blank">IndieGala</a> and <a href="https://gaming.amazon.com/home"
                     target="_blank">Amazon</a> to get free games</span>
                 <FrequencySelect value={claimFrequency} onChange={handleFrequencyChange} />
                 <div className="checkboxes">
