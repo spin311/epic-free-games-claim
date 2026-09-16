@@ -6,6 +6,7 @@ import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFr
 import {parse} from 'node-html-parser';
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
+import {PRIME_GAMING_HOME_URL} from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import {
   setBadgeBackgroundColor as setActionBadgeBackgroundColor,
   setBadgeText as setActionBadgeText,
@@ -255,11 +256,12 @@ export const background = {
   },
 
   async getFreeGamesList() {
-    const { steamCheck, epicCheck, gogCheck, indieGalaCheck } = await getStorageItems([
-      "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck",
+    const { steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck } = await getStorageItems([
+      "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck",
     ]);
     const claimGog = gogCheck !== false;
     const claimIndieGala = indieGalaCheck !== false;
+    const claimPrimeGaming = primeGamingCheck !== false;
     try {
       await this.getEpicGamesList(epicCheck);
     } catch (e) {
@@ -284,6 +286,12 @@ export const background = {
       console.error("getIndieGalaGamesList failed:", e);
       if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
     }
+    try {
+      await this.getPrimeGamingGamesList();
+    } catch (e) {
+      console.error("getPrimeGamingGamesList failed:", e);
+      if (claimPrimeGaming) await this.openTabAndSendActionToContent(PRIME_GAMING_HOME_URL, "getFreeGames");
+    }
   },
 
   async claimGames(games: FreeGame[]) {
@@ -292,8 +300,15 @@ export const background = {
     const claimable = await this.filterByReviewThreshold(games);
     if (claimable.length === 0) return;
 
+    // Prime Gaming's internal offers all share one claim page — the content
+    // script claims every unclaimed offer it finds in a single visit, so opening
+    // a separate tab per game (all pointing at the same URL) would just be
+    // wasted 10s waits. Every other platform already has a unique link per
+    // game, so this dedupe is a no-op for them.
+    const uniqueByLink = Array.from(new Map(claimable.map((g) => [g.link, g])).values());
+
     void this.setBadgeText(claimable.length.toString());
-    for (const game of claimable) {
+    for (const game of uniqueByLink) {
       // One unreachable tab (404 product page, content script never injected,
       // navigation error) must not cancel the remaining claims.
       try {
@@ -557,12 +572,22 @@ export const background = {
     }
   },
 
+  // No public API and no server-rendered offer data exist — gaming.amazon.com/home
+  // is a client-rendered SPA whose offer list only exists after a real,
+  // authenticated page load. This always throws so getFreeGamesList's existing
+  // catch block falls back to a real tab, exactly like Epic and Steam's own
+  // fallback path — there is no "try a fast path first" option here.
+  async getPrimeGamingGamesList(): Promise<never> {
+    throw new Error("Prime Gaming requires a live page render; no background API available");
+  },
+
   async clearGamesList() {
     await setStorageItem("epicGames", []);
     await setStorageItem("futureGames", []);
     await setStorageItem("steamGames", []);
     await setStorageItem("gogGames", []);
     await setStorageItem("indieGalaGames", []);
+    await setStorageItem("primeGamingGames", []);
   },
 
   async setBadgeText(text: string) {

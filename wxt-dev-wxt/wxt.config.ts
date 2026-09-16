@@ -13,7 +13,8 @@ export default defineConfig({
       'https://store.steampowered.com/*',
       "https://store-site-backend-static-ipv4.ak.epicgames.com/*",
       "https://www.gog.com/*",
-      "https://freebies.indiegala.com/*"
+      "https://freebies.indiegala.com/*",
+      "https://gaming.amazon.com/*"
     ],
     browser_specific_settings: {
       gecko: {
