@@ -7,6 +7,7 @@ import {
   readEpicLoginState,
   readSteamLoginState,
   readIndieGalaLoginState,
+  readPrimeGamingLoginState,
   readLoginState,
   detectLoginState,
   recordLoginState,
@@ -163,5 +164,22 @@ describe('recordLoginState', () => {
       'text/html'
     );
     expect(readLoginState(Platforms.GOG, doc)).toBeNull();
+  });
+});
+
+describe('readPrimeGamingLoginState', () => {
+  it('is true when the user dropdown is present', () => {
+    const doc = docFrom('<span data-a-target="user-dropdown-first-name-text">Jane</span>');
+    expect(readPrimeGamingLoginState(doc)).toBe(true);
+  });
+
+  it('is false when a "Sign in" button is present', () => {
+    const doc = docFrom('<button>Sign in</button>');
+    expect(readPrimeGamingLoginState(doc)).toBe(false);
+  });
+
+  it('is null when neither signal has rendered yet', () => {
+    const doc = docFrom('<div>loading…</div>');
+    expect(readPrimeGamingLoginState(doc)).toBeNull();
   });
 });

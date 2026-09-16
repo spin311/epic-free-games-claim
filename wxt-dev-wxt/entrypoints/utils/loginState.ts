@@ -48,6 +48,18 @@ export function readIndieGalaLoginState(doc: Document): LoginState {
     return !userCont.querySelector('.header-top-notlogged');
 }
 
+// Confirmed live by vogler/free-games-claimer's prime-gaming.js: the user
+// dropdown only renders once signed in; a "Sign in" button renders only when
+// signed out. Neither present yet means the page hasn't hydrated.
+export function readPrimeGamingLoginState(doc: Document): LoginState {
+    if (doc.querySelector('[data-a-target="user-dropdown-first-name-text"]')) return true;
+    const hasSignIn = Array.from(doc.querySelectorAll('button')).some(
+        (btn) => (btn.textContent ?? '').trim().toLowerCase() === 'sign in'
+    );
+    if (hasSignIn) return false;
+    return null;
+}
+
 // GOG is deliberately absent: its session is proven by /giveaway/status
 // answering 401 or not, so the GOG content script calls recordLoginState
 // directly instead of reading the DOM. Returning null here keeps
@@ -61,6 +73,8 @@ export function readLoginState(platform: Platforms, doc: Document): LoginState {
             return readSteamLoginState(doc);
         case Platforms.IndieGala:
             return readIndieGalaLoginState(doc);
+        case Platforms.PrimeGaming:
+            return readPrimeGamingLoginState(doc);
         default:
             return null;
     }
