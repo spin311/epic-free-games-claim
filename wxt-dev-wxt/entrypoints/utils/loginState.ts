@@ -13,6 +13,7 @@ export const LOGIN_STATE_KEYS: Record<Platforms, string> = {
     [Platforms.Steam]: "steamLoggedIn",
     [Platforms.GOG]: "gogLoggedIn",
     [Platforms.IndieGala]: "indieGalaLoggedIn",
+    [Platforms.PrimeGaming]: "primeGamingLoggedIn",
 };
 
 const POLL_INTERVAL_MS = 250;
