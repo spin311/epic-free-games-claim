@@ -74,6 +74,23 @@ describe('readIndieGalaLoginState', () => {
   });
 });
 
+describe('readPrimeGamingLoginState', () => {
+  it('is true when the user dropdown is present', () => {
+    const doc = docFrom('<span data-a-target="user-dropdown-first-name-text">Jane</span>');
+    expect(readPrimeGamingLoginState(doc)).toBe(true);
+  });
+
+  it('is false when a "Sign in" button is present', () => {
+    const doc = docFrom('<button>Sign in</button>');
+    expect(readPrimeGamingLoginState(doc)).toBe(false);
+  });
+
+  it('is null when neither signal has rendered yet', () => {
+    const doc = docFrom('<div>loading…</div>');
+    expect(readPrimeGamingLoginState(doc)).toBeNull();
+  });
+});
+
 describe('readLoginState', () => {
   it('dispatches to the Epic reader', () => {
     const doc = docFrom('<egs-navigation isloggedin="true"></egs-navigation>');
@@ -88,6 +105,11 @@ describe('readLoginState', () => {
   it('dispatches to the IndieGala reader', () => {
     const doc = docFrom('<div class="header-top-user"><div class="header-top-logged">Me</div></div>');
     expect(readLoginState(Platforms.IndieGala, doc)).toBe(true);
+  });
+
+  it('dispatches to the PrimeGaming reader', () => {
+    const doc = docFrom('<span data-a-target="user-dropdown-first-name-text">Jane</span>');
+    expect(readLoginState(Platforms.PrimeGaming, doc)).toBe(true);
   });
 
   it('does not confuse one platform signal for the other', () => {
@@ -164,22 +186,5 @@ describe('recordLoginState', () => {
       'text/html'
     );
     expect(readLoginState(Platforms.GOG, doc)).toBeNull();
-  });
-});
-
-describe('readPrimeGamingLoginState', () => {
-  it('is true when the user dropdown is present', () => {
-    const doc = docFrom('<span data-a-target="user-dropdown-first-name-text">Jane</span>');
-    expect(readPrimeGamingLoginState(doc)).toBe(true);
-  });
-
-  it('is false when a "Sign in" button is present', () => {
-    const doc = docFrom('<button>Sign in</button>');
-    expect(readPrimeGamingLoginState(doc)).toBe(false);
-  });
-
-  it('is null when neither signal has rendered yet', () => {
-    const doc = docFrom('<div>loading…</div>');
-    expect(readPrimeGamingLoginState(doc)).toBeNull();
   });
 });
