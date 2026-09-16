@@ -50,3 +50,31 @@ export function hasPrimeMembership(doc: Document): boolean {
       (btn) => (btn.textContent ?? '').trim().toLowerCase() === 'try prime'
   );
 }
+
+export type ClaimOutcome = "claimed" | "already-claimed" | "failed";
+
+// Confirmed by vogler/free-games-claimer's prime-gaming.js: an already-claimed
+// card shows a <p> containing "Collected" text. Polls briefly after the click
+// because the DOM update isn't necessarily synchronous with the click event.
+export async function claimOfferCard(
+    card: Element,
+    clickFn: (el: HTMLElement) => void,
+    waitFn: (ms: number) => Promise<void>,
+    timeoutMs = 5000,
+    pollIntervalMs = 250
+): Promise<ClaimOutcome> {
+  const button = card.querySelector<HTMLButtonElement>('button[data-a-target="FGWPOffer"]');
+  if (!button) return "failed";
+
+  clickFn(button);
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    const collected = Array.from(card.querySelectorAll('p')).some(
+        (p) => (p.textContent ?? '').trim().toLowerCase() === 'collected'
+    );
+    if (collected) return "claimed";
+    await waitFn(pollIntervalMs);
+  }
+  return "failed";
+}

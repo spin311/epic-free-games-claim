@@ -1,5 +1,5 @@
-import { describe, it, expect } from 'vitest';
-import { hasPrimeMembership, isInternalOfferCard, parseInternalOffers, parseOfferCard, PRIME_GAMING_HOME_URL } from './primeGamingGiveaway';
+import { describe, it, expect, vi } from 'vitest';
+import { claimOfferCard, hasPrimeMembership, isInternalOfferCard, parseInternalOffers, parseOfferCard, PRIME_GAMING_HOME_URL } from './primeGamingGiveaway';
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
 
 function elFrom(html: string): Element {
@@ -82,5 +82,75 @@ describe('hasPrimeMembership', () => {
   it('is false when a "Try Prime" button is present', () => {
     const doc = docFrom('<button>Try Prime</button>');
     expect(hasPrimeMembership(doc)).toBe(false);
+  });
+});
+
+const CARD_WITH_CLAIM_BUTTON = `
+<div class="item-card__action">
+  <div class="item-card-details__body__primary">Some Game</div>
+  <button data-a-target="FGWPOffer" class="tw-button">Claim</button>
+</div>`;
+
+describe('claimOfferCard', () => {
+  it('clicks the button and returns "claimed" when the collected marker is already present', async () => {
+    const card = elFrom(CARD_WITH_CLAIM_BUTTON);
+    const collected = card.ownerDocument.createElement('p');
+    collected.textContent = 'Collected';
+    card.appendChild(collected);
+
+    const clickFn = vi.fn();
+    const waitFn = vi.fn(async () => {});
+
+    const outcome = await claimOfferCard(card, clickFn, waitFn);
+
+    expect(outcome).toBe('claimed');
+    expect(clickFn).toHaveBeenCalledTimes(1);
+    expect(clickFn).toHaveBeenCalledWith(card.querySelector('button'));
+    // The marker was readable on the very first check, so no poll was needed.
+    expect(waitFn).not.toHaveBeenCalled();
+  });
+
+  it('returns "claimed" once the collected marker appears after a few polls', async () => {
+    const card = elFrom(CARD_WITH_CLAIM_BUTTON);
+    const clickFn = vi.fn();
+    let calls = 0;
+    const waitFn = vi.fn(async () => {
+      calls++;
+      if (calls === 2) {
+        const collected = card.ownerDocument.createElement('p');
+        collected.textContent = 'Collected';
+        card.appendChild(collected);
+      }
+    });
+
+    const outcome = await claimOfferCard(card, clickFn, waitFn, 5_000, 250);
+
+    expect(outcome).toBe('claimed');
+    expect(waitFn).toHaveBeenCalledTimes(2);
+  });
+
+  it('returns "failed" when the collected marker never appears before the timeout', async () => {
+    const card = elFrom(CARD_WITH_CLAIM_BUTTON);
+    const clickFn = vi.fn();
+    const waitFn = vi.fn(async () => {});
+
+    // A tiny timeout keeps this test fast; waitFn never mutates the DOM so the
+    // poll loop must exhaust the deadline and report failure.
+    const outcome = await claimOfferCard(card, clickFn, waitFn, 20, 5);
+
+    expect(outcome).toBe('failed');
+    expect(clickFn).toHaveBeenCalledTimes(1);
+  });
+
+  it('returns "failed" without clicking when the card has no claim button', async () => {
+    const card = elFrom('<div class="item-card__action"><p>No button here</p></div>');
+    const clickFn = vi.fn();
+    const waitFn = vi.fn(async () => {});
+
+    const outcome = await claimOfferCard(card, clickFn, waitFn);
+
+    expect(outcome).toBe('failed');
+    expect(clickFn).not.toHaveBeenCalled();
+    expect(waitFn).not.toHaveBeenCalled();
   });
 });
