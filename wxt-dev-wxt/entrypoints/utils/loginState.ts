@@ -37,6 +37,16 @@ export function readSteamLoginState(doc: Document): LoginState {
     return !!actions.querySelector('#account_pulldown');
 }
 
+// The header container is present on every page; when signed out it wraps a
+// child .header-top-notlogged element (confirmed live, unauthenticated). Only
+// that known signed-out signal is checked, so this doesn't depend on knowing
+// what the signed-in markup looks like.
+export function readIndieGalaLoginState(doc: Document): LoginState {
+    const userCont = doc.querySelector('.header-top-user');
+    if (!userCont) return null;
+    return !userCont.querySelector('.header-top-notlogged');
+}
+
 // GOG is deliberately absent: its session is proven by /giveaway/status
 // answering 401 or not, so the GOG content script calls recordLoginState
 // directly instead of reading the DOM. Returning null here keeps
@@ -48,6 +58,8 @@ export function readLoginState(platform: Platforms, doc: Document): LoginState {
             return readEpicLoginState(doc);
         case Platforms.Steam:
             return readSteamLoginState(doc);
+        case Platforms.IndieGala:
+            return readIndieGalaLoginState(doc);
         default:
             return null;
     }

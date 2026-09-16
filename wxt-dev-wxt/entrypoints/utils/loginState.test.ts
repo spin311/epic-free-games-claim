@@ -6,6 +6,7 @@ import {
   LOGIN_STATE_KEYS,
   readEpicLoginState,
   readSteamLoginState,
+  readIndieGalaLoginState,
   readLoginState,
   detectLoginState,
   recordLoginState,
@@ -55,6 +56,23 @@ describe('readSteamLoginState', () => {
   });
 });
 
+describe('readIndieGalaLoginState', () => {
+  it('is false when the signed-out marker is present', () => {
+    const doc = docFrom('<div class="header-top-user"><div class="header-top-notlogged">Login</div></div>');
+    expect(readIndieGalaLoginState(doc)).toBe(false);
+  });
+
+  it('is true when the container is present without the signed-out marker', () => {
+    const doc = docFrom('<div class="header-top-user"><div class="header-top-logged">Me</div></div>');
+    expect(readIndieGalaLoginState(doc)).toBe(true);
+  });
+
+  it('is null when the header has not rendered yet', () => {
+    const doc = docFrom('<div>no header here</div>');
+    expect(readIndieGalaLoginState(doc)).toBeNull();
+  });
+});
+
 describe('readLoginState', () => {
   it('dispatches to the Epic reader', () => {
     const doc = docFrom('<egs-navigation isloggedin="true"></egs-navigation>');
@@ -64,6 +82,11 @@ describe('readLoginState', () => {
   it('dispatches to the Steam reader', () => {
     const doc = docFrom('<div id="global_actions"><div id="account_pulldown"></div></div>');
     expect(readLoginState(Platforms.Steam, doc)).toBe(true);
+  });
+
+  it('dispatches to the IndieGala reader', () => {
+    const doc = docFrom('<div class="header-top-user"><div class="header-top-logged">Me</div></div>');
+    expect(readLoginState(Platforms.IndieGala, doc)).toBe(true);
   });
 
   it('does not confuse one platform signal for the other', () => {
