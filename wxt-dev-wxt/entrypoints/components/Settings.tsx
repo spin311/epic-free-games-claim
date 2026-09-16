@@ -16,11 +16,13 @@ function Settings() {
     const [steamCheck, setSteamCheck] = useStorage<boolean>("steamCheck", true);
     const [epicCheck, setEpicCheck] = useStorage<boolean>("epicCheck", true);
     const [gogCheck, setGogCheck] = useStorage<boolean>("gogCheck", true);
+    const [indieGalaCheck, setIndieGalaCheck] = useStorage<boolean>("indieGalaCheck", true);
     const [claimFrequency, setClaimFrequency] = useStorage<ClaimFrequency>("claimFrequency", ClaimFrequency.DAILY);
     // Written by the store content scripts on each claim run; null until one has run.
     const [steamLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.Steam], null);
     const [epicLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.Epic], null);
     const [gogLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.GOG], null);
+    const [indieGalaLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.IndieGala], null);
     // Blank (null) means no review gate — claim every free Steam game.
     const [minPositivePercent, setMinPositivePercent] = useStorage<number | null>("steamMinPositivePercent", null);
 
@@ -43,8 +45,9 @@ function Settings() {
                 <ManualClaimBtn/>
                 <span>Log in on <a href="https://store.steampowered.com/login/" target="_blank">Steam</a>, <a
                     href="https://www.epicgames.com/id/login"
-                    target="_blank">Epic games</a> and <a href="https://www.gog.com/en"
-                    target="_blank">GOG</a> to get free games</span>
+                    target="_blank">Epic games</a>, <a href="https://www.gog.com/en"
+                    target="_blank">GOG</a> and <a href="https://www.indiegala.com/login"
+                    target="_blank">IndieGala</a> to get free games</span>
                 <FrequencySelect value={claimFrequency} onChange={handleFrequencyChange} />
                 <div className="checkboxes">
                     <Checkbox name="Steam" checked={steamCheck} onChange={e => setSteamCheck(e.target.checked)}
@@ -55,6 +58,8 @@ function Settings() {
                               trailing={<LoginStatus state={epicLoggedIn}/>}/>
                     <Checkbox name="GOG" checked={gogCheck} onChange={e => setGogCheck(e.target.checked)}
                               trailing={<LoginStatus state={gogLoggedIn}/>}/>
+                    <Checkbox name="IndieGala" checked={indieGalaCheck} onChange={e => setIndieGalaCheck(e.target.checked)}
+                              trailing={<LoginStatus state={indieGalaLoggedIn}/>}/>
                 </div>
             </div>
             <span>Free games are automatically claimed based on your selected frequency</span>
