@@ -5,6 +5,9 @@ import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFrequency.ts";
 import {parse} from 'node-html-parser';
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
+import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
+import {PRIME_GAMING_HOME_URL} from "@/entrypoints/utils/primeGamingGiveaway.ts";
+import {LoginState} from "@/entrypoints/utils/loginState.ts";
 import {
   setBadgeBackgroundColor as setActionBadgeBackgroundColor,
   setBadgeText as setActionBadgeText,
@@ -254,10 +257,12 @@ export const background = {
   },
 
   async getFreeGamesList() {
-    const { steamCheck, epicCheck, gogCheck } = await getStorageItems(["steamCheck", "epicCheck", "gogCheck"]);
-    // The GOG checkbox defaults to on, so an unset key means "enabled" — only an
-    // explicit false disables it.
+    const { steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck } = await getStorageItems([
+      "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck",
+    ]);
     const claimGog = gogCheck !== false;
+    const claimIndieGala = indieGalaCheck !== false;
+    const claimPrimeGaming = primeGamingCheck !== false;
     try {
       await this.getEpicGamesList(epicCheck);
     } catch (e) {
@@ -276,6 +281,17 @@ export const background = {
       console.error("getGogGamesList failed:", e);
       if (claimGog) await this.openTabAndSendActionToContent(GOG_HOME_URL, "getFreeGames");
     }
+    try {
+      await this.getIndieGalaGamesList(claimIndieGala);
+    } catch (e) {
+      console.error("getIndieGalaGamesList failed:", e);
+      if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
+    }
+    // Prime Gaming has no background-reachable API — gaming.amazon.com/home is a
+    // client-rendered SPA whose offer list only exists after an authenticated page
+    // load, so this platform goes straight to a real tab (no fast path to try first,
+    // unlike Epic/Steam/GOG/IndieGala which can attempt a direct background fetch).
+    if (claimPrimeGaming) await this.openTabAndSendActionToContent(PRIME_GAMING_HOME_URL, "getFreeGames");
   },
 
   async claimGames(games: FreeGame[]) {
@@ -284,8 +300,17 @@ export const background = {
     const claimable = await this.filterByReviewThreshold(games);
     if (claimable.length === 0) return;
 
+    // Prime Gaming's internal offers all share one claim page — the content
+    // script claims every unclaimed offer it finds in a single visit, so opening
+    // a separate tab per game (all pointing at the same URL) would just be
+    // wasted 10s waits. Epic's slug-less fallback link is the one other case
+    // where links can collide; collapsing those to one hub visit is also correct
+    // (that fallback was already non-functional for claiming — see
+    // epic.content.ts's purchase-button lookup, which needs a real product page).
+    const uniqueByLink = Array.from(new Map(claimable.map((g) => [g.link, g])).values());
+
     void this.setBadgeText(claimable.length.toString());
-    for (const game of claimable) {
+    for (const game of uniqueByLink) {
       // One unreachable tab (404 product page, content script never injected,
       // navigation error) must not cancel the remaining claims.
       try {
@@ -530,11 +555,38 @@ export const background = {
     if (shouldClaim) await this.claimGames([game]);
   },
 
+  // Freebies listing is public, so unlike GOG this practically never throws for
+  // an auth reason — only network/HTTP failures reach the catch block in
+  // getFreeGamesList, which falls back to a real tab.
+  async getIndieGalaGamesList(shouldClaim: boolean = true) {
+    const freebies = await fetchFreebies();
+    if (freebies.length === 0) return;
+
+    const gamesArr: FreeGame[] = freebies.map((f) => f.game);
+    const currFreeGames: FreeGame[] = await getStorageItem("indieGalaGames") || [];
+    const newGames = gamesArr.filter((game) =>
+        !currFreeGames.some((g) => g?.title === game.title)
+    );
+
+    // Persisted regardless of login state so the popup can still show what's
+    // available. Only the claim itself is gated: IndieGala's index page lists
+    // ~7 simultaneous freebies (unlike GOG's 1), so a logged-out run would
+    // otherwise burn the whole list into "already seen" storage in one go with
+    // 7 wasted tabs and 7 failed claims that never retry automatically.
+    await setStorageItem("indieGalaGames", gamesArr);
+    const loggedIn = await getStorageItem<LoginState>("indieGalaLoggedIn");
+    if (shouldClaim && loggedIn !== false && newGames.length > 0) {
+      await this.claimGames(newGames);
+    }
+  },
+
   async clearGamesList() {
     await setStorageItem("epicGames", []);
     await setStorageItem("futureGames", []);
     await setStorageItem("steamGames", []);
     await setStorageItem("gogGames", []);
+    await setStorageItem("indieGalaGames", []);
+    await setStorageItem("primeGamingGames", []);
   },
 
   async setBadgeText(text: string) {

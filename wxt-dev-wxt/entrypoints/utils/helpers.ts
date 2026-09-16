@@ -41,8 +41,8 @@ export async function waitForAllElements(document: Document, selector: string, t
 }
 
 
-export function wait(ms: number) {
-    return new Promise((r) => setTimeout(r, ms));
+export function wait(ms: number): Promise<void> {
+    return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
 export async function clickWhenVisible(selector: string, doc: Document | HTMLElement = document) {

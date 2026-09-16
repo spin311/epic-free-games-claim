@@ -7,12 +7,14 @@ export default defineConfig({
     '@': '.',
   },
   manifest: {
-    name: "Free Game Claimer for Steam, Epic & GOG",
+    name: "Free Game Claimer for Steam, Epic, GOG, IndieGala & Prime Gaming",
     permissions: ['storage', "tabs", "scripting", "alarms"],
     host_permissions: [
       'https://store.steampowered.com/*',
       "https://store-site-backend-static-ipv4.ak.epicgames.com/*",
-      "https://www.gog.com/*"
+      "https://www.gog.com/*",
+      "https://freebies.indiegala.com/*",
+      "https://gaming.amazon.com/*"
     ],
     browser_specific_settings: {
       gecko: {

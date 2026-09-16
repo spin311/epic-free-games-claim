@@ -6,6 +6,8 @@ import {
   LOGIN_STATE_KEYS,
   readEpicLoginState,
   readSteamLoginState,
+  readIndieGalaLoginState,
+  readPrimeGamingLoginState,
   readLoginState,
   detectLoginState,
   recordLoginState,
@@ -55,6 +57,40 @@ describe('readSteamLoginState', () => {
   });
 });
 
+describe('readIndieGalaLoginState', () => {
+  it('is false when the signed-out marker is present', () => {
+    const doc = docFrom('<div class="header-top-user"><div class="header-top-notlogged">Login</div></div>');
+    expect(readIndieGalaLoginState(doc)).toBe(false);
+  });
+
+  it('is true when the container is present without the signed-out marker', () => {
+    const doc = docFrom('<div class="header-top-user"><div class="header-top-logged">Me</div></div>');
+    expect(readIndieGalaLoginState(doc)).toBe(true);
+  });
+
+  it('is null when the header has not rendered yet', () => {
+    const doc = docFrom('<div>no header here</div>');
+    expect(readIndieGalaLoginState(doc)).toBeNull();
+  });
+});
+
+describe('readPrimeGamingLoginState', () => {
+  it('is true when the user dropdown is present', () => {
+    const doc = docFrom('<span data-a-target="user-dropdown-first-name-text">Jane</span>');
+    expect(readPrimeGamingLoginState(doc)).toBe(true);
+  });
+
+  it('is false when a "Sign in" button is present', () => {
+    const doc = docFrom('<button>Sign in</button>');
+    expect(readPrimeGamingLoginState(doc)).toBe(false);
+  });
+
+  it('is null when neither signal has rendered yet', () => {
+    const doc = docFrom('<div>loading…</div>');
+    expect(readPrimeGamingLoginState(doc)).toBeNull();
+  });
+});
+
 describe('readLoginState', () => {
   it('dispatches to the Epic reader', () => {
     const doc = docFrom('<egs-navigation isloggedin="true"></egs-navigation>');
@@ -64,6 +100,16 @@ describe('readLoginState', () => {
   it('dispatches to the Steam reader', () => {
     const doc = docFrom('<div id="global_actions"><div id="account_pulldown"></div></div>');
     expect(readLoginState(Platforms.Steam, doc)).toBe(true);
+  });
+
+  it('dispatches to the IndieGala reader', () => {
+    const doc = docFrom('<div class="header-top-user"><div class="header-top-logged">Me</div></div>');
+    expect(readLoginState(Platforms.IndieGala, doc)).toBe(true);
+  });
+
+  it('dispatches to the PrimeGaming reader', () => {
+    const doc = docFrom('<span data-a-target="user-dropdown-first-name-text">Jane</span>');
+    expect(readLoginState(Platforms.PrimeGaming, doc)).toBe(true);
   });
 
   it('does not confuse one platform signal for the other', () => {
