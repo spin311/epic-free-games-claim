@@ -5,6 +5,7 @@ import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFrequency.ts";
 import {parse} from 'node-html-parser';
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
+import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {
   setBadgeBackgroundColor as setActionBadgeBackgroundColor,
   setBadgeText as setActionBadgeText,
@@ -254,10 +255,11 @@ export const background = {
   },
 
   async getFreeGamesList() {
-    const { steamCheck, epicCheck, gogCheck } = await getStorageItems(["steamCheck", "epicCheck", "gogCheck"]);
-    // The GOG checkbox defaults to on, so an unset key means "enabled" — only an
-    // explicit false disables it.
+    const { steamCheck, epicCheck, gogCheck, indieGalaCheck } = await getStorageItems([
+      "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck",
+    ]);
     const claimGog = gogCheck !== false;
+    const claimIndieGala = indieGalaCheck !== false;
     try {
       await this.getEpicGamesList(epicCheck);
     } catch (e) {
@@ -275,6 +277,12 @@ export const background = {
     } catch (e) {
       console.error("getGogGamesList failed:", e);
       if (claimGog) await this.openTabAndSendActionToContent(GOG_HOME_URL, "getFreeGames");
+    }
+    try {
+      await this.getIndieGalaGamesList(claimIndieGala);
+    } catch (e) {
+      console.error("getIndieGalaGamesList failed:", e);
+      if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
     }
   },
 
@@ -530,11 +538,31 @@ export const background = {
     if (shouldClaim) await this.claimGames([game]);
   },
 
+  // Freebies listing is public, so unlike GOG this practically never throws for
+  // an auth reason — only network/HTTP failures reach the catch block in
+  // getFreeGamesList, which falls back to a real tab.
+  async getIndieGalaGamesList(shouldClaim: boolean = true) {
+    const freebies = await fetchFreebies();
+    if (freebies.length === 0) return;
+
+    const gamesArr: FreeGame[] = freebies.map((f) => f.game);
+    const currFreeGames: FreeGame[] = await getStorageItem("indieGalaGames") || [];
+    const newGames = gamesArr.filter((game) =>
+        !currFreeGames.some((g) => g?.title === game.title)
+    );
+
+    await setStorageItem("indieGalaGames", gamesArr);
+    if (shouldClaim && newGames.length > 0) {
+      await this.claimGames(newGames);
+    }
+  },
+
   async clearGamesList() {
     await setStorageItem("epicGames", []);
     await setStorageItem("futureGames", []);
     await setStorageItem("steamGames", []);
     await setStorageItem("gogGames", []);
+    await setStorageItem("indieGalaGames", []);
   },
 
   async setBadgeText(text: string) {
