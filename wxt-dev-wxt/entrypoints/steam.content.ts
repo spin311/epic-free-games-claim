@@ -5,6 +5,7 @@ import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
 import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
+import {detectAndRecordLoginState} from "@/entrypoints/utils/loginState.ts";
 import {
     clickWhenVisible,
     incrementCounter,
@@ -25,7 +26,7 @@ export default defineContentScript({
             await waitForPageLoad();
             const games = document.querySelector('div#search_result_container');
             const freeGames = games?.querySelectorAll('a.search_result_row:not(.ds_owned)') as NodeListOf<HTMLAnchorElement>;
-            const isLoggedIn: boolean = !!document.querySelector('div#global_actions #account_pulldown');
+            const loginState = await detectAndRecordLoginState(Platforms.Steam);
             let gamesArr: FreeGame[] = [];
             freeGames?.forEach((freeGame) => {
                 const newFreeGame = {
@@ -38,9 +39,11 @@ export default defineContentScript({
             });
             if (gamesArr.length === 0) return;
             await setStorageItem("steamGames", gamesArr);
+            // An inconclusive read must not block claiming, so only a definite
+            // "signed out" reports loggedIn: false upstream.
             const freeGamesResponse: FreeGamesResponse = {
                 freeGames: gamesArr,
-                loggedIn: isLoggedIn
+                loggedIn: loginState !== false
             };
             await browser.runtime.sendMessage({
                 target: 'background',
@@ -51,6 +54,9 @@ export default defineContentScript({
 
         async function claimCurrentFreeGame() {
             await waitForPageLoad();
+            // Refresh the popup's login indicator off the page we already have
+            // open. Deliberately not awaited so it can't delay the claim.
+            void detectAndRecordLoginState(Platforms.Steam);
             const buyOptions = await waitForAllElements(document, "div.game_area_purchase_game");
             if (!buyOptions) return;
 
