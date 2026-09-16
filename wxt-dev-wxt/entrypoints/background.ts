@@ -7,6 +7,7 @@ import {parse} from 'node-html-parser';
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {PRIME_GAMING_HOME_URL} from "@/entrypoints/utils/primeGamingGiveaway.ts";
+import {LoginState} from "@/entrypoints/utils/loginState.ts";
 import {
   setBadgeBackgroundColor as setActionBadgeBackgroundColor,
   setBadgeText as setActionBadgeText,
@@ -286,12 +287,11 @@ export const background = {
       console.error("getIndieGalaGamesList failed:", e);
       if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
     }
-    try {
-      await this.getPrimeGamingGamesList();
-    } catch (e) {
-      console.error("getPrimeGamingGamesList failed:", e);
-      if (claimPrimeGaming) await this.openTabAndSendActionToContent(PRIME_GAMING_HOME_URL, "getFreeGames");
-    }
+    // Prime Gaming has no background-reachable API — gaming.amazon.com/home is a
+    // client-rendered SPA whose offer list only exists after an authenticated page
+    // load, so this platform goes straight to a real tab (no fast path to try first,
+    // unlike Epic/Steam/GOG/IndieGala which can attempt a direct background fetch).
+    if (claimPrimeGaming) await this.openTabAndSendActionToContent(PRIME_GAMING_HOME_URL, "getFreeGames");
   },
 
   async claimGames(games: FreeGame[]) {
@@ -303,8 +303,10 @@ export const background = {
     // Prime Gaming's internal offers all share one claim page — the content
     // script claims every unclaimed offer it finds in a single visit, so opening
     // a separate tab per game (all pointing at the same URL) would just be
-    // wasted 10s waits. Every other platform already has a unique link per
-    // game, so this dedupe is a no-op for them.
+    // wasted 10s waits. Epic's slug-less fallback link is the one other case
+    // where links can collide; collapsing those to one hub visit is also correct
+    // (that fallback was already non-functional for claiming — see
+    // epic.content.ts's purchase-button lookup, which needs a real product page).
     const uniqueByLink = Array.from(new Map(claimable.map((g) => [g.link, g])).values());
 
     void this.setBadgeText(claimable.length.toString());
@@ -566,19 +568,16 @@ export const background = {
         !currFreeGames.some((g) => g?.title === game.title)
     );
 
+    // Persisted regardless of login state so the popup can still show what's
+    // available. Only the claim itself is gated: IndieGala's index page lists
+    // ~7 simultaneous freebies (unlike GOG's 1), so a logged-out run would
+    // otherwise burn the whole list into "already seen" storage in one go with
+    // 7 wasted tabs and 7 failed claims that never retry automatically.
     await setStorageItem("indieGalaGames", gamesArr);
-    if (shouldClaim && newGames.length > 0) {
+    const loggedIn = await getStorageItem<LoginState>("indieGalaLoggedIn");
+    if (shouldClaim && loggedIn !== false && newGames.length > 0) {
       await this.claimGames(newGames);
     }
-  },
-
-  // No public API and no server-rendered offer data exist — gaming.amazon.com/home
-  // is a client-rendered SPA whose offer list only exists after a real,
-  // authenticated page load. This always throws so getFreeGamesList's existing
-  // catch block falls back to a real tab, exactly like Epic and Steam's own
-  // fallback path — there is no "try a fast path first" option here.
-  async getPrimeGamingGamesList(): Promise<never> {
-    throw new Error("Prime Gaming requires a live page render; no background API available");
   },
 
   async clearGamesList() {
