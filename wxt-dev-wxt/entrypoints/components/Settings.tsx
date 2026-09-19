@@ -102,12 +102,12 @@ function Settings() {
                                   disabled={!primeGamingCheck}/>
                     </div>
                     <div className="nested-checkbox">
-                        <Checkbox name="Claim GOG-linked offers" checked={claimGog}
+                        <Checkbox name="Open GOG-linked offers (shows redeem code)" checked={claimGog}
                                   onChange={e => setClaimGog(e.target.checked)}
                                   disabled={!primeGamingCheck}/>
                     </div>
                     <div className="nested-checkbox">
-                        <Checkbox name="Claim Windows-linked offers" checked={claimWindows}
+                        <Checkbox name="Open Windows-linked offers (shows redeem code)" checked={claimWindows}
                                   onChange={e => setClaimWindows(e.target.checked)}
                                   disabled={!primeGamingCheck}/>
                     </div>

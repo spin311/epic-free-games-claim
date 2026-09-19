@@ -9,6 +9,7 @@ import { detectAndRecordLoginState } from "@/entrypoints/utils/loginState.ts";
 import {
     claimExternalOfferPage,
     claimOfferCard,
+    detectExternalPlatform,
     EXTERNAL_PLATFORM_STORAGE_KEYS,
     ExternalPlatform,
     hasPrimeMembership,
@@ -119,13 +120,23 @@ export default defineContentScript({
             const loginState = await detectAndRecordLoginState(Platforms.PrimeGaming);
             if (loginState === false) return;
 
+            // Confirmed live: this "claimed" signal (the Get game button
+            // disappearing on the same page) only means a real library claim for
+            // Epic's account-linking flow. GOG and Windows Store instead redeem
+            // via a one-time code shown on this same page once clicked — the
+            // button disappears there too, but nothing is actually claimed until
+            // the user pastes that code into gog.com or the Windows Store app
+            // themselves, so counting it here would be a false positive. The
+            // click still happens (it surfaces the code without the user having
+            // to find the offer manually) — it just isn't counted as claimed.
+            const platform = detectExternalPlatform(document.body);
             const outcome = await claimExternalOfferPage(
                 () => findButtonByText(document, 'Get game'),
                 realClick,
                 wait,
                 () => location.href,
             );
-            if (outcome === "claimed") await incrementCounter();
+            if (outcome === "claimed" && platform === "Epic") await incrementCounter();
             // "link-required" (redirected to Amazon's account-linking flow) and
             // "failed" are both silent no-ops by design — never thrown, so one
             // unlinked platform can't block the rest of the claim run.
