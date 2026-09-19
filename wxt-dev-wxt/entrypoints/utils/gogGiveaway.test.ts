@@ -14,14 +14,14 @@ import { Platforms } from '@/entrypoints/enums/platforms.ts';
 
 describe('buildRedeemUrl', () => {
   it('builds a gog.com/redeem URL carrying the code as a query param', () => {
-    expect(buildRedeemUrl('ABCDE-FGHIJ-KLMNO-PQRST'))
-      .toBe(`${GOG_REDEEM_URL}?extCode=ABCDE-FGHIJ-KLMNO-PQRST`);
+    expect(buildRedeemUrl('YRXG7D62AF07ADCE5B'))
+      .toBe(`${GOG_REDEEM_URL}?extCode=YRXG7D62AF07ADCE5B`);
   });
 });
 
 describe('extractRedeemCodeParam', () => {
   it('reads the code back out of the query string', () => {
-    expect(extractRedeemCodeParam('?extCode=ABCDE-FGHIJ-KLMNO-PQRST')).toBe('ABCDE-FGHIJ-KLMNO-PQRST');
+    expect(extractRedeemCodeParam('?extCode=YRXG7D62AF07ADCE5B')).toBe('YRXG7D62AF07ADCE5B');
   });
 
   it('returns null when the param is absent', () => {

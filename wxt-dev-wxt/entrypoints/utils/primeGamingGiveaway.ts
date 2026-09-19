@@ -160,11 +160,15 @@ export async function claimOfferCard(
   return "failed";
 }
 
-// GOG's redeem codes are uppercase, hyphen-separated groups — unverified
-// against a live page (no way to see one without actually redeeming), but
-// deliberately case-sensitive so it can never match the lowercase-hex Luna
-// item id that's also hyphen-separated and present on every details page.
-const REDEEM_CODE_PATTERN = /\b[A-Z0-9]{4,8}(?:-[A-Z0-9]{4,8}){2,5}\b/;
+// Confirmed live: a GOG redeem code is a single contiguous uppercase
+// alphanumeric string with no separators (e.g. "YRXG7D62AF07ADCE5B", 19
+// chars) — not the hyphen-grouped shape this originally assumed. Requiring
+// both a letter and a digit (via lookaheads) rules out plain all-caps words
+// and pure numbers; requiring uppercase rules out the lowercase-hex Luna item
+// id that's also present on every details page. Length is a guess bounded
+// around the one confirmed example — may need widening if other games' codes
+// turn out shorter or longer.
+const REDEEM_CODE_PATTERN = /\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{12,24}\b/;
 
 export function extractRedeemCode(root: Document | HTMLElement): string | null {
   // Document.textContent is spec'd to return null (only Elements have it) —

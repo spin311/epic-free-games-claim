@@ -264,9 +264,11 @@ describe('claimExternalOfferPage', () => {
 });
 
 describe('extractRedeemCode', () => {
-  it('extracts an uppercase hyphenated redeem code from the page text', () => {
-    const doc = docFrom('<div class="code-panel"><p>Your code:</p><p>ABCDE-FGHIJ-KLMNO-PQRST</p></div>');
-    expect(extractRedeemCode(doc)).toBe('ABCDE-FGHIJ-KLMNO-PQRST');
+  // Confirmed live: a GOG redeem code is one contiguous uppercase alphanumeric
+  // string, no separators — e.g. "YRXG7D62AF07ADCE5B" (19 chars).
+  it('extracts a contiguous uppercase alphanumeric redeem code from the page text', () => {
+    const doc = docFrom('<div class="code-panel"><p>Your code:</p><p>YRXG7D62AF07ADCE5B</p></div>');
+    expect(extractRedeemCode(doc)).toBe('YRXG7D62AF07ADCE5B');
   });
 
   it('returns null when no code-like pattern is present', () => {
@@ -274,17 +276,27 @@ describe('extractRedeemCode', () => {
     expect(extractRedeemCode(doc)).toBeNull();
   });
 
-  // The Luna item id (amzn1.pg.item.<lowercase-hex-uuid>) is also
-  // hyphen-separated and appears on every details page — the pattern must not
-  // mistake it for the redeem code, which GOG issues in uppercase.
+  // The Luna item id (amzn1.pg.item.<lowercase-hex-uuid>) appears on every
+  // details page — the pattern must not mistake it for the redeem code,
+  // which GOG issues in uppercase.
   it('does not match a lowercase UUID-style item id', () => {
     const doc = docFrom('<div>amzn1.pg.item.dbfe54c6-6298-46ec-808d-49d3915b9734</div>');
     expect(extractRedeemCode(doc)).toBeNull();
   });
 
+  it('does not match a plain all-caps word (needs both a letter and a digit)', () => {
+    const doc = docFrom('<div>CONGRATULATIONS</div>');
+    expect(extractRedeemCode(doc)).toBeNull();
+  });
+
+  it('does not match a pure number (needs both a letter and a digit)', () => {
+    const doc = docFrom('<div>1234567890123456</div>');
+    expect(extractRedeemCode(doc)).toBeNull();
+  });
+
   it('returns the first match when multiple code-like strings are present', () => {
-    const doc = docFrom('<div>ABCDE-FGHIJ-KLMNO first, then WXYZ1-WXYZ2-WXYZ3 second</div>');
-    expect(extractRedeemCode(doc)).toBe('ABCDE-FGHIJ-KLMNO');
+    const doc = docFrom('<div>YRXG7D62AF07ADCE5B first, then AB12CD34EF56GH78IJ second</div>');
+    expect(extractRedeemCode(doc)).toBe('YRXG7D62AF07ADCE5B');
   });
 });
 
