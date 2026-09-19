@@ -3,6 +3,7 @@ import {
   claimExternalOfferPage,
   claimOfferCard,
   detectExternalPlatform,
+  extractRedeemCode,
   hasPrimeMembership,
   isInternalOfferCard,
   isOfferDetailsPage,
@@ -259,6 +260,31 @@ describe('claimExternalOfferPage', () => {
     );
 
     expect(outcome).toBe('failed');
+  });
+});
+
+describe('extractRedeemCode', () => {
+  it('extracts an uppercase hyphenated redeem code from the page text', () => {
+    const doc = docFrom('<div class="code-panel"><p>Your code:</p><p>ABCDE-FGHIJ-KLMNO-PQRST</p></div>');
+    expect(extractRedeemCode(doc)).toBe('ABCDE-FGHIJ-KLMNO-PQRST');
+  });
+
+  it('returns null when no code-like pattern is present', () => {
+    const doc = docFrom('<div>Thanks for claiming Some Game!</div>');
+    expect(extractRedeemCode(doc)).toBeNull();
+  });
+
+  // The Luna item id (amzn1.pg.item.<lowercase-hex-uuid>) is also
+  // hyphen-separated and appears on every details page — the pattern must not
+  // mistake it for the redeem code, which GOG issues in uppercase.
+  it('does not match a lowercase UUID-style item id', () => {
+    const doc = docFrom('<div>amzn1.pg.item.dbfe54c6-6298-46ec-808d-49d3915b9734</div>');
+    expect(extractRedeemCode(doc)).toBeNull();
+  });
+
+  it('returns the first match when multiple code-like strings are present', () => {
+    const doc = docFrom('<div>ABCDE-FGHIJ-KLMNO first, then WXYZ1-WXYZ2-WXYZ3 second</div>');
+    expect(extractRedeemCode(doc)).toBe('ABCDE-FGHIJ-KLMNO');
   });
 });
 

@@ -1,13 +1,34 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+  buildRedeemUrl,
+  extractRedeemCodeParam,
   GOG_CLAIM_URL,
   GOG_HOME_URL,
+  GOG_REDEEM_URL,
   GOG_STATUS_URL,
   claimGiveaway,
   fetchGiveaway,
   parseGiveawayStatus,
 } from './gogGiveaway';
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
+
+describe('buildRedeemUrl', () => {
+  it('builds a gog.com/redeem URL carrying the code as a query param', () => {
+    expect(buildRedeemUrl('ABCDE-FGHIJ-KLMNO-PQRST'))
+      .toBe(`${GOG_REDEEM_URL}?extCode=ABCDE-FGHIJ-KLMNO-PQRST`);
+  });
+});
+
+describe('extractRedeemCodeParam', () => {
+  it('reads the code back out of the query string', () => {
+    expect(extractRedeemCodeParam('?extCode=ABCDE-FGHIJ-KLMNO-PQRST')).toBe('ABCDE-FGHIJ-KLMNO-PQRST');
+  });
+
+  it('returns null when the param is absent', () => {
+    expect(extractRedeemCodeParam('')).toBeNull();
+    expect(extractRedeemCodeParam('?other=1')).toBeNull();
+  });
+});
 
 // Builds a minimal Response-like stub; the helpers only touch these members.
 function response(status: number, body: unknown, ok = status >= 200 && status < 300) {

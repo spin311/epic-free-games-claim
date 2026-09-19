@@ -12,12 +12,14 @@ import {
     detectExternalPlatform,
     EXTERNAL_PLATFORM_STORAGE_KEYS,
     ExternalPlatform,
+    extractRedeemCode,
     hasPrimeMembership,
     isInternalOfferCard,
     isOfferDetailsPage,
     parseExternalOffers,
     parseInternalOffers,
 } from "@/entrypoints/utils/primeGamingGiveaway.ts";
+import { buildRedeemUrl } from "@/entrypoints/utils/gogGiveaway.ts";
 import { findButtonByText, getRndInteger, incrementCounter, realClick, wait, waitForElement, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
 
 export default defineContentScript({
@@ -136,10 +138,29 @@ export default defineContentScript({
                 wait,
                 () => location.href,
             );
-            if (outcome === "claimed" && platform === "Epic") await incrementCounter();
+
+            if (outcome !== "claimed") return;
             // "link-required" (redirected to Amazon's account-linking flow) and
             // "failed" are both silent no-ops by design — never thrown, so one
             // unlinked platform can't block the rest of the claim run.
+
+            if (platform === "Epic") {
+                await incrementCounter();
+                return;
+            }
+
+            // GOG redeems via a one-time code shown on this same page rather than
+            // an in-library claim — hand it straight to gog.com/redeem so the
+            // user only has to solve the captcha and click Continue there. Never
+            // counted as claimed: redemption only actually completes once they
+            // do that themselves.
+            if (platform === "GOG") {
+                const code = extractRedeemCode(document);
+                if (code) location.href = buildRedeemUrl(code);
+            }
+            // Windows Store codes have nowhere a browser extension can hand them
+            // off to (no website — the native Store app does the redeeming), so
+            // this just leaves the code visible on the page for manual copying.
         }
     },
 });

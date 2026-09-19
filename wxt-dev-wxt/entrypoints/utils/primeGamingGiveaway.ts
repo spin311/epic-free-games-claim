@@ -160,6 +160,21 @@ export async function claimOfferCard(
   return "failed";
 }
 
+// GOG's redeem codes are uppercase, hyphen-separated groups — unverified
+// against a live page (no way to see one without actually redeeming), but
+// deliberately case-sensitive so it can never match the lowercase-hex Luna
+// item id that's also hyphen-separated and present on every details page.
+const REDEEM_CODE_PATTERN = /\b[A-Z0-9]{4,8}(?:-[A-Z0-9]{4,8}){2,5}\b/;
+
+export function extractRedeemCode(root: Document | HTMLElement): string | null {
+  // Document.textContent is spec'd to return null (only Elements have it) —
+  // callers pass `document` itself, so this must fall back to .body. Duck-typed
+  // rather than `instanceof Document` to stay realm-agnostic in tests.
+  const node = 'body' in root && root.body ? root.body : (root as HTMLElement);
+  const match = REDEEM_CODE_PATTERN.exec(node.textContent ?? '');
+  return match ? match[0] : null;
+}
+
 export type ExternalClaimOutcome = "claimed" | "link-required" | "failed";
 
 // "Get game" on an external offer's details page either claims in place

@@ -5,8 +5,8 @@ import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {recordLoginState} from "@/entrypoints/utils/loginState.ts";
-import {claimGiveaway, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
-import {incrementCounter, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
+import {claimGiveaway, extractRedeemCodeParam, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
+import {incrementCounter, waitForElement, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
 
 // Unlike the Epic and Steam scripts this one never touches the page's DOM — GOG
 // exposes the giveaway as JSON. It exists purely so the requests run in a
@@ -18,7 +18,30 @@ export default defineContentScript({
         if (!oncePerPageRun('_myGogContentScriptInjected' as keyof Window)) {
             return;
         }
+
+        // A GOG-linked Prime Gaming claim (see primegaming.content.ts) lands
+        // here with the code in the URL. Prefilling it and stopping there — the
+        // redeem page's own Cloudflare Turnstile captcha gates its Continue
+        // button, and solving that is intentionally left to the user, never
+        // automated.
+        void prefillRedeemCodeIfPresent();
+
         onClaimMessage({getFreeGames: getFreeGamesList, claimGames: claimCurrentGiveaway});
+
+        async function prefillRedeemCodeIfPresent() {
+            const code = extractRedeemCodeParam(location.search);
+            if (!code) return;
+
+            await waitForPageLoad();
+            const input = await waitForElement(document, '#codeInput');
+            if (!input) return;
+
+            (input as HTMLInputElement).value = code;
+            // The redeem page is a Vue app whose v-model only syncs on a real
+            // 'input' event — setting .value alone leaves its internal state
+            // (and the Continue button's validation) unaware anything changed.
+            input.dispatchEvent(new Event('input', {bubbles: true}));
+        }
 
         async function getFreeGamesList() {
             await waitForPageLoad();

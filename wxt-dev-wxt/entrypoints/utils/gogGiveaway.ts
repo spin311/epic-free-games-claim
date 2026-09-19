@@ -8,6 +8,22 @@ import { Platforms } from "@/entrypoints/enums/platforms.ts";
 export const GOG_HOME_URL = "https://www.gog.com/";
 export const GOG_STATUS_URL = "https://www.gog.com/giveaway/status";
 export const GOG_CLAIM_URL = "https://www.gog.com/giveaway/claim";
+export const GOG_REDEEM_URL = "https://www.gog.com/redeem";
+// gog.content.ts's redeem-page branch reads this param back out and fills
+// #codeInput with it. The redeem page itself is gated behind a Cloudflare
+// Turnstile captcha before its Continue button enables — deliberately never
+// automated past this point; a human still has to solve it and submit.
+export const GOG_REDEEM_CODE_PARAM = "extCode";
+
+export function buildRedeemUrl(code: string): string {
+    const url = new URL(GOG_REDEEM_URL);
+    url.searchParams.set(GOG_REDEEM_CODE_PARAM, code);
+    return url.toString();
+}
+
+export function extractRedeemCodeParam(search: string): string | null {
+    return new URLSearchParams(search).get(GOG_REDEEM_CODE_PARAM);
+}
 
 const FALLBACK_IMAGE = "/icon/128.png";
 const FALLBACK_TITLE = "GOG Giveaway";
