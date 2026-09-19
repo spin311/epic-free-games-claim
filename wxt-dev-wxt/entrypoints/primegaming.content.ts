@@ -40,7 +40,15 @@ export default defineContentScript({
         async function openGamesTabAndGetOfferList(): Promise<Element | null> {
             const gameTab = await waitForElement(document, 'button[data-type="Game"]');
             if (gameTab) realClick(gameTab);
-            return waitForElement(document, 'div[data-a-target="offer-list-FGWP_FULL"]', 500, 20);
+            const offerList = await waitForElement(document, 'div[data-a-target="offer-list-FGWP_FULL"]', 500, 20);
+            if (!offerList) return null;
+
+            // Confirmed live: the container div can render before its card
+            // children actually stream in, so reading offerList's children
+            // immediately after finding it can race an empty shell. Wait for at
+            // least one card to exist before treating the list as ready.
+            const hasCards = await waitForElement(offerList, '.item-card__action', 500, 20);
+            return hasCards ? offerList : null;
         }
 
         // Off by default per platform — claiming an external offer means
