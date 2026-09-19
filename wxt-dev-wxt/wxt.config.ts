@@ -15,7 +15,8 @@ export default defineConfig({
       "https://www.gog.com/*",
       "https://freebies.indiegala.com/*",
       "https://www.indiegala.com/*",
-      "https://gaming.amazon.com/*"
+      "https://gaming.amazon.com/*",
+      "https://luna.amazon.com/*"
     ],
     browser_specific_settings: {
       gecko: {
