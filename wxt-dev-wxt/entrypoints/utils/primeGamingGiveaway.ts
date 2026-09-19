@@ -53,26 +53,23 @@ export const EXTERNAL_PLATFORM_STORAGE_KEYS: Record<ExternalPlatform, string> = 
   Windows: "primeGamingClaimWindows",
 };
 
-const EXTERNAL_PLATFORM_PATTERNS: [ExternalPlatform, RegExp][] = [
-  ["Epic", /epic\s*games/i],
-  ["GOG", /\bgog\b/i],
-  ["Windows", /windows|microsoft\s*store/i],
+// Confirmed live: cards carry no icon, alt text, title, or aria-label naming
+// the redeem platform anywhere on them — the only signal is the claim slug
+// itself, which Amazon suffixes with the platform: .../claims/drop-duchy-epic/
+// dp/..., .../claims/weakless-gog/dp/..., .../claims/doom-eternal-microsoft/
+// dp/.... Also seen: "-aga" (Amazon's own native launcher app), which isn't
+// one of the three platforms this extension supports and is deliberately
+// left unmatched.
+const EXTERNAL_PLATFORM_SLUG_SUFFIXES: [ExternalPlatform, string][] = [
+  ["Epic", "-epic"],
+  ["GOG", "-gog"],
+  ["Windows", "-microsoft"],
 ];
 
-// The redeem-platform badge isn't a selector we can pin down without a live
-// session, so this matches accessible text (alt/title/aria-label) plus the
-// card's own text against known platform names — generic on purpose, so a
-// markup tweak to the badge itself doesn't silently stop detection.
-export function detectExternalPlatform(card: Element): ExternalPlatform | null {
-  const haystack = [
-    card.textContent ?? '',
-    ...Array.from(card.querySelectorAll('img')).map((img) => img.getAttribute('alt') ?? ''),
-    ...Array.from(card.querySelectorAll('[title]')).map((el) => el.getAttribute('title') ?? ''),
-    ...Array.from(card.querySelectorAll('[aria-label]')).map((el) => el.getAttribute('aria-label') ?? ''),
-  ].join(' ');
-
-  for (const [platform, pattern] of EXTERNAL_PLATFORM_PATTERNS) {
-    if (pattern.test(haystack)) return platform;
+export function detectExternalPlatform(href: string): ExternalPlatform | null {
+  const slug = href.split('/claims/')[1]?.split('/dp/')[0]?.split('?')[0] ?? '';
+  for (const [platform, suffix] of EXTERNAL_PLATFORM_SLUG_SUFFIXES) {
+    if (slug.endsWith(suffix)) return platform;
   }
   return null;
 }
@@ -109,7 +106,8 @@ export function parseExternalOffers(
   const games: FreeGame[] = [];
   for (const card of cards) {
     if (isInternalOfferCard(card)) continue;
-    const platform = detectExternalPlatform(card);
+    const href = card.querySelector('a')?.getAttribute('href');
+    const platform = href ? detectExternalPlatform(href) : null;
     if (!platform || !allowedPlatforms.has(platform)) continue;
     const game = parseExternalOfferCard(card, baseUrl);
     if (game) games.push(game);

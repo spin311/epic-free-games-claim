@@ -107,38 +107,49 @@ const CARD_WITH_CLAIM_BUTTON = `
 // Confirmed live: clicking an external offer navigates to
 // https://luna.amazon.com/claims/{slug}/dp/{itemId}?ingress=amzn — a details
 // page distinct from the offer-list page.
+// Confirmed live: cards carry no icon/alt/title/aria-label naming the
+// platform — only the claim href's slug suffix does.
 const EPIC_EXTERNAL_CARD = `
 <div class="item-card__action">
   <a data-a-target="FGWPOffer" href="/claims/space-grunts-epic/dp/amzn1.pg.item.dbfe54c6?ingress=amzn">
-    <img class="tw-image" src="https://images/space-grunts.png" alt="Redeem on Epic Games"/>
+    <img class="tw-image" src="https://images/space-grunts.png"/>
   </a>
   <div class="item-card-details__body__primary">Space Grunts</div>
 </div>`;
 
 const GOG_EXTERNAL_CARD = `
 <div class="item-card__action">
-  <a data-a-target="FGWPOffer" href="/claims/some-gog-game/dp/amzn1.pg.item.aaa?ingress=amzn">
-    <img class="tw-image" src="https://images/gog-game.png" alt="Redeem on GOG"/>
+  <a data-a-target="FGWPOffer" href="/claims/weakless-gog/dp/amzn1.pg.item.aaa?ingress=amzn">
+    <img class="tw-image" src="https://images/weakless.png"/>
   </a>
-  <div class="item-card-details__body__primary">Some GOG Game</div>
+  <div class="item-card-details__body__primary">Weakless</div>
 </div>`;
 
 describe('detectExternalPlatform', () => {
-  it('detects Epic from the offer image alt text', () => {
-    expect(detectExternalPlatform(elFrom(EPIC_EXTERNAL_CARD))).toBe('Epic');
+  it('detects Epic from the claim href\'s slug suffix', () => {
+    expect(detectExternalPlatform('/claims/space-grunts-epic/dp/amzn1.pg.item.dbfe54c6?ingress=amzn')).toBe('Epic');
   });
 
-  it('detects GOG from the offer image alt text', () => {
-    expect(detectExternalPlatform(elFrom(GOG_EXTERNAL_CARD))).toBe('GOG');
+  it('detects GOG from the claim href\'s slug suffix', () => {
+    expect(detectExternalPlatform('/claims/weakless-gog/dp/amzn1.pg.item.aaa?ingress=amzn')).toBe('GOG');
   });
 
-  it('returns null for an internal offer (no external-store badge)', () => {
-    expect(detectExternalPlatform(elFrom(INTERNAL_CARD))).toBeNull();
+  it('detects Windows from the claim href\'s slug suffix', () => {
+    expect(detectExternalPlatform('/claims/doom-eternal-microsoft/dp/amzn1.pg.item.bbb?ingress=amzn')).toBe('Windows');
   });
 
-  it('returns null when no known platform keyword is present', () => {
-    const card = elFrom('<div class="item-card__action"><img alt="mystery store"/></div>');
-    expect(detectExternalPlatform(card)).toBeNull();
+  it('works against a full absolute URL, not just a path', () => {
+    expect(detectExternalPlatform('https://luna.amazon.com/claims/drop-duchy-epic/dp/amzn1.pg.item.ccc?ingress=amzn')).toBe('Epic');
+  });
+
+  // "-aga" is Amazon's own native-launcher app — a real platform seen live,
+  // just not one of the three this extension supports.
+  it('returns null for an unsupported platform suffix (Amazon Games App)', () => {
+    expect(detectExternalPlatform('/claims/havendock-aga/dp/amzn1.pg.item.ddd?ingress=amzn')).toBeNull();
+  });
+
+  it('returns null when the href has no /claims/ segment at all', () => {
+    expect(detectExternalPlatform('/home')).toBeNull();
   });
 });
 
@@ -177,7 +188,7 @@ describe('parseExternalOffers', () => {
       new Set(['Epic', 'GOG']),
       'https://luna.amazon.com/home'
     );
-    expect(games.map((g) => g.title).sort()).toEqual(['Some GOG Game', 'Space Grunts']);
+    expect(games.map((g) => g.title).sort()).toEqual(['Space Grunts', 'Weakless']);
   });
 
   it('returns nothing when no platform is allowed (opt-in default)', () => {

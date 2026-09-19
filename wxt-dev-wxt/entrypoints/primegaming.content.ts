@@ -154,7 +154,7 @@ export default defineContentScript({
             // themselves, so counting it here would be a false positive. The
             // click still happens (it surfaces the code without the user having
             // to find the offer manually) — it just isn't counted as claimed.
-            const platform = detectExternalPlatform(document.body);
+            const platform = detectExternalPlatform(location.pathname);
             const outcome = await claimExternalOfferPage(
                 () => findButtonByText(document, 'Get game'),
                 realClick,
