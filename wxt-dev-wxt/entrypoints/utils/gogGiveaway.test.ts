@@ -158,6 +158,15 @@ describe('fetchGiveaway', () => {
     await expect(fetchGiveaway(fetchImpl)).resolves.toEqual({ unauthorized: false, game: null });
   });
 
+  // Confirmed live: the endpoint 404s when no giveaway is running, rather
+  // than answering 200 with an empty body — same "nothing to report" outcome
+  // as the case above, not a transport failure worth throwing over.
+  it('treats a 404 as "no giveaway running" rather than throwing', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response(404, 'Not Found', false));
+
+    await expect(fetchGiveaway(fetchImpl)).resolves.toEqual({ unauthorized: false, game: null });
+  });
+
   it('returns the parsed game when a giveaway is running', async () => {
     const fetchImpl = vi
       .fn()

@@ -276,11 +276,17 @@ export const background = {
       console.error("getSteamGamesList failed:", e);
       if (steamCheck) await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
     }
-    try {
-      await this.getGogGamesList(claimGog);
-    } catch (e) {
-      console.error("getGogGamesList failed:", e);
-      if (claimGog) await this.openTabAndSendActionToContent(GOG_HOME_URL, "getFreeGames");
+    // Skipped entirely (not just un-claimed) when disabled — unlike the other
+    // platforms' public/no-auth APIs, GOG's status endpoint needs the user's
+    // session and has genuine failure modes (signed out, transport errors)
+    // worth avoiding altogether when the user doesn't want GOG at all.
+    if (claimGog) {
+      try {
+        await this.getGogGamesList(claimGog);
+      } catch (e) {
+        console.error("getGogGamesList failed:", e);
+        await this.openTabAndSendActionToContent(GOG_HOME_URL, "getFreeGames");
+      }
     }
     try {
       await this.getIndieGalaGamesList(claimIndieGala);

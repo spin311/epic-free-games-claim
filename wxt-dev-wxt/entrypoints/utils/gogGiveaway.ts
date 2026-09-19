@@ -105,6 +105,9 @@ function parseJsonBody(body: string): unknown {
 // Reads the currently running giveaway. Throws on transport/server failures so
 // the background can fall back to driving a real gog.com tab; a 401/403 is
 // reported rather than thrown because it is an expected, actionable state.
+// Confirmed live: a 404 is GOG's normal "no giveaway running right now"
+// response (not an auth problem, not a broken endpoint) — reported the same
+// way as an empty 200 body rather than thrown.
 export async function fetchGiveaway(fetchImpl: typeof fetch = fetch): Promise<GiveawayLookup> {
     const response = await fetchImpl(GOG_STATUS_URL, {
         credentials: "include",
@@ -113,6 +116,9 @@ export async function fetchGiveaway(fetchImpl: typeof fetch = fetch): Promise<Gi
 
     if (response.status === 401 || response.status === 403) {
         return { unauthorized: true, game: null };
+    }
+    if (response.status === 404) {
+        return { unauthorized: false, game: null };
     }
     if (!response.ok) {
         throw new Error(`GOG giveaway status responded ${response.status}`);
