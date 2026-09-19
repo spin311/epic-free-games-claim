@@ -9,6 +9,7 @@ import { ClaimFrequency } from "@/entrypoints/enums/claimFrequency.ts";
 import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
 import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
+import { StoredWheelPrize } from "@/entrypoints/utils/indieGalaWheel.ts";
 
 function Settings() {
 
@@ -17,6 +18,10 @@ function Settings() {
     const [epicCheck, setEpicCheck] = useStorage<boolean>("epicCheck", true);
     const [gogCheck, setGogCheck] = useStorage<boolean>("gogCheck", true);
     const [indieGalaCheck, setIndieGalaCheck] = useStorage<boolean>("indieGalaCheck", true);
+    // Off by default, but turning IndieGala on also turns this on (see
+    // handleIndieGalaCheckChange) — the user can still opt back out afterward.
+    const [indieGalaWheelCheck, setIndieGalaWheelCheck] = useStorage<boolean>("indieGalaWheelCheck", false);
+    const [indieGalaWheelLastPrize] = useStorage<StoredWheelPrize | null>("indieGalaWheelLastPrize", null);
     const [primeGamingCheck, setPrimeGamingCheck] = useStorage<boolean>("primeGamingCheck", true);
     const [claimFrequency, setClaimFrequency] = useStorage<ClaimFrequency>("claimFrequency", ClaimFrequency.DAILY);
     // Written by the store content scripts on each claim run; null until one has run.
@@ -33,6 +38,14 @@ function Settings() {
         sendMessage({ action: "updateFrequency", target: "background" });
     }
 
+    // Turning IndieGala on also turns the wheel sub-setting on, so most users
+    // never have to find and enable it separately; turning IndieGala off does
+    // not clear it, so re-enabling IndieGala later remembers the choice.
+    function handleIndieGalaCheckChange(checked: boolean) {
+        setIndieGalaCheck(checked);
+        if (checked) setIndieGalaWheelCheck(true);
+    }
+
     function sendMessage(request: MessageRequest) {
         browser.runtime.sendMessage(request);
     }
@@ -41,6 +54,12 @@ function Settings() {
         <div className="tab-content">
             <h1>Free Games for Steam, Epic, GOG, IndieGala & Prime Gaming</h1>
             <p>Games claimed: {counter}</p>
+            {indieGalaWheelLastPrize && (
+                <p>
+                    IndieGala wheel last prize: {indieGalaWheelLastPrize.label}
+                    {' '}({new Date(indieGalaWheelLastPrize.wonAt).toLocaleDateString()})
+                </p>
+            )}
             <OnButton/>
 
             <div className="inputs">
@@ -61,8 +80,13 @@ function Settings() {
                               trailing={<LoginStatus state={epicLoggedIn}/>}/>
                     <Checkbox name="GOG" checked={gogCheck} onChange={e => setGogCheck(e.target.checked)}
                               trailing={<LoginStatus state={gogLoggedIn}/>}/>
-                    <Checkbox name="IndieGala" checked={indieGalaCheck} onChange={e => setIndieGalaCheck(e.target.checked)}
+                    <Checkbox name="IndieGala" checked={indieGalaCheck} onChange={e => handleIndieGalaCheckChange(e.target.checked)}
                               trailing={<LoginStatus state={indieGalaLoggedIn}/>}/>
+                    <div className="nested-checkbox">
+                        <Checkbox name="Wheel of Fortune" checked={indieGalaWheelCheck}
+                                  onChange={e => setIndieGalaWheelCheck(e.target.checked)}
+                                  disabled={!indieGalaCheck}/>
+                    </div>
                     <Checkbox name="Prime Gaming" checked={primeGamingCheck} onChange={e => setPrimeGamingCheck(e.target.checked)}
                               trailing={<LoginStatus state={primeGamingLoggedIn}/>}/>
                 </div>

@@ -191,6 +191,23 @@ button:focus-visible {
   opacity: 0.5;
 }
 
+/* IndieGala wheel sub-setting, indented under the IndieGala checkbox row and
+   plain rather than pill-styled — the same treatment review-threshold uses
+   for Steam's sub-setting. */
+.nested-checkbox {
+  padding: 0 0.75em 0.2em 2.1em;
+}
+
+.nested-checkbox span {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.nested-checkbox .is-disabled {
+  opacity: 0.5;
+}
+
 /* Sits after the row label (which is flex: 1), so it hugs the right edge. */
 .login-status {
   display: flex;

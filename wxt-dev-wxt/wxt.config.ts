@@ -14,6 +14,7 @@ export default defineConfig({
       "https://store-site-backend-static-ipv4.ak.epicgames.com/*",
       "https://www.gog.com/*",
       "https://freebies.indiegala.com/*",
+      "https://www.indiegala.com/*",
       "https://gaming.amazon.com/*"
     ],
     browser_specific_settings: {

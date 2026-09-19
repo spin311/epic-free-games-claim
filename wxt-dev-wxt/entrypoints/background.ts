@@ -6,6 +6,7 @@ import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFr
 import {parse} from 'node-html-parser';
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
+import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
 import {PRIME_GAMING_HOME_URL} from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import {LoginState} from "@/entrypoints/utils/loginState.ts";
 import {
@@ -257,8 +258,8 @@ export const background = {
   },
 
   async getFreeGamesList() {
-    const { steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck } = await getStorageItems([
-      "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck",
+    const { steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck, indieGalaWheelCheck } = await getStorageItems([
+      "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck", "indieGalaWheelCheck",
     ]);
     const claimGog = gogCheck !== false;
     const claimIndieGala = indieGalaCheck !== false;
@@ -286,6 +287,11 @@ export const background = {
     } catch (e) {
       console.error("getIndieGalaGamesList failed:", e);
       if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
+    }
+    try {
+      await this.checkIndieGalaWheel(claimIndieGala && indieGalaWheelCheck === true);
+    } catch (e) {
+      console.error("checkIndieGalaWheel failed:", e);
     }
     // Prime Gaming has no background-reachable API — gaming.amazon.com/home is a
     // client-rendered SPA whose offer list only exists after an authenticated page
@@ -578,6 +584,28 @@ export const background = {
     if (shouldClaim && loggedIn !== false && newGames.length > 0) {
       await this.claimGames(newGames);
     }
+  },
+
+  // The daily wheel resets once per calendar day server-side regardless of how
+  // often getFreeGamesList runs, so this self-gates on its own last-check date
+  // instead of reusing claimFrequency — an hourly game-claim cadence must not
+  // reopen an IndieGala tab every hour just to find no spin available.
+  // Unlike the other platforms, the wheel has no fast background-fetch path:
+  // reading it requires a CSRF cookie only a real page can supply, so this
+  // always opens a tab when due, same as Prime Gaming.
+  async checkIndieGalaWheel(shouldSpin: boolean) {
+    if (!shouldSpin) return;
+
+    const today = new Date().toISOString();
+    const lastCheck = await getStorageItem<string>("indieGalaWheelLastCheck");
+    if (lastCheck && !areDatesDifferent(lastCheck, today)) return;
+
+    // Flag set only after the tab/message actually goes out (mirrors
+    // getFreeGamesAndSetOpenedFlag): if this throws, today's attempt never
+    // happened, so the next check must still retry rather than silently
+    // skipping the wheel for the rest of the day.
+    await this.openTabAndSendActionToContent(INDIEGALA_WHEEL_URL, "spinWheel");
+    await setStorageItem("indieGalaWheelLastCheck", today);
   },
 
   async clearGamesList() {

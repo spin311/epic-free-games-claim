@@ -2,7 +2,8 @@
 // Lives under entrypoints/tests/ (not entrypoints/ root) so WXT doesn't treat it
 // as a duplicate "background" entrypoint. Node env avoids the esbuild/jsdom clash
 // from importing background.ts (which pulls in `#imports`).
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vitest';
+import { fakeBrowser } from 'wxt/testing';
 import {
   areDatesDifferent,
   background,
@@ -14,6 +15,8 @@ import {
   withEpicEnglishLocale,
 } from '../background';
 import { Platforms } from '../enums/platforms';
+import { getStorageItem, setStorageItem } from '../hooks/useStorage';
+import { INDIEGALA_WHEEL_URL } from '../utils/indieGalaWheel';
 
 describe('areDatesDifferent', () => {
   it('is true for different calendar days', () => {
@@ -251,5 +254,92 @@ describe('claimGames resilience', () => {
 
     expect(opened).toHaveLength(2);
     expect(badgeTexts).toEqual(['2']);
+  });
+});
+
+describe('checkIndieGalaWheel', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  it('opens the IndieGala homepage to spin when due and enabled', async () => {
+    const opened: { url: string; action: string }[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string, action: string) => {
+      opened.push({ url, action });
+    };
+
+    await runner.checkIndieGalaWheel(true);
+
+    expect(opened).toEqual([{ url: INDIEGALA_WHEEL_URL, action: 'spinWheel' }]);
+  });
+
+  it('does nothing when the wheel check is disabled', async () => {
+    const opened: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+
+    await runner.checkIndieGalaWheel(false);
+
+    expect(opened).toEqual([]);
+  });
+
+  it('does not re-open the tab twice on the same calendar day', async () => {
+    const opened: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+
+    await runner.checkIndieGalaWheel(true);
+    await runner.checkIndieGalaWheel(true);
+
+    expect(opened).toHaveLength(1);
+  });
+
+  it('opens the tab again once the calendar day changes', async () => {
+    const opened: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+    await setStorageItem('indieGalaWheelLastCheck', new Date('2026-01-01T00:00:00Z').toISOString());
+
+    await runner.checkIndieGalaWheel(true);
+
+    expect(opened).toHaveLength(1);
+  });
+
+  it('records the last-check date so the next same-day call is a no-op', async () => {
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async () => {};
+
+    await runner.checkIndieGalaWheel(true);
+
+    const lastCheck = await getStorageItem<string>('indieGalaWheelLastCheck');
+    expect(lastCheck).not.toBeNull();
+    expect(areDatesDifferent(lastCheck!, new Date().toISOString())).toBe(false);
+  });
+
+  // Regression: the flag used to be written before the tab/message attempt,
+  // so a failed open (tab never loads, content script unreachable) still
+  // marked the day as "checked" and silently skipped the wheel until tomorrow.
+  it('does not record the last-check date when opening the tab fails, so the next call retries', async () => {
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async () => {
+      throw new Error('Could not establish connection');
+    };
+
+    await expect(runner.checkIndieGalaWheel(true)).rejects.toThrow();
+    expect(await getStorageItem<string>('indieGalaWheelLastCheck')).toBeNull();
+
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+    await runner.checkIndieGalaWheel(true);
+    expect(opened).toEqual([INDIEGALA_WHEEL_URL]);
   });
 });
