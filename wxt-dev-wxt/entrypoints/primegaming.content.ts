@@ -59,18 +59,33 @@ export default defineContentScript({
         async function getFreeGamesList() {
             await waitForPageLoad();
             const loginState = await detectAndRecordLoginState(Platforms.PrimeGaming);
-            if (loginState === false) return;
-            if (!hasPrimeMembership(document)) return;
+            if (loginState === false) {
+                console.warn("[primegaming] not signed in; skipping");
+                return;
+            }
+            if (!hasPrimeMembership(document)) {
+                console.warn("[primegaming] no Prime membership detected; skipping");
+                return;
+            }
 
             const offerList = await openGamesTabAndGetOfferList();
-            if (!offerList) return;
+            if (!offerList) {
+                console.warn("[primegaming] offer list never rendered; skipping");
+                return;
+            }
 
             const allowedExternalPlatforms = await getAllowedExternalPlatforms();
-            const gamesArr: FreeGame[] = [
-                ...parseInternalOffers(offerList),
-                ...parseExternalOffers(offerList, allowedExternalPlatforms, location.href),
-            ];
-            if (gamesArr.length === 0) return;
+            const internalGames = parseInternalOffers(offerList);
+            const externalGames = parseExternalOffers(offerList, allowedExternalPlatforms, location.href);
+            const gamesArr: FreeGame[] = [...internalGames, ...externalGames];
+            if (gamesArr.length === 0) {
+                console.warn(
+                    `[primegaming] nothing to claim — internal: ${internalGames.length}, ` +
+                    `external: ${externalGames.length}, allowed external platforms: ` +
+                    `${[...allowedExternalPlatforms].join(', ') || 'none'}`
+                );
+                return;
+            }
 
             await setStorageItem("primeGamingGames", gamesArr);
 
