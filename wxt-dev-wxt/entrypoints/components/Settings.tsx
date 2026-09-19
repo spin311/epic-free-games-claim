@@ -10,6 +10,7 @@ import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
 import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { StoredWheelPrize } from "@/entrypoints/utils/indieGalaWheel.ts";
+import { EXTERNAL_PLATFORM_STORAGE_KEYS } from "@/entrypoints/utils/primeGamingGiveaway.ts";
 
 function Settings() {
 
@@ -23,6 +24,12 @@ function Settings() {
     const [indieGalaWheelCheck, setIndieGalaWheelCheck] = useStorage<boolean>("indieGalaWheelCheck", false);
     const [indieGalaWheelLastPrize] = useStorage<StoredWheelPrize | null>("indieGalaWheelLastPrize", null);
     const [primeGamingCheck, setPrimeGamingCheck] = useStorage<boolean>("primeGamingCheck", true);
+    // Off by default and not auto-cascaded from primeGamingCheck (unlike the
+    // IndieGala wheel) — claiming these means navigating to that store's own
+    // account and possibly its account-linking flow, so it's a deliberate opt-in.
+    const [claimEpic, setClaimEpic] = useStorage<boolean>(EXTERNAL_PLATFORM_STORAGE_KEYS.Epic, false);
+    const [claimGog, setClaimGog] = useStorage<boolean>(EXTERNAL_PLATFORM_STORAGE_KEYS.GOG, false);
+    const [claimWindows, setClaimWindows] = useStorage<boolean>(EXTERNAL_PLATFORM_STORAGE_KEYS.Windows, false);
     const [claimFrequency, setClaimFrequency] = useStorage<ClaimFrequency>("claimFrequency", ClaimFrequency.DAILY);
     // Written by the store content scripts on each claim run; null until one has run.
     const [steamLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.Steam], null);
@@ -89,6 +96,21 @@ function Settings() {
                     </div>
                     <Checkbox name="Prime Gaming" checked={primeGamingCheck} onChange={e => setPrimeGamingCheck(e.target.checked)}
                               trailing={<LoginStatus state={primeGamingLoggedIn}/>}/>
+                    <div className="nested-checkbox">
+                        <Checkbox name="Claim Epic-linked offers" checked={claimEpic}
+                                  onChange={e => setClaimEpic(e.target.checked)}
+                                  disabled={!primeGamingCheck}/>
+                    </div>
+                    <div className="nested-checkbox">
+                        <Checkbox name="Claim GOG-linked offers" checked={claimGog}
+                                  onChange={e => setClaimGog(e.target.checked)}
+                                  disabled={!primeGamingCheck}/>
+                    </div>
+                    <div className="nested-checkbox">
+                        <Checkbox name="Claim Windows-linked offers" checked={claimWindows}
+                                  onChange={e => setClaimWindows(e.target.checked)}
+                                  disabled={!primeGamingCheck}/>
+                    </div>
                 </div>
             </div>
             <span>Free games are automatically claimed based on your selected frequency</span>

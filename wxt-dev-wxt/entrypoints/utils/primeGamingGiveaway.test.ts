@@ -1,5 +1,17 @@
 import { describe, it, expect, vi } from 'vitest';
-import { claimOfferCard, hasPrimeMembership, isInternalOfferCard, parseInternalOffers, parseOfferCard, PRIME_GAMING_HOME_URL } from './primeGamingGiveaway';
+import {
+  claimExternalOfferPage,
+  claimOfferCard,
+  detectExternalPlatform,
+  hasPrimeMembership,
+  isInternalOfferCard,
+  isOfferDetailsPage,
+  parseExternalOfferCard,
+  parseExternalOffers,
+  parseInternalOffers,
+  parseOfferCard,
+  PRIME_GAMING_HOME_URL,
+} from './primeGamingGiveaway';
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
 
 function elFrom(html: string): Element {
@@ -90,6 +102,165 @@ const CARD_WITH_CLAIM_BUTTON = `
   <div class="item-card-details__body__primary">Some Game</div>
   <button data-a-target="FGWPOffer" class="tw-button">Claim</button>
 </div>`;
+
+// Confirmed live: clicking an external offer navigates to
+// https://luna.amazon.com/claims/{slug}/dp/{itemId}?ingress=amzn — a details
+// page distinct from the offer-list page.
+const EPIC_EXTERNAL_CARD = `
+<div class="item-card__action">
+  <a data-a-target="FGWPOffer" href="/claims/space-grunts-epic/dp/amzn1.pg.item.dbfe54c6?ingress=amzn">
+    <img class="tw-image" src="https://images/space-grunts.png" alt="Redeem on Epic Games"/>
+  </a>
+  <div class="item-card-details__body__primary">Space Grunts</div>
+</div>`;
+
+const GOG_EXTERNAL_CARD = `
+<div class="item-card__action">
+  <a data-a-target="FGWPOffer" href="/claims/some-gog-game/dp/amzn1.pg.item.aaa?ingress=amzn">
+    <img class="tw-image" src="https://images/gog-game.png" alt="Redeem on GOG"/>
+  </a>
+  <div class="item-card-details__body__primary">Some GOG Game</div>
+</div>`;
+
+describe('detectExternalPlatform', () => {
+  it('detects Epic from the offer image alt text', () => {
+    expect(detectExternalPlatform(elFrom(EPIC_EXTERNAL_CARD))).toBe('Epic');
+  });
+
+  it('detects GOG from the offer image alt text', () => {
+    expect(detectExternalPlatform(elFrom(GOG_EXTERNAL_CARD))).toBe('GOG');
+  });
+
+  it('returns null for an internal offer (no external-store badge)', () => {
+    expect(detectExternalPlatform(elFrom(INTERNAL_CARD))).toBeNull();
+  });
+
+  it('returns null when no known platform keyword is present', () => {
+    const card = elFrom('<div class="item-card__action"><img alt="mystery store"/></div>');
+    expect(detectExternalPlatform(card)).toBeNull();
+  });
+});
+
+describe('parseExternalOfferCard', () => {
+  it('resolves the relative claims-page href against the given base URL', () => {
+    const game = parseExternalOfferCard(elFrom(EPIC_EXTERNAL_CARD), 'https://luna.amazon.com/home');
+    expect(game).toEqual({
+      title: 'Space Grunts',
+      platform: Platforms.PrimeGaming,
+      link: 'https://luna.amazon.com/claims/space-grunts-epic/dp/amzn1.pg.item.dbfe54c6?ingress=amzn',
+      img: 'https://images/space-grunts.png',
+    });
+  });
+
+  it('returns null when the card has no title', () => {
+    const card = elFrom('<div class="item-card__action"><a href="/x"></a></div>');
+    expect(parseExternalOfferCard(card, 'https://luna.amazon.com/home')).toBeNull();
+  });
+});
+
+describe('parseExternalOffers', () => {
+  const LIST_HTML = `<div>${INTERNAL_CARD}${EPIC_EXTERNAL_CARD}${GOG_EXTERNAL_CARD}</div>`;
+
+  it('returns only external cards matching an allowed platform', () => {
+    const games = parseExternalOffers(
+      elFrom(LIST_HTML),
+      new Set(['Epic']),
+      'https://luna.amazon.com/home'
+    );
+    expect(games.map((g) => g.title)).toEqual(['Space Grunts']);
+  });
+
+  it('returns cards for every allowed platform', () => {
+    const games = parseExternalOffers(
+      elFrom(LIST_HTML),
+      new Set(['Epic', 'GOG']),
+      'https://luna.amazon.com/home'
+    );
+    expect(games.map((g) => g.title).sort()).toEqual(['Some GOG Game', 'Space Grunts']);
+  });
+
+  it('returns nothing when no platform is allowed (opt-in default)', () => {
+    expect(parseExternalOffers(elFrom(LIST_HTML), new Set(), 'https://luna.amazon.com/home')).toEqual([]);
+  });
+
+  it('never includes internal offers, even if somehow allowed', () => {
+    const games = parseExternalOffers(
+      elFrom(LIST_HTML),
+      new Set(['Epic', 'GOG', 'Windows']),
+      'https://luna.amazon.com/home'
+    );
+    expect(games.some((g) => g.title === 'Some Game')).toBe(false);
+  });
+});
+
+describe('isOfferDetailsPage', () => {
+  it('is true for a confirmed live claims-details path', () => {
+    expect(isOfferDetailsPage('/claims/space-grunts-chrono-shard-epic/dp/amzn1.pg.item.dbfe54c6-6298-46ec-808d-49d3915b9734')).toBe(true);
+  });
+
+  it('is false for the offer-list home path', () => {
+    expect(isOfferDetailsPage('/claims/home')).toBe(false);
+  });
+});
+
+describe('claimExternalOfferPage', () => {
+  const DETAILS_URL = 'https://luna.amazon.com/claims/space-grunts-epic/dp/amzn1.pg.item.abc?ingress=amzn';
+
+  it('returns "claimed" once the "Get game" button disappears (already linked)', async () => {
+    let buttonGone = false;
+    const button = document.createElement('button');
+    const clickFn = vi.fn();
+    let calls = 0;
+    const waitFn = vi.fn(async () => {
+      calls++;
+      if (calls === 1) buttonGone = true;
+    });
+
+    const outcome = await claimExternalOfferPage(
+      () => (buttonGone ? null : button),
+      clickFn,
+      waitFn,
+      () => DETAILS_URL,
+    );
+
+    expect(outcome).toBe('claimed');
+    expect(clickFn).toHaveBeenCalledWith(button);
+  });
+
+  it('returns "link-required" when the URL changes away from the details page (not linked)', async () => {
+    let url = DETAILS_URL;
+    const button = document.createElement('button');
+    const waitFn = vi.fn(async () => {
+      url = 'https://www.amazon.com/ap/oa?client_id=epic-games';
+    });
+
+    const outcome = await claimExternalOfferPage(() => button, vi.fn(), waitFn, () => url);
+
+    expect(outcome).toBe('link-required');
+  });
+
+  it('returns "failed" without clicking when no "Get game" button is found', async () => {
+    const clickFn = vi.fn();
+    const outcome = await claimExternalOfferPage(() => null, clickFn, vi.fn(async () => {}), () => DETAILS_URL);
+
+    expect(outcome).toBe('failed');
+    expect(clickFn).not.toHaveBeenCalled();
+  });
+
+  it('returns "failed" when neither signal appears before the timeout', async () => {
+    const button = document.createElement('button');
+    const outcome = await claimExternalOfferPage(
+      () => button,
+      vi.fn(),
+      vi.fn(async () => {}),
+      () => DETAILS_URL,
+      20,
+      5,
+    );
+
+    expect(outcome).toBe('failed');
+  });
+});
 
 describe('claimOfferCard', () => {
   it('clicks the button and returns "claimed" when the collected marker is already present', async () => {

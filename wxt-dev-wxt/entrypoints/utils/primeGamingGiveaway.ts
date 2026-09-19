@@ -42,6 +42,87 @@ export function parseInternalOffers(offerList: Element): FreeGame[] {
   return games;
 }
 
+// External offers are opt-in per platform (see EXTERNAL_PLATFORM_STORAGE_KEYS)
+// since claiming them means navigating to that store's own account and, if
+// unlinked, its linking flow — a bigger step than an internal in-place claim.
+export type ExternalPlatform = "Epic" | "GOG" | "Windows";
+
+export const EXTERNAL_PLATFORM_STORAGE_KEYS: Record<ExternalPlatform, string> = {
+  Epic: "primeGamingClaimEpic",
+  GOG: "primeGamingClaimGog",
+  Windows: "primeGamingClaimWindows",
+};
+
+const EXTERNAL_PLATFORM_PATTERNS: [ExternalPlatform, RegExp][] = [
+  ["Epic", /epic\s*games/i],
+  ["GOG", /\bgog\b/i],
+  ["Windows", /windows|microsoft\s*store/i],
+];
+
+// The redeem-platform badge isn't a selector we can pin down without a live
+// session, so this matches accessible text (alt/title/aria-label) plus the
+// card's own text against known platform names — generic on purpose, so a
+// markup tweak to the badge itself doesn't silently stop detection.
+export function detectExternalPlatform(card: Element): ExternalPlatform | null {
+  const haystack = [
+    card.textContent ?? '',
+    ...Array.from(card.querySelectorAll('img')).map((img) => img.getAttribute('alt') ?? ''),
+    ...Array.from(card.querySelectorAll('[title]')).map((el) => el.getAttribute('title') ?? ''),
+    ...Array.from(card.querySelectorAll('[aria-label]')).map((el) => el.getAttribute('aria-label') ?? ''),
+  ].join(' ');
+
+  for (const [platform, pattern] of EXTERNAL_PLATFORM_PATTERNS) {
+    if (pattern.test(haystack)) return platform;
+  }
+  return null;
+}
+
+// Unlike internal offers, every external offer has its own distinct claims-page
+// link (confirmed live: /claims/{slug}/dp/{itemId}?ingress=amzn), so — unlike
+// parseOfferCard — the href is actually used, resolved against baseUrl since
+// the card only carries a path-relative one.
+export function parseExternalOfferCard(card: Element, baseUrl: string): FreeGame | null {
+  const title = card.querySelector('.item-card-details__body__primary')?.textContent?.trim();
+  const href = card.querySelector('a')?.getAttribute('href');
+  const img = card.querySelector('img.tw-image')?.getAttribute('src');
+  if (!title || !href) return null;
+
+  return {
+    title,
+    // Still tagged PrimeGaming (the source), not the redeem platform — keeps
+    // it out of the popup's actual Epic-Store-freebies list, which is a
+    // different mechanism entirely.
+    platform: Platforms.PrimeGaming,
+    link: new URL(href, baseUrl).toString(),
+    img: img ?? "/icon/128.png",
+  };
+}
+
+export function parseExternalOffers(
+  offerList: Element,
+  allowedPlatforms: ReadonlySet<ExternalPlatform>,
+  baseUrl: string
+): FreeGame[] {
+  if (allowedPlatforms.size === 0) return [];
+
+  const cards = Array.from(offerList.querySelectorAll('.item-card__action'));
+  const games: FreeGame[] = [];
+  for (const card of cards) {
+    if (isInternalOfferCard(card)) continue;
+    const platform = detectExternalPlatform(card);
+    if (!platform || !allowedPlatforms.has(platform)) continue;
+    const game = parseExternalOfferCard(card, baseUrl);
+    if (game) games.push(game);
+  }
+  return games;
+}
+
+// Confirmed live: an external offer's link opens a /claims/{slug}/dp/{itemId}
+// details page, distinct from the /claims/home list page.
+export function isOfferDetailsPage(pathname: string): boolean {
+  return /\/claims\/[^/]+\/dp\//.test(pathname);
+}
+
 // A signed-in non-Prime account is a valid, expected state — not a failure — so
 // callers must check this before treating an empty offer list as "nothing to
 // claim right now" versus "can't claim anything, ever, on this account."
@@ -74,6 +155,41 @@ export async function claimOfferCard(
         (p) => (p.textContent ?? '').trim().toLowerCase() === 'collected'
     );
     if (collected) return "claimed";
+    await waitFn(pollIntervalMs);
+  }
+  return "failed";
+}
+
+export type ExternalClaimOutcome = "claimed" | "link-required" | "failed";
+
+// "Get game" on an external offer's details page either claims in place
+// (account already linked to that store) or navigates to Amazon's
+// account-linking flow — confirmed live, but that flow's own markup/copy
+// isn't something confirmable without going through it on a real account, so
+// detection is generic: a URL change away from this details page means we
+// got redirected somewhere else (treated as "link-required" regardless of
+// where — account linking, an external site, anything), while the "Get game"
+// button disappearing on the SAME page means it claimed in place. Neither
+// non-"claimed" outcome may ever throw — the caller must be able to skip an
+// unlinked platform and keep claiming the rest of the run.
+export async function claimExternalOfferPage(
+    findGetGameButton: () => HTMLElement | null,
+    clickFn: (el: HTMLElement) => void,
+    waitFn: (ms: number) => Promise<void>,
+    getUrl: () => string,
+    timeoutMs = 8000,
+    pollIntervalMs = 250
+): Promise<ExternalClaimOutcome> {
+  const button = findGetGameButton();
+  if (!button) return "failed";
+
+  const startUrl = getUrl();
+  clickFn(button);
+
+  const deadline = Date.now() + timeoutMs;
+  while (Date.now() < deadline) {
+    if (getUrl() !== startUrl) return "link-required";
+    if (!findGetGameButton()) return "claimed";
     await waitFn(pollIntervalMs);
   }
   return "failed";
