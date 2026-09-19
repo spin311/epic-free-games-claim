@@ -90,6 +90,15 @@ export function findAgeGateContinue(root: Document | HTMLElement): HTMLButtonEle
     return button && !button.disabled ? button : null;
 }
 
+// freebies.indiegala.com's own inline script (initAdultCheckDialog) injects
+// this dialog for mature-content freebies, gated by a client-side cookie
+// rather than a server redirect — the underlying page (CSRF token, product
+// id) is already fully present in the DOM either way, but the overlay covers
+// it, so it's dismissed the same way a human visitor would.
+export function findAdultCheckConfirm(root: Document | HTMLElement): HTMLAnchorElement | null {
+    return root.querySelector<HTMLAnchorElement>('a.adult-check-confirm');
+}
+
 export async function waitForPageLoad() {
     if (!isDocumentReady()) {
         await new Promise<void>(resolve => {
