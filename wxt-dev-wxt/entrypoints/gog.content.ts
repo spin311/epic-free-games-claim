@@ -3,7 +3,7 @@ import {browser} from "wxt/browser";
 import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
-import {onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
+import {closeCurrentTab, onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {recordLoginState} from "@/entrypoints/utils/loginState.ts";
 import {claimGiveaway, extractRedeemCodeParam, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {incrementCounter, waitForElement, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
@@ -51,13 +51,17 @@ export default defineContentScript({
                 lookup = await fetchGiveaway();
             } catch (error: unknown) {
                 console.error("[gog] giveaway status lookup failed:", error);
+                await closeCurrentTab();
                 return;
             }
 
             // Here a 401 is authoritative: the request went out from gog.com
             // itself, so a rejected session really is a signed-out user.
             await recordLoginState(Platforms.GOG, !lookup.unauthorized);
-            if (lookup.unauthorized || !lookup.game) return;
+            if (lookup.unauthorized || !lookup.game) {
+                await closeCurrentTab();
+                return;
+            }
 
             const gamesArr = [lookup.game];
             await setStorageItem("gogGames", gamesArr);
@@ -72,6 +76,9 @@ export default defineContentScript({
                 action: 'claimFreeGames',
                 data: freeGamesResponse
             });
+            // Nothing further needed from this tab — background opens its own
+            // claim tab for whatever this reported.
+            await closeCurrentTab();
         }
 
         async function claimCurrentGiveaway() {
@@ -80,6 +87,7 @@ export default defineContentScript({
             const outcome = await claimGiveaway();
             if (outcome === "unauthorized") {
                 await recordLoginState(Platforms.GOG, false);
+                await closeCurrentTab();
                 return;
             }
 
@@ -87,6 +95,7 @@ export default defineContentScript({
             // "already-claimed" is a success for the user but not a new game, so
             // it must not inflate the claimed counter.
             if (outcome === "claimed") await incrementCounter();
+            await closeCurrentTab();
         }
     },
 });

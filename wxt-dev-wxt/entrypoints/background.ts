@@ -308,21 +308,22 @@ export const background = {
 
   async claimGames(games: FreeGame[]) {
     // Filter BEFORE the badge and the tab loop: each game costs a tab plus a
-    // 10s wait, and the badge must count what we actually claim.
+    // spacing wait, and the badge must count what we actually claim.
     const claimable = await this.filterByReviewThreshold(games);
     if (claimable.length === 0) return;
 
     // Prime Gaming's internal offers all share one claim page — the content
     // script claims every unclaimed offer it finds in a single visit, so opening
     // a separate tab per game (all pointing at the same URL) would just be
-    // wasted 10s waits. Epic's slug-less fallback link is the one other case
+    // wasted spacing waits. Epic's slug-less fallback link is the one other case
     // where links can collide; collapsing those to one hub visit is also correct
     // (that fallback was already non-functional for claiming — see
     // epic.content.ts's purchase-button lookup, which needs a real product page).
     const uniqueByLink = Array.from(new Map(claimable.map((g) => [g.link, g])).values());
 
     void this.setBadgeText(claimable.length.toString());
-    for (const game of uniqueByLink) {
+    for (let i = 0; i < uniqueByLink.length; i++) {
+      const game = uniqueByLink[i];
       // One unreachable tab (404 product page, content script never injected,
       // navigation error) must not cancel the remaining claims.
       try {
@@ -330,7 +331,11 @@ export const background = {
       } catch (e) {
         console.error(`claimGames: failed to claim "${game.title}" (${game.link})`, e);
       }
-      await this.wait(10_000);
+      // Tabs close themselves once their content script is done (see
+      // closeCurrentTab), so this is just spacing between opens, not a wait
+      // for completion — kept short, and skipped entirely after the last
+      // game since there's nothing left to space out.
+      if (i < uniqueByLink.length - 1) await this.wait(3_000);
     }
   },
 
@@ -389,8 +394,10 @@ export const background = {
     });
   },
 
+  // Background tabs so a claim run never steals focus from whatever the user
+  // is actually doing — content scripts don't need the tab visible to work.
   async openTabAndSendActionToContent(url: string, action: string) {
-    const tab = await browser.tabs.create({ url });
+    const tab = await browser.tabs.create({ url, active: false });
     if (!tab || !tab.id) return;
     await this.waitForTabToLoad(tab.id);
     await this.sendMessageWithRetry(tab.id, { target: "content", action });
@@ -439,6 +446,15 @@ export const background = {
       }
     } else if (request.action === "updateFrequency" || request.action === "updateActive") {
       await this.initializeAlarms();
+    } else if (request.action === "closeTab") {
+      const tabId = sender?.tab?.id;
+      if (tabId != null) {
+        try {
+          await browser.tabs.remove(tabId);
+        } catch (e) {
+          // Tab may already be closed (e.g. the user closed it manually).
+        }
+      }
     }
   },
 

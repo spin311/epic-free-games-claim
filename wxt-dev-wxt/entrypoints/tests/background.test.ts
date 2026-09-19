@@ -255,6 +255,29 @@ describe('claimGames resilience', () => {
     expect(opened).toHaveLength(2);
     expect(badgeTexts).toEqual(['2']);
   });
+
+  it('spaces tab opens with a wait, but skips waiting after the last one', async () => {
+    const opened: string[] = [];
+    const waits: number[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+    runner.wait = async (ms: number) => {
+      waits.push(ms);
+    };
+    runner.setBadgeText = async () => {};
+
+    await runner.claimGames([
+      { title: 'A', platform: Platforms.Epic, link: 'https://store.epicgames.com/en-US/p/a' },
+      { title: 'B', platform: Platforms.Epic, link: 'https://store.epicgames.com/en-US/p/b' },
+      { title: 'C', platform: Platforms.Epic, link: 'https://store.epicgames.com/en-US/p/c' },
+    ] as any);
+
+    expect(opened).toHaveLength(3);
+    // One wait between each pair of opens (3 games -> 2 waits), none trailing.
+    expect(waits).toHaveLength(2);
+  });
 });
 
 describe('checkIndieGalaWheel', () => {

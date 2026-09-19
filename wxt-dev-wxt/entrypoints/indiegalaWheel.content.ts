@@ -2,6 +2,7 @@ import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun.ts";
 import { browser } from "wxt/browser";
 import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
 import { setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
+import { closeCurrentTab } from "@/entrypoints/utils/contentMessaging.ts";
 import { findSpinButton, parseWheelPrize, StoredWheelPrize, WheelPrize } from "@/entrypoints/utils/indieGalaWheel.ts";
 import { getRndInteger, realClick, wait, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
 
@@ -30,7 +31,10 @@ export default defineContentScript({
             // still available, so the button's absence within this window
             // means "already spun" or "nothing configured" — nothing to do.
             const button = await waitForSpinButton();
-            if (!button) return;
+            if (!button) {
+                await closeCurrentTab();
+                return;
+            }
 
             await wait(getRndInteger(100, 500));
             realClick(button);
@@ -40,11 +44,13 @@ export default defineContentScript({
             const prize = await waitForWheelPrize();
             if (!prize) {
                 console.error("[indiegala-wheel] spin clicked but no prize appeared in time");
+                await closeCurrentTab();
                 return;
             }
 
             const storedPrize: StoredWheelPrize = { ...prize, wonAt: new Date().toISOString() };
             await setStorageItem("indieGalaWheelLastPrize", storedPrize);
+            await closeCurrentTab();
         }
 
         async function waitForSpinButton(timeoutMs = 10_000, intervalMs = 250): Promise<HTMLButtonElement | null> {

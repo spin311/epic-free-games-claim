@@ -17,3 +17,13 @@ export function onClaimMessage(handlers: {
         }
     });
 }
+
+// Tabs are opened in the background (see openTabAndSendActionToContent) so
+// they never steal focus, but they still accumulate as clutter unless closed
+// once a content script is actually done with one. Callers must only call
+// this when nothing further needs the tab — never after redirecting to a
+// page the user still has to act on (e.g. GOG's redeem-code page, or an
+// account-linking redirect).
+export async function closeCurrentTab(): Promise<void> {
+    await browser.runtime.sendMessage({ target: "background", action: "closeTab" });
+}

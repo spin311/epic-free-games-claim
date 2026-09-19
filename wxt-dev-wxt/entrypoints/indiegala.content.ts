@@ -3,7 +3,7 @@ import { browser } from "wxt/browser";
 import { FreeGamesResponse } from "@/entrypoints/types/freeGamesResponse.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
-import { onClaimMessage } from "@/entrypoints/utils/contentMessaging.ts";
+import { closeCurrentTab, onClaimMessage } from "@/entrypoints/utils/contentMessaging.ts";
 import { detectAndRecordLoginState } from "@/entrypoints/utils/loginState.ts";
 import { claimFreebie, extractProductId, fetchFreebies } from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import { findAdultCheckConfirm, getRndInteger, incrementCounter, realClick, wait, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
@@ -29,9 +29,13 @@ export default defineContentScript({
                 freebies = await fetchFreebies();
             } catch (error: unknown) {
                 console.error("[indiegala] freebies list fetch failed:", error);
+                await closeCurrentTab();
                 return;
             }
-            if (freebies.length === 0) return;
+            if (freebies.length === 0) {
+                await closeCurrentTab();
+                return;
+            }
 
             const gamesArr = freebies.map((f) => f.game);
             await setStorageItem("indieGalaGames", gamesArr);
@@ -45,6 +49,9 @@ export default defineContentScript({
                 action: 'claimFreeGames',
                 data: freeGamesResponse,
             });
+            // Nothing further needed from this tab — background opens its own
+            // claim tab per freebie for whatever this reported.
+            await closeCurrentTab();
         }
 
         // Runs on the individual product page background.ts opened (game.link),
@@ -61,11 +68,13 @@ export default defineContentScript({
 
             if (!csrfToken || !productId || !slug) {
                 console.error("[indiegala] could not determine product identity from the current page");
+                await closeCurrentTab();
                 return;
             }
 
             const outcome = await claimFreebie(productId, slug, csrfToken);
             if (outcome === "claimed") await incrementCounter();
+            await closeCurrentTab();
         }
 
         // Mature-content freebies cover the page with a click-blocking overlay

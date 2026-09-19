@@ -4,7 +4,7 @@ import { FreeGamesResponse } from "@/entrypoints/types/freeGamesResponse.ts";
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { getStorageItems, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
-import { onClaimMessage } from "@/entrypoints/utils/contentMessaging.ts";
+import { closeCurrentTab, onClaimMessage } from "@/entrypoints/utils/contentMessaging.ts";
 import { detectAndRecordLoginState } from "@/entrypoints/utils/loginState.ts";
 import {
     claimExternalOfferPage,
@@ -69,16 +69,19 @@ export default defineContentScript({
             const loginState = await detectAndRecordLoginState(Platforms.PrimeGaming);
             if (loginState === false) {
                 console.warn("[primegaming] not signed in; skipping");
+                await closeCurrentTab();
                 return;
             }
             if (!hasPrimeMembership(document)) {
                 console.warn("[primegaming] no Prime membership detected; skipping");
+                await closeCurrentTab();
                 return;
             }
 
             const offerList = await openGamesTabAndGetOfferList();
             if (!offerList) {
                 console.warn("[primegaming] offer list never rendered; skipping");
+                await closeCurrentTab();
                 return;
             }
 
@@ -92,6 +95,7 @@ export default defineContentScript({
                     `external: ${externalGames.length}, allowed external platforms: ` +
                     `${[...allowedExternalPlatforms].join(', ') || 'none'}`
                 );
+                await closeCurrentTab();
                 return;
             }
 
@@ -106,6 +110,9 @@ export default defineContentScript({
                 action: 'claimFreeGames',
                 data: freeGamesResponse,
             });
+            // Nothing further needed from this tab — background opens its own
+            // claim tab(s) for whatever this reported.
+            await closeCurrentTab();
         }
 
         // All internal offers share one claim page, so this claims every
@@ -123,11 +130,20 @@ export default defineContentScript({
             }
 
             const loginState = await detectAndRecordLoginState(Platforms.PrimeGaming);
-            if (loginState === false) return;
-            if (!hasPrimeMembership(document)) return;
+            if (loginState === false) {
+                await closeCurrentTab();
+                return;
+            }
+            if (!hasPrimeMembership(document)) {
+                await closeCurrentTab();
+                return;
+            }
 
             const offerList = await openGamesTabAndGetOfferList();
-            if (!offerList) return;
+            if (!offerList) {
+                await closeCurrentTab();
+                return;
+            }
 
             const cards = Array.from(
                 offerList.querySelectorAll<HTMLElement>('.item-card__action')
@@ -139,11 +155,15 @@ export default defineContentScript({
                 if (outcome === "claimed") await incrementCounter();
                 await wait(getRndInteger(800, 1500));
             }
+            await closeCurrentTab();
         }
 
         async function claimCurrentExternalOffer() {
             const loginState = await detectAndRecordLoginState(Platforms.PrimeGaming);
-            if (loginState === false) return;
+            if (loginState === false) {
+                await closeCurrentTab();
+                return;
+            }
 
             // Confirmed live: this "claimed" signal (the Get game button
             // disappearing on the same page) only means a real library claim for
@@ -162,13 +182,22 @@ export default defineContentScript({
                 () => location.href,
             );
 
-            if (outcome !== "claimed") return;
-            // "link-required" (redirected to Amazon's account-linking flow) and
-            // "failed" are both silent no-ops by design — never thrown, so one
-            // unlinked platform can't block the rest of the claim run.
+            // Both are silent no-ops by design — never thrown, so one unlinked
+            // platform can't block the rest of the claim run.
+            if (outcome === "failed") {
+                await closeCurrentTab();
+                return;
+            }
+            if (outcome === "link-required") {
+                // Left open: this tab now IS Amazon's account-linking page, and
+                // closing it would take away the exact page the user would need
+                // to finish linking their account, if they want to.
+                return;
+            }
 
             if (platform === "Epic") {
                 await incrementCounter();
+                await closeCurrentTab();
                 return;
             }
 
