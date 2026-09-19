@@ -31,6 +31,9 @@ const STEAM_GAMES_URL =
 
 const ALARM_NAME = "checkFreeGames";
 let isChecking = false;
+// Distinct from the green claimed-count badge (see handleInstall) so "still
+// working" never reads as "N games claimed".
+const CLAIMING_BADGE_COLOR = "#f0ad4e";
 
 // --- Pure helpers (module-level and exported so they're unit-testable) ---
 
@@ -145,6 +148,10 @@ export function formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame
 }
 
 export const background = {
+  // Set by claimGames() during a run so getFreeGamesList's finally block
+  // knows whether to leave the badge's claimed-count alone or clear it.
+  claimedSomethingThisRun: false,
+
   async main() {
     browser.runtime.onStartup.addListener(() => this.handleStartup());
 
@@ -257,7 +264,26 @@ export const background = {
     }
   },
 
+  // Wraps the whole check/claim run with a visible "in progress" signal — the
+  // popup (via the isClaiming storage flag) and the toolbar badge both need
+  // to know a run that can open many tabs and take a while is happening,
+  // rather than giving no feedback until (or unless) it finishes.
   async getFreeGamesList() {
+    this.claimedSomethingThisRun = false;
+    await setStorageItem("isClaiming", true);
+    await this.setBadgeText("…");
+    await setActionBadgeBackgroundColor(CLAIMING_BADGE_COLOR);
+    try {
+      await this.runFreeGamesChecks();
+    } finally {
+      await setStorageItem("isClaiming", false);
+      // Leave the count claimGames() already set alone; only clear the "in
+      // progress" placeholder if nothing this run ever replaced it.
+      if (!this.claimedSomethingThisRun) await this.setBadgeText("");
+    }
+  },
+
+  async runFreeGamesChecks() {
     const { steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck, indieGalaWheelCheck } = await getStorageItems([
       "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck", "indieGalaWheelCheck",
     ]);
@@ -321,6 +347,7 @@ export const background = {
     // epic.content.ts's purchase-button lookup, which needs a real product page).
     const uniqueByLink = Array.from(new Map(claimable.map((g) => [g.link, g])).values());
 
+    this.claimedSomethingThisRun = true;
     void this.setBadgeText(claimable.length.toString());
     for (let i = 0; i < uniqueByLink.length; i++) {
       const game = uniqueByLink[i];

@@ -15,6 +15,7 @@ import { EXTERNAL_PLATFORM_STORAGE_KEYS } from "@/entrypoints/utils/primeGamingG
 function Settings() {
 
     const [counter] = useStorage<number>("counter", 0);
+    const [isClaiming] = useStorage<boolean>("isClaiming", false);
     const [steamCheck, setSteamCheck] = useStorage<boolean>("steamCheck", true);
     const [epicCheck, setEpicCheck] = useStorage<boolean>("epicCheck", true);
     const [gogCheck, setGogCheck] = useStorage<boolean>("gogCheck", true);
@@ -61,6 +62,7 @@ function Settings() {
         <div className="tab-content">
             <h1>Free Games for Steam, Epic, GOG, IndieGala & Prime Gaming</h1>
             <p>Games claimed: {counter}</p>
+            {isClaiming && <p className="claiming-status">⏳ Claiming free games…</p>}
             {indieGalaWheelLastPrize && (
                 <p>
                     IndieGala wheel last prize: {indieGalaWheelLastPrize.label}

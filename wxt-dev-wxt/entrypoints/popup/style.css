@@ -50,6 +50,11 @@ p {
   color: #c0bbbb;
 }
 
+.claiming-status {
+  color: #f0ad4e;
+  font-weight: 500;
+}
+
 button {
   border-radius: 8px;
   border: 1px solid transparent;
@@ -110,6 +115,11 @@ button:focus-visible {
 .manual-btn {
   align-self: center;
   width: 10em;
+}
+
+.manual-btn:disabled {
+  opacity: 0.6;
+  cursor: default;
 }
 
 .checkboxes {
