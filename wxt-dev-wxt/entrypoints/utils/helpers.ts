@@ -9,17 +9,19 @@ export function isVisible(el: HTMLElement) {
 }
 
 export async function waitForElement(document: Document | HTMLElement, selector: string, timeout = 500, maxRetry = 10): Promise<HTMLElement | null> {
-    let retry = 0;
-    let el;
-    let visible = false;
-    while (retry < maxRetry) {
-            el = document.querySelector(selector) as HTMLElement;
-            visible = isVisible(el);
-        if (el && visible) {
+    return waitForMatch(() => document.querySelector(selector) as HTMLElement | null, timeout, maxRetry);
+}
+
+// Same polling shape as waitForElement, but for callers that can't express
+// what they're looking for as a single CSS selector (e.g. matching an input
+// by a hint across several attributes rather than one fixed id).
+export async function waitForMatch<T extends HTMLElement>(find: () => T | null, timeout = 500, maxRetry = 10): Promise<T | null> {
+    for (let retry = 0; retry < maxRetry; retry++) {
+        const el = find();
+        if (el && isVisible(el)) {
             return el;
         }
         await wait(timeout);
-        retry++;
     }
     return null;
 }
@@ -88,6 +90,15 @@ export function findDeviceNotSupportedContinue(root: Document | HTMLElement): HT
 export function findAgeGateContinue(root: Document | HTMLElement): HTMLButtonElement | null {
     const button = root.querySelector<HTMLButtonElement>('#btn_age_continue');
     return button && !button.disabled ? button : null;
+}
+
+// freebies.indiegala.com's own inline script (initAdultCheckDialog) injects
+// this dialog for mature-content freebies, gated by a client-side cookie
+// rather than a server redirect — the underlying page (CSRF token, product
+// id) is already fully present in the DOM either way, but the overlay covers
+// it, so it's dismissed the same way a human visitor would.
+export function findAdultCheckConfirm(root: Document | HTMLElement): HTMLAnchorElement | null {
+    return root.querySelector<HTMLAnchorElement>('a.adult-check-confirm');
 }
 
 export async function waitForPageLoad() {

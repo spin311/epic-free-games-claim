@@ -6,6 +6,7 @@ import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFr
 import {parse} from 'node-html-parser';
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
+import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
 import {PRIME_GAMING_HOME_URL} from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import {LoginState} from "@/entrypoints/utils/loginState.ts";
 import {
@@ -30,6 +31,9 @@ const STEAM_GAMES_URL =
 
 const ALARM_NAME = "checkFreeGames";
 let isChecking = false;
+// Distinct from the green claimed-count badge (see handleInstall) so "still
+// working" never reads as "N games claimed".
+const CLAIMING_BADGE_COLOR = "#f0ad4e";
 
 // --- Pure helpers (module-level and exported so they're unit-testable) ---
 
@@ -42,6 +46,76 @@ export function didEnoughTimePass(lastOpened: string, requiredMinutes: number): 
   const now = new Date();
   const minutesElapsed = (now.getTime() - lastDate.getTime()) / (1000 * 60);
   return minutesElapsed >= requiredMinutes;
+}
+
+// `active` defaults to enabled (see OnButton's useStorage default) — unset
+// storage (nothing persisted yet, e.g. before the popup has ever rendered)
+// must read as active, not inactive. The same asymmetric-default class of bug
+// already fixed for the platform toggles in resolvePlatformToggles: without
+// this, a fresh install's alarm never gets created and its first scheduled
+// check never runs, since nothing writes `active` to storage until OnButton
+// itself mounts.
+export function isActive(active: unknown): boolean {
+  return active !== false;
+}
+
+// Confirmed (against Prime Gaming's own reference scraper and third-party
+// lineup trackers): new titles land almost exclusively on Thursdays — a larger
+// batch on the month's first Thursday, then a weekly trickle — with only rare
+// off-cycle bonus adds. Unlike Epic/Steam/GOG/IndieGala, Prime has no
+// background-reachable listing endpoint (see checkPrimeGaming), so opening a
+// real tab on every claimFrequency tick (which can be as often as hourly)
+// finds nothing new on 5 of 7 days. Restricting the check to Thu/Fri (a
+// one-day buffer for late/timezone drops) cuts that overhead without missing
+// drops; the interval catch-up guarantees an off-cycle title or a missed
+// Thu/Fri window is never more than PRIME_GAMING_MAX_CHECK_INTERVAL_DAYS stale.
+export const PRIME_GAMING_CHECK_DAYS_OF_WEEK = [4, 5]; // Date#getDay(): Thu, Fri
+export const PRIME_GAMING_MAX_CHECK_INTERVAL_DAYS = 6;
+
+// GOG defaults ON for existing behavior; IndieGala and Prime Gaming default
+// OFF on a fresh install — so an unset ("never stored") value must resolve
+// opposite ways for the two groups. This is a pure, testable extraction of
+// that asymmetry: getStorageItems returns raw storage, not the useStorage
+// hook's own defaultValue, and the popup's default only lands in storage once
+// the popup has actually been opened — this alarm-driven (and install-time)
+// path can run first.
+//
+// Steam/Epic are included too even though they default ON like GOG: passing
+// a raw `null` straight into getEpicGamesList(shouldClaim: boolean = true)
+// does NOT fall back to the default — JS default parameters only trigger for
+// `undefined`, and getStorageItems resolves an unset key to `null`. Without
+// resolving it here first, the very first (install-time) run silently never
+// claims or detects login state for Steam/Epic on a fresh install.
+export function resolvePlatformToggles(flags: {
+  steamCheck?: boolean | null;
+  epicCheck?: boolean | null;
+  gogCheck?: boolean | null;
+  indieGalaCheck?: boolean | null;
+  primeGamingCheck?: boolean | null;
+}): {
+  claimSteam: boolean;
+  claimEpic: boolean;
+  claimGog: boolean;
+  claimIndieGala: boolean;
+  claimPrimeGaming: boolean;
+} {
+  return {
+    claimSteam: flags.steamCheck !== false,
+    claimEpic: flags.epicCheck !== false,
+    claimGog: flags.gogCheck !== false,
+    claimIndieGala: flags.indieGalaCheck === true,
+    claimPrimeGaming: flags.primeGamingCheck === true,
+  };
+}
+
+export function shouldCheckPrimeGamingToday(lastCheck: string | null, now: Date): boolean {
+  if (!lastCheck) return true;
+  if (!areDatesDifferent(lastCheck, now.toISOString())) return false;
+
+  const daysSinceLastCheck = (now.getTime() - new Date(lastCheck).getTime()) / (24 * 60 * 60 * 1000);
+  if (daysSinceLastCheck >= PRIME_GAMING_MAX_CHECK_INTERVAL_DAYS) return true;
+
+  return PRIME_GAMING_CHECK_DAYS_OF_WEEK.includes(now.getDay());
 }
 
 // Force Epic claim pages into English (?lang=en-US) so the content script can match
@@ -144,6 +218,10 @@ export function formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame
 }
 
 export const background = {
+  // Set by claimGames() during a run so getFreeGamesList's finally block
+  // knows whether to leave the badge's claimed-count alone or clear it.
+  claimedSomethingThisRun: false,
+
   async main() {
     browser.runtime.onStartup.addListener(() => this.handleStartup());
 
@@ -166,7 +244,7 @@ export const background = {
 
   async handleStartup() {
     const result = await getStorageItems(["active", "claimFrequency"]);
-    if (!result?.active) return;
+    if (!isActive(result?.active)) return;
 
     const frequency = result.claimFrequency || ClaimFrequency.DAILY;
     
@@ -177,7 +255,7 @@ export const background = {
 
   async handleAlarmTriggered() {
     const result = await getStorageItems(["active", "claimFrequency"]);
-    if (!result?.active) return;
+    if (!isActive(result?.active)) return;
 
     const frequency = result.claimFrequency || ClaimFrequency.DAILY;
     await this.checkAndClaimIfDue(frequency);
@@ -216,7 +294,7 @@ export const background = {
 
   async initializeAlarms() {
     const result = await getStorageItems(["active", "claimFrequency"]);
-    if (!result?.active) {
+    if (!isActive(result?.active)) {
       try {
         await browser.alarms.clear(ALARM_NAME);
       } catch (e) {
@@ -256,30 +334,62 @@ export const background = {
     }
   },
 
+  // Wraps the whole check/claim run with a visible "in progress" signal — the
+  // popup (via the isClaiming storage flag) and the toolbar badge both need
+  // to know a run that can open many tabs and take a while is happening,
+  // rather than giving no feedback until (or unless) it finishes.
   async getFreeGamesList() {
-    const { steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck } = await getStorageItems([
-      "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck",
-    ]);
-    const claimGog = gogCheck !== false;
-    const claimIndieGala = indieGalaCheck !== false;
-    const claimPrimeGaming = primeGamingCheck !== false;
+    this.claimedSomethingThisRun = false;
+    await setStorageItem("isClaiming", true);
+    await this.setBadgeText("…");
+    await setActionBadgeBackgroundColor(CLAIMING_BADGE_COLOR);
     try {
-      await this.getEpicGamesList(epicCheck);
+      await this.runFreeGamesChecks();
+    } finally {
+      await setStorageItem("isClaiming", false);
+      // Leave the count claimGames() already set alone; only clear the "in
+      // progress" placeholder if nothing this run ever replaced it.
+      if (!this.claimedSomethingThisRun) await this.setBadgeText("");
+    }
+  },
+
+  async runFreeGamesChecks() {
+    const { steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck, indieGalaWheelCheck } = await getStorageItems([
+      "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck", "indieGalaWheelCheck",
+    ]);
+    const { claimSteam, claimEpic, claimGog, claimIndieGala, claimPrimeGaming } =
+        resolvePlatformToggles({ steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck });
+    try {
+      await this.getEpicGamesList(claimEpic);
     } catch (e) {
       console.error("getEpicGamesList failed:", e);
-      if (epicCheck) await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
+      if (claimEpic) await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
     }
     try {
-      await this.getSteamGamesList(steamCheck);
+      await this.getSteamGamesList(claimSteam);
     } catch (e) {
       console.error("getSteamGamesList failed:", e);
-      if (steamCheck) await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
+      if (claimSteam) await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
     }
+    // Skipped entirely (not just un-claimed) when disabled — unlike the other
+    // platforms' public/no-auth APIs, GOG's status endpoint needs the user's
+    // session and has genuine failure modes (signed out, transport errors)
+    // worth avoiding altogether when the user doesn't want GOG at all.
+    if (claimGog) {
+      try {
+        await this.getGogGamesList(claimGog);
+      } catch (e) {
+        console.error("getGogGamesList failed:", e);
+        await this.openTabAndSendActionToContent(GOG_HOME_URL, "getFreeGames");
+      }
+    }
+    // Wheel spun before the regular freebie claim, per spec — the two are
+    // independent (different storage keys, different tab targets), so the
+    // order is purely a preference, not a correctness requirement.
     try {
-      await this.getGogGamesList(claimGog);
+      await this.checkIndieGalaWheel(claimIndieGala && indieGalaWheelCheck === true);
     } catch (e) {
-      console.error("getGogGamesList failed:", e);
-      if (claimGog) await this.openTabAndSendActionToContent(GOG_HOME_URL, "getFreeGames");
+      console.error("checkIndieGalaWheel failed:", e);
     }
     try {
       await this.getIndieGalaGamesList(claimIndieGala);
@@ -287,30 +397,32 @@ export const background = {
       console.error("getIndieGalaGamesList failed:", e);
       if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
     }
-    // Prime Gaming has no background-reachable API — gaming.amazon.com/home is a
-    // client-rendered SPA whose offer list only exists after an authenticated page
-    // load, so this platform goes straight to a real tab (no fast path to try first,
-    // unlike Epic/Steam/GOG/IndieGala which can attempt a direct background fetch).
-    if (claimPrimeGaming) await this.openTabAndSendActionToContent(PRIME_GAMING_HOME_URL, "getFreeGames");
+    try {
+      await this.checkPrimeGaming(claimPrimeGaming);
+    } catch (e) {
+      console.error("checkPrimeGaming failed:", e);
+    }
   },
 
   async claimGames(games: FreeGame[]) {
     // Filter BEFORE the badge and the tab loop: each game costs a tab plus a
-    // 10s wait, and the badge must count what we actually claim.
+    // spacing wait, and the badge must count what we actually claim.
     const claimable = await this.filterByReviewThreshold(games);
     if (claimable.length === 0) return;
 
     // Prime Gaming's internal offers all share one claim page — the content
     // script claims every unclaimed offer it finds in a single visit, so opening
     // a separate tab per game (all pointing at the same URL) would just be
-    // wasted 10s waits. Epic's slug-less fallback link is the one other case
+    // wasted spacing waits. Epic's slug-less fallback link is the one other case
     // where links can collide; collapsing those to one hub visit is also correct
     // (that fallback was already non-functional for claiming — see
     // epic.content.ts's purchase-button lookup, which needs a real product page).
     const uniqueByLink = Array.from(new Map(claimable.map((g) => [g.link, g])).values());
 
+    this.claimedSomethingThisRun = true;
     void this.setBadgeText(claimable.length.toString());
-    for (const game of uniqueByLink) {
+    for (let i = 0; i < uniqueByLink.length; i++) {
+      const game = uniqueByLink[i];
       // One unreachable tab (404 product page, content script never injected,
       // navigation error) must not cancel the remaining claims.
       try {
@@ -318,7 +430,11 @@ export const background = {
       } catch (e) {
         console.error(`claimGames: failed to claim "${game.title}" (${game.link})`, e);
       }
-      await this.wait(10_000);
+      // Tabs close themselves once their content script is done (see
+      // closeCurrentTab), so this is just spacing between opens, not a wait
+      // for completion — kept short, and skipped entirely after the last
+      // game since there's nothing left to space out.
+      if (i < uniqueByLink.length - 1) await this.wait(3_000);
     }
   },
 
@@ -377,8 +493,10 @@ export const background = {
     });
   },
 
+  // Background tabs so a claim run never steals focus from whatever the user
+  // is actually doing — content scripts don't need the tab visible to work.
   async openTabAndSendActionToContent(url: string, action: string) {
-    const tab = await browser.tabs.create({ url });
+    const tab = await browser.tabs.create({ url, active: false });
     if (!tab || !tab.id) return;
     await this.waitForTabToLoad(tab.id);
     await this.sendMessageWithRetry(tab.id, { target: "content", action });
@@ -427,6 +545,18 @@ export const background = {
       }
     } else if (request.action === "updateFrequency" || request.action === "updateActive") {
       await this.initializeAlarms();
+    } else if (request.action === "checkPlatformLogin") {
+      const platform = request.data?.platform as Platforms | undefined;
+      if (platform) await this.checkPlatformLogin(platform);
+    } else if (request.action === "closeTab") {
+      const tabId = sender?.tab?.id;
+      if (tabId != null) {
+        try {
+          await browser.tabs.remove(tabId);
+        } catch (e) {
+          // Tab may already be closed (e.g. the user closed it manually).
+        }
+      }
     }
   },
 
@@ -453,6 +583,12 @@ export const background = {
     });
   },
 
+  // Deliberately does nothing on a fresh install — claiming only ever
+  // happens on a browser restart (handleStartup) or once the configured
+  // claimFrequency interval is actually due (handleAlarmTriggered), never
+  // as a side effect of installing or of flipping a setting. LoginStatus
+  // shows a "Log in" prompt by default (see LoginStatus.tsx) so the popup
+  // still has something useful to show before either of those has run.
   handleInstall(r: Browser.runtime.InstalledDetails) {
     if (r.reason === "update") {
       void setActionBadgeBackgroundColor("#50ca26");
@@ -577,6 +713,95 @@ export const background = {
     const loggedIn = await getStorageItem<LoginState>("indieGalaLoggedIn");
     if (shouldClaim && loggedIn !== false && newGames.length > 0) {
       await this.claimGames(newGames);
+    }
+  },
+
+  // The daily wheel resets once per calendar day server-side regardless of how
+  // often getFreeGamesList runs, so this self-gates on its own last-check date
+  // instead of reusing claimFrequency — an hourly game-claim cadence must not
+  // reopen an IndieGala tab every hour just to find no spin available.
+  // Unlike the other platforms, the wheel has no fast background-fetch path:
+  // reading it requires a CSRF cookie only a real page can supply, so this
+  // always opens a tab when due, same as Prime Gaming.
+  async checkIndieGalaWheel(shouldSpin: boolean) {
+    if (!shouldSpin) return;
+
+    const today = new Date().toISOString();
+    const lastCheck = await getStorageItem<string>("indieGalaWheelLastCheck");
+    if (lastCheck && !areDatesDifferent(lastCheck, today)) return;
+
+    // Flag set only after the tab/message actually goes out (mirrors
+    // getFreeGamesAndSetOpenedFlag): if this throws, today's attempt never
+    // happened, so the next check must still retry rather than silently
+    // skipping the wheel for the rest of the day.
+    await this.openTabAndSendActionToContent(INDIEGALA_WHEEL_URL, "spinWheel");
+    await setStorageItem("indieGalaWheelLastCheck", today);
+  },
+
+  // See shouldCheckPrimeGamingToday: Prime has no background-reachable listing
+  // endpoint (gaming.amazon.com/home is a client-rendered SPA that only exists
+  // after an authenticated page load, unlike Epic/Steam/GOG/IndieGala's
+  // fetch-first paths), so checking still means opening a real tab — this just
+  // restricts *how often* that tab opens to the days it can actually find
+  // something new.
+  // `force` bypasses the day-of-week/catch-up gate above — used only by an
+  // explicit user action (clicking "Log in" for Prime Gaming; see
+  // checkPlatformLogin), never by the automatic startup/alarm path, since the
+  // whole point of a manual trigger is to ignore automatic throttling.
+  async checkPrimeGaming(shouldCheck: boolean, force: boolean = false) {
+    if (!shouldCheck) return;
+
+    const now = new Date();
+    const lastCheck = await getStorageItem<string>("primeGamingLastCheck");
+    if (!force && !shouldCheckPrimeGamingToday(lastCheck, now)) return;
+
+    // Flag set only after the tab/message actually goes out (mirrors
+    // checkIndieGalaWheel): if this throws, today's attempt never happened, so
+    // the next due check must still retry rather than silently skipping ahead.
+    await this.openTabAndSendActionToContent(PRIME_GAMING_HOME_URL, "getFreeGames");
+    await setStorageItem("primeGamingLastCheck", now.toISOString());
+  },
+
+  // Triggered by clicking a platform's "Log in" link in the popup (see
+  // LoginStatus) — a deliberate, explicit user action, so unlike the
+  // startup/alarm path this always runs regardless of claimFrequency or (for
+  // Prime Gaming) the day-of-week gate, and isn't wrapped in the
+  // isClaiming/badge "in progress" indicator that a full multi-platform run
+  // gets, since the popup that triggered this has already closed by the time
+  // the click's target="_blank" tab opens.
+  async checkPlatformLogin(platform: Platforms) {
+    // Mirrors runFreeGamesChecks's per-platform fallback: Epic/Steam/GOG/
+    // IndieGala's fast background-fetch path can fail for reasons (including
+    // an ambiguous 401) that a real page visit resolves, so a failure here
+    // falls back to opening one, same as the automatic path does.
+    try {
+      switch (platform) {
+        case Platforms.Steam:
+          await this.getSteamGamesList(true);
+          break;
+        case Platforms.Epic:
+          await this.getEpicGamesList(true);
+          break;
+        case Platforms.GOG:
+          await this.getGogGamesList(true);
+          break;
+        case Platforms.IndieGala:
+          await this.getIndieGalaGamesList(true);
+          break;
+        case Platforms.PrimeGaming:
+          await this.checkPrimeGaming(true, true);
+          break;
+      }
+    } catch (e) {
+      console.error(`checkPlatformLogin failed for ${platform}:`, e);
+      const fallbackUrl = {
+        [Platforms.Steam]: STEAM_GAMES_URL,
+        [Platforms.Epic]: EPIC_GAMES_URL,
+        [Platforms.GOG]: GOG_HOME_URL,
+        [Platforms.IndieGala]: INDIEGALA_FREEBIES_URL,
+        [Platforms.PrimeGaming]: undefined,
+      }[platform];
+      if (fallbackUrl) await this.openTabAndSendActionToContent(fallbackUrl, "getFreeGames");
     }
   },
 

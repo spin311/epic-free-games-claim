@@ -1,5 +1,6 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
+import { REDEEM_CODE_PARAM } from "@/entrypoints/utils/redeemCode.ts";
 
 // GOG's own store client (productcard bundle_min.js) resolves exactly these two
 // endpoints for its giveaway button, so we talk to them directly instead of
@@ -8,6 +9,17 @@ import { Platforms } from "@/entrypoints/enums/platforms.ts";
 export const GOG_HOME_URL = "https://www.gog.com/";
 export const GOG_STATUS_URL = "https://www.gog.com/giveaway/status";
 export const GOG_CLAIM_URL = "https://www.gog.com/giveaway/claim";
+export const GOG_REDEEM_URL = "https://www.gog.com/redeem";
+
+// The extCode handoff (appended here, read back out by gog.content.ts) is
+// shared with microsoft.content.ts's redeem flow — see redeemCode.ts.
+export { extractRedeemCodeParam } from "@/entrypoints/utils/redeemCode.ts";
+
+export function buildRedeemUrl(code: string): string {
+    const url = new URL(GOG_REDEEM_URL);
+    url.searchParams.set(REDEEM_CODE_PARAM, code);
+    return url.toString();
+}
 
 const FALLBACK_IMAGE = "/icon/128.png";
 const FALLBACK_TITLE = "GOG Giveaway";
@@ -71,12 +83,18 @@ export function parseGiveawayStatus(payload: unknown): FreeGame | null {
         (product ? readString(product, ["storeLink", "url"]) : "");
     const image = readString(source, ["coverHorizontal", "image", "img", "logo"]) ||
         (product ? readString(product, ["coverHorizontal", "image"]) : "");
+    // Same "unverified shape" caveat as the rest of this function — description
+    // is optional on FreeGame and GameCard only renders it when present, so a
+    // wrong guess here just means no description shows, same as today.
+    const description = readString(source, ["description", "summary", "shortDescription"]) ||
+        (product ? readString(product, ["description", "summary", "shortDescription"]) : "");
 
     return {
         title: title || (slug ? titleFromSlug(slug) : FALLBACK_TITLE),
         platform: Platforms.GOG,
         link: storeLink || (slug ? `https://www.gog.com/en/game/${slug}` : GOG_HOME_URL),
         img: image || FALLBACK_IMAGE,
+        ...(description ? { description } : {}),
     };
 }
 
@@ -89,6 +107,9 @@ function parseJsonBody(body: string): unknown {
 // Reads the currently running giveaway. Throws on transport/server failures so
 // the background can fall back to driving a real gog.com tab; a 401/403 is
 // reported rather than thrown because it is an expected, actionable state.
+// Confirmed live: a 404 is GOG's normal "no giveaway running right now"
+// response (not an auth problem, not a broken endpoint) — reported the same
+// way as an empty 200 body rather than thrown.
 export async function fetchGiveaway(fetchImpl: typeof fetch = fetch): Promise<GiveawayLookup> {
     const response = await fetchImpl(GOG_STATUS_URL, {
         credentials: "include",
@@ -97,6 +118,9 @@ export async function fetchGiveaway(fetchImpl: typeof fetch = fetch): Promise<Gi
 
     if (response.status === 401 || response.status === 403) {
         return { unauthorized: true, game: null };
+    }
+    if (response.status === 404) {
+        return { unauthorized: false, game: null };
     }
     if (!response.ok) {
         throw new Error(`GOG giveaway status responded ${response.status}`);

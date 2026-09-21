@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { getRndInteger, isVisible, waitForPageLoad, findButtonByText, findDeviceNotSupportedContinue, findAgeGateContinue } from './helpers';
+import { getRndInteger, isVisible, waitForPageLoad, findButtonByText, findDeviceNotSupportedContinue, findAgeGateContinue, findAdultCheckConfirm } from './helpers';
 
 describe('getRndInteger', () => {
   it('returns a value within [min, max] inclusive', () => {
@@ -134,6 +134,32 @@ describe('findAgeGateContinue', () => {
     const root = document.createElement('div');
     root.innerHTML = '<button id="something-else">Continue</button>';
     expect(findAgeGateContinue(root)).toBeNull();
+  });
+});
+
+describe('findAdultCheckConfirm', () => {
+  // Real markup: initAdultCheckDialog() (freebies.indiegala.com's own inline
+  // script) prepends this dialog to <body> for mature-content products.
+  const ADULT_CHECK_DIALOG =
+    '<div id="adult-cover" class="adult-check-cover"><div class="adult-check-inner">' +
+    '<div class="adult-check-header">Adult age check</div>' +
+    '<div class="adult-check-footer"><div class="adult-check-action">' +
+    '<a class="adult-check-leave" href="https://www.indiegala.com">Leave this page</a></div>' +
+    '<div class="adult-check-action"><a class="adult-check-confirm" href="#">Confirm</a></div>' +
+    '</div></div></div>';
+
+  it('returns the Confirm link, not Leave this page', () => {
+    const root = document.createElement('div');
+    root.innerHTML = ADULT_CHECK_DIALOG;
+    const link = findAdultCheckConfirm(root);
+    expect(link?.textContent?.trim()).toBe('Confirm');
+    expect(link?.className).toBe('adult-check-confirm');
+  });
+
+  it('returns null when no gate is present (non-mature freebie)', () => {
+    const root = document.createElement('div');
+    root.innerHTML = '<div>ordinary product page</div>';
+    expect(findAdultCheckConfirm(root)).toBeNull();
   });
 });
 

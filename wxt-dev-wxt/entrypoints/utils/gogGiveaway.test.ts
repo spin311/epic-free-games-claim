@@ -1,13 +1,34 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+  buildRedeemUrl,
+  extractRedeemCodeParam,
   GOG_CLAIM_URL,
   GOG_HOME_URL,
+  GOG_REDEEM_URL,
   GOG_STATUS_URL,
   claimGiveaway,
   fetchGiveaway,
   parseGiveawayStatus,
 } from './gogGiveaway';
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
+
+describe('buildRedeemUrl', () => {
+  it('builds a gog.com/redeem URL carrying the code as a query param', () => {
+    expect(buildRedeemUrl('YRXG7D62AF07ADCE5B'))
+      .toBe(`${GOG_REDEEM_URL}?extCode=YRXG7D62AF07ADCE5B`);
+  });
+});
+
+describe('extractRedeemCodeParam', () => {
+  it('reads the code back out of the query string', () => {
+    expect(extractRedeemCodeParam('?extCode=YRXG7D62AF07ADCE5B')).toBe('YRXG7D62AF07ADCE5B');
+  });
+
+  it('returns null when the param is absent', () => {
+    expect(extractRedeemCodeParam('')).toBeNull();
+    expect(extractRedeemCodeParam('?other=1')).toBeNull();
+  });
+});
 
 // Builds a minimal Response-like stub; the helpers only touch these members.
 function response(status: number, body: unknown, ok = status >= 200 && status < 300) {
@@ -105,6 +126,20 @@ describe('parseGiveawayStatus', () => {
     expect(parseGiveawayStatus({ id: '1', coverHorizontal: url })?.img).toBe(url);
     expect(parseGiveawayStatus({ id: '1', image: url })?.img).toBe(url);
   });
+
+  it('picks up a description when the payload carries any', () => {
+    expect(parseGiveawayStatus({ id: '1', description: 'A classic platformer.' })?.description)
+      .toBe('A classic platformer.');
+    expect(parseGiveawayStatus({ id: '1', summary: 'Short blurb.' })?.description)
+      .toBe('Short blurb.');
+    expect(parseGiveawayStatus({ id: '1', product: { description: 'Nested blurb.' } })?.description)
+      .toBe('Nested blurb.');
+  });
+
+  it('omits description entirely rather than an empty string when absent', () => {
+    const game = parseGiveawayStatus({ id: '1', title: 'Some Game' });
+    expect(game).not.toHaveProperty('description');
+  });
 });
 
 describe('fetchGiveaway', () => {
@@ -133,6 +168,15 @@ describe('fetchGiveaway', () => {
 
   it('returns no game when a signed-in session has no giveaway running', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(response(200, {}));
+
+    await expect(fetchGiveaway(fetchImpl)).resolves.toEqual({ unauthorized: false, game: null });
+  });
+
+  // Confirmed live: the endpoint 404s when no giveaway is running, rather
+  // than answering 200 with an empty body — same "nothing to report" outcome
+  // as the case above, not a transport failure worth throwing over.
+  it('treats a 404 as "no giveaway running" rather than throwing', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response(404, 'Not Found', false));
 
     await expect(fetchGiveaway(fetchImpl)).resolves.toEqual({ unauthorized: false, game: null });
   });

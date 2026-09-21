@@ -4,7 +4,7 @@ import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
-import {onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
+import {closeCurrentTab, onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {detectAndRecordLoginState} from "@/entrypoints/utils/loginState.ts";
 import {
     getRndInteger,
@@ -60,6 +60,9 @@ export default defineContentScript({
                     data: freeGamesResponse
                 });
             }
+            // Nothing further needed from this tab — background opens its own
+            // claim tab(s) for whatever this reported.
+            await closeCurrentTab();
         }
 
         async function claimCurrentFreeGame() {
@@ -81,6 +84,8 @@ export default defineContentScript({
                 console.warn('[claimer] Could not complete claim within timeout');
                 logClaimDiagnostics();
             }
+            // Either way, nothing further needed from this tab.
+            await closeCurrentTab();
         }
 
         // Mature-content games open behind an age-gate modal that blocks the

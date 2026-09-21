@@ -2,18 +2,26 @@
 // Lives under entrypoints/tests/ (not entrypoints/ root) so WXT doesn't treat it
 // as a duplicate "background" entrypoint. Node env avoids the esbuild/jsdom clash
 // from importing background.ts (which pulls in `#imports`).
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing';
 import {
   areDatesDifferent,
   background,
   didEnoughTimePass,
   EPIC_FREE_GAMES_URL,
   formatEpicFreeGame,
+  isActive,
   partitionEpicPromotions,
   resolveEpicSlug,
+  resolvePlatformToggles,
+  shouldCheckPrimeGamingToday,
   withEpicEnglishLocale,
 } from '../background';
 import { Platforms } from '../enums/platforms';
+import { getStorageItem, setStorageItem } from '../hooks/useStorage';
+import { INDIEGALA_WHEEL_URL } from '../utils/indieGalaWheel';
+import { PRIME_GAMING_HOME_URL } from '../utils/primeGamingGiveaway';
+import { GOG_HOME_URL } from '../utils/gogGiveaway';
 
 describe('areDatesDifferent', () => {
   it('is true for different calendar days', () => {
@@ -38,6 +46,279 @@ describe('didEnoughTimePass', () => {
   it('is false when not enough time has passed', () => {
     const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
     expect(didEnoughTimePass(fiveMinAgo, 60)).toBe(false);
+  });
+});
+
+describe('isActive', () => {
+  // Regression: `active` isn't persisted to storage until OnButton's
+  // useStorage effect first mounts, so a fresh install (or any raw storage
+  // read before the popup has ever opened) must not treat "unset" as "off".
+  it('is true when unset (fresh install, never persisted)', () => {
+    expect(isActive(undefined)).toBe(true);
+    expect(isActive(null)).toBe(true);
+  });
+
+  it('is true when explicitly enabled', () => {
+    expect(isActive(true)).toBe(true);
+  });
+
+  it('is false only when explicitly disabled', () => {
+    expect(isActive(false)).toBe(false);
+  });
+});
+
+describe('handleInstall', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  // Claiming must never be a side effect of installing — only a browser
+  // restart or a due claimFrequency interval may trigger it.
+  it('does nothing on a fresh install', async () => {
+    const runner = Object.create(background);
+    let calls = 0;
+    runner.getFreeGamesAndSetOpenedFlag = async () => { calls++; };
+
+    runner.handleInstall({ reason: 'install' });
+    await new Promise(process.nextTick);
+
+    expect(calls).toBe(0);
+  });
+
+  it('only sets the update badge on an update, never triggers a check', async () => {
+    // fake-browser doesn't implement action.setBadgeText/setBadgeBackgroundColor
+    // (the update branch's own, pre-existing behavior, unrelated to this test).
+    vi.spyOn(fakeBrowser.action, 'setBadgeText').mockResolvedValue(undefined as never);
+    vi.spyOn(fakeBrowser.action, 'setBadgeBackgroundColor').mockResolvedValue(undefined as never);
+
+    const runner = Object.create(background);
+    let calls = 0;
+    runner.getFreeGamesAndSetOpenedFlag = async () => { calls++; };
+
+    runner.handleInstall({ reason: 'update' });
+    await new Promise(process.nextTick);
+
+    expect(calls).toBe(0);
+  });
+});
+
+describe('resolvePlatformToggles', () => {
+  // Regression: a fresh install has never written any of these keys, so
+  // getStorageItems returns undefined/null for all five — this must not be
+  // read as "enabled" for the two platforms that default off on install, and
+  // (a real bug this caught) must still resolve to "enabled" for Steam/Epic
+  // despite getEpicGamesList/getSteamGamesList's own `= true` default params
+  // never actually firing for a raw `null` argument.
+  it('treats Steam, Epic, and GOG as enabled by default (unset) but IndieGala and Prime Gaming as disabled', () => {
+    expect(resolvePlatformToggles({})).toEqual({
+      claimSteam: true,
+      claimEpic: true,
+      claimGog: true,
+      claimIndieGala: false,
+      claimPrimeGaming: false,
+    });
+  });
+
+  it('respects an explicit false for Steam, Epic, and GOG', () => {
+    const result = resolvePlatformToggles({ steamCheck: false, epicCheck: false, gogCheck: false });
+    expect(result.claimSteam).toBe(false);
+    expect(result.claimEpic).toBe(false);
+    expect(result.claimGog).toBe(false);
+  });
+
+  it('respects an explicit true for IndieGala and Prime Gaming', () => {
+    const result = resolvePlatformToggles({ indieGalaCheck: true, primeGamingCheck: true });
+    expect(result.claimIndieGala).toBe(true);
+    expect(result.claimPrimeGaming).toBe(true);
+  });
+
+  it('respects an explicit false for IndieGala and Prime Gaming', () => {
+    const result = resolvePlatformToggles({ indieGalaCheck: false, primeGamingCheck: false });
+    expect(result.claimIndieGala).toBe(false);
+    expect(result.claimPrimeGaming).toBe(false);
+  });
+});
+
+describe('shouldCheckPrimeGamingToday', () => {
+  it('is true when Prime Gaming has never been checked before', () => {
+    // 2026-09-19 is a Saturday — not a check day — proving "never checked"
+    // overrides the day-of-week restriction entirely.
+    expect(shouldCheckPrimeGamingToday(null, new Date('2026-09-19T12:00:00Z'))).toBe(true);
+  });
+
+  it('is false when already checked earlier the same calendar day, even on a Thursday', () => {
+    const lastCheck = '2026-09-17T08:00:00Z';
+    const now = new Date('2026-09-17T18:00:00Z');
+    expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(false);
+  });
+
+  it('is true on a Thursday once the calendar day has changed', () => {
+    const lastCheck = '2026-09-16T12:00:00Z'; // Wednesday
+    const now = new Date('2026-09-17T12:00:00Z'); // Thursday
+    expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(true);
+  });
+
+  it('is true on a Friday once the calendar day has changed', () => {
+    const lastCheck = '2026-09-17T12:00:00Z'; // Thursday
+    const now = new Date('2026-09-18T12:00:00Z'); // Friday
+    expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(true);
+  });
+
+  it('is false on a non-Thu/Fri day within the catch-up window', () => {
+    const lastCheck = '2026-09-18T12:00:00Z'; // Friday
+    const now = new Date('2026-09-19T12:00:00Z'); // Saturday, 1 day later
+    expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(false);
+  });
+
+  it('is true on a non-Thu/Fri day once the catch-up interval is exceeded', () => {
+    const lastCheck = '2026-09-13T12:00:00Z'; // Sunday
+    const now = new Date('2026-09-19T12:00:00Z'); // Saturday, 6 days later
+    expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(true);
+  });
+});
+
+describe('checkPrimeGaming', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  it('does nothing when disabled', async () => {
+    const opened: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+
+    await runner.checkPrimeGaming(false);
+
+    expect(opened).toEqual([]);
+  });
+
+  it('opens the tab when enabled and never checked before', async () => {
+    const opened: { url: string; action: string }[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string, action: string) => {
+      opened.push({ url, action });
+    };
+
+    await runner.checkPrimeGaming(true);
+
+    expect(opened).toEqual([{ url: PRIME_GAMING_HOME_URL, action: 'getFreeGames' }]);
+  });
+
+  it('does not re-open the tab twice on the same calendar day', async () => {
+    const opened: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+
+    await runner.checkPrimeGaming(true);
+    await runner.checkPrimeGaming(true);
+
+    expect(opened).toHaveLength(1);
+  });
+
+  // Regression: the tab used to open on every check regardless of day, even
+  // though new Prime Gaming titles only ever land on Thursdays/Fridays.
+  it('skips the tab on a day that is neither a check day nor past the catch-up window', async () => {
+    await setStorageItem('primeGamingLastCheck', new Date('2026-09-18T12:00:00Z').toISOString()); // Friday
+
+    const opened: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-19T12:00:00Z')); // Saturday, 1 day later
+    try {
+      await runner.checkPrimeGaming(true);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(opened).toEqual([]);
+  });
+
+  it('does not record the last-check date when opening the tab fails, so the next due call retries', async () => {
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async () => {
+      throw new Error('Could not establish connection');
+    };
+
+    await expect(runner.checkPrimeGaming(true)).rejects.toThrow();
+    expect(await getStorageItem<string>('primeGamingLastCheck')).toBeNull();
+
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+    await runner.checkPrimeGaming(true);
+    expect(opened).toEqual([PRIME_GAMING_HOME_URL]);
+  });
+
+  it('bypasses the day-of-week gate when forced (explicit user action)', async () => {
+    await setStorageItem('primeGamingLastCheck', new Date('2026-09-18T12:00:00Z').toISOString()); // Friday
+
+    const opened: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-19T12:00:00Z')); // Saturday, not a check day
+    try {
+      await runner.checkPrimeGaming(true, true);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(opened).toEqual([PRIME_GAMING_HOME_URL]);
+  });
+});
+
+describe('checkPlatformLogin', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  it('checks Steam via getSteamGamesList', async () => {
+    const runner = Object.create(background);
+    let calls = 0;
+    runner.getSteamGamesList = async (shouldClaim: boolean) => { calls++; expect(shouldClaim).toBe(true); };
+
+    await runner.checkPlatformLogin(Platforms.Steam);
+
+    expect(calls).toBe(1);
+  });
+
+  it('checks Prime Gaming via checkPrimeGaming, forced regardless of day', async () => {
+    const runner = Object.create(background);
+    let forcedArg: boolean | undefined;
+    runner.checkPrimeGaming = async (_shouldCheck: boolean, force: boolean) => { forcedArg = force; };
+
+    await runner.checkPlatformLogin(Platforms.PrimeGaming);
+
+    expect(forcedArg).toBe(true);
+  });
+
+  // Regression: getGogGamesList throws on an ambiguous 401 rather than
+  // recording a definitive logged-out state (see its own comment) — without
+  // falling back to a real tab here the same way runFreeGamesChecks does,
+  // clicking "Log in" for GOG while unauthorized would silently do nothing.
+  it('falls back to opening a real tab when the fast path throws', async () => {
+    const runner = Object.create(background);
+    runner.getGogGamesList = async () => { throw new Error('GOG giveaway status requires a signed-in session'); };
+    const opened: { url: string; action: string }[] = [];
+    runner.openTabAndSendActionToContent = async (url: string, action: string) => {
+      opened.push({ url, action });
+    };
+
+    await runner.checkPlatformLogin(Platforms.GOG);
+
+    expect(opened).toEqual([{ url: GOG_HOME_URL, action: 'getFreeGames' }]);
   });
 });
 
@@ -251,5 +532,115 @@ describe('claimGames resilience', () => {
 
     expect(opened).toHaveLength(2);
     expect(badgeTexts).toEqual(['2']);
+  });
+
+  it('spaces tab opens with a wait, but skips waiting after the last one', async () => {
+    const opened: string[] = [];
+    const waits: number[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+    runner.wait = async (ms: number) => {
+      waits.push(ms);
+    };
+    runner.setBadgeText = async () => {};
+
+    await runner.claimGames([
+      { title: 'A', platform: Platforms.Epic, link: 'https://store.epicgames.com/en-US/p/a' },
+      { title: 'B', platform: Platforms.Epic, link: 'https://store.epicgames.com/en-US/p/b' },
+      { title: 'C', platform: Platforms.Epic, link: 'https://store.epicgames.com/en-US/p/c' },
+    ] as any);
+
+    expect(opened).toHaveLength(3);
+    // One wait between each pair of opens (3 games -> 2 waits), none trailing.
+    expect(waits).toHaveLength(2);
+  });
+});
+
+describe('checkIndieGalaWheel', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  it('opens the IndieGala homepage to spin when due and enabled', async () => {
+    const opened: { url: string; action: string }[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string, action: string) => {
+      opened.push({ url, action });
+    };
+
+    await runner.checkIndieGalaWheel(true);
+
+    expect(opened).toEqual([{ url: INDIEGALA_WHEEL_URL, action: 'spinWheel' }]);
+  });
+
+  it('does nothing when the wheel check is disabled', async () => {
+    const opened: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+
+    await runner.checkIndieGalaWheel(false);
+
+    expect(opened).toEqual([]);
+  });
+
+  it('does not re-open the tab twice on the same calendar day', async () => {
+    const opened: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+
+    await runner.checkIndieGalaWheel(true);
+    await runner.checkIndieGalaWheel(true);
+
+    expect(opened).toHaveLength(1);
+  });
+
+  it('opens the tab again once the calendar day changes', async () => {
+    const opened: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+    await setStorageItem('indieGalaWheelLastCheck', new Date('2026-01-01T00:00:00Z').toISOString());
+
+    await runner.checkIndieGalaWheel(true);
+
+    expect(opened).toHaveLength(1);
+  });
+
+  it('records the last-check date so the next same-day call is a no-op', async () => {
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async () => {};
+
+    await runner.checkIndieGalaWheel(true);
+
+    const lastCheck = await getStorageItem<string>('indieGalaWheelLastCheck');
+    expect(lastCheck).not.toBeNull();
+    expect(areDatesDifferent(lastCheck!, new Date().toISOString())).toBe(false);
+  });
+
+  // Regression: the flag used to be written before the tab/message attempt,
+  // so a failed open (tab never loads, content script unreachable) still
+  // marked the day as "checked" and silently skipped the wheel until tomorrow.
+  it('does not record the last-check date when opening the tab fails, so the next call retries', async () => {
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async () => {
+      throw new Error('Could not establish connection');
+    };
+
+    await expect(runner.checkIndieGalaWheel(true)).rejects.toThrow();
+    expect(await getStorageItem<string>('indieGalaWheelLastCheck')).toBeNull();
+
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+    await runner.checkIndieGalaWheel(true);
+    expect(opened).toEqual([INDIEGALA_WHEEL_URL]);
   });
 });

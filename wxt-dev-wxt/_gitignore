@@ -14,6 +14,9 @@ stats-*.json
 .wxt
 web-ext.config.ts
 
+# Playwright CLI snapshots (local debugging artifacts)
+.playwright-cli/
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json
