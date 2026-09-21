@@ -1,5 +1,6 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
+import { REDEEM_CODE_PARAM } from "@/entrypoints/utils/redeemCode.ts";
 
 // GOG's own store client (productcard bundle_min.js) resolves exactly these two
 // endpoints for its giveaway button, so we talk to them directly instead of
@@ -9,20 +10,15 @@ export const GOG_HOME_URL = "https://www.gog.com/";
 export const GOG_STATUS_URL = "https://www.gog.com/giveaway/status";
 export const GOG_CLAIM_URL = "https://www.gog.com/giveaway/claim";
 export const GOG_REDEEM_URL = "https://www.gog.com/redeem";
-// gog.content.ts's redeem-page branch reads this param back out and fills
-// #codeInput with it. The redeem page itself is gated behind a Cloudflare
-// Turnstile captcha before its Continue button enables — deliberately never
-// automated past this point; a human still has to solve it and submit.
-export const GOG_REDEEM_CODE_PARAM = "extCode";
+
+// The extCode handoff (appended here, read back out by gog.content.ts) is
+// shared with microsoft.content.ts's redeem flow — see redeemCode.ts.
+export { extractRedeemCodeParam } from "@/entrypoints/utils/redeemCode.ts";
 
 export function buildRedeemUrl(code: string): string {
     const url = new URL(GOG_REDEEM_URL);
-    url.searchParams.set(GOG_REDEEM_CODE_PARAM, code);
+    url.searchParams.set(REDEEM_CODE_PARAM, code);
     return url.toString();
-}
-
-export function extractRedeemCodeParam(search: string): string | null {
-    return new URLSearchParams(search).get(GOG_REDEEM_CODE_PARAM);
 }
 
 const FALLBACK_IMAGE = "/icon/128.png";
@@ -87,12 +83,18 @@ export function parseGiveawayStatus(payload: unknown): FreeGame | null {
         (product ? readString(product, ["storeLink", "url"]) : "");
     const image = readString(source, ["coverHorizontal", "image", "img", "logo"]) ||
         (product ? readString(product, ["coverHorizontal", "image"]) : "");
+    // Same "unverified shape" caveat as the rest of this function — description
+    // is optional on FreeGame and GameCard only renders it when present, so a
+    // wrong guess here just means no description shows, same as today.
+    const description = readString(source, ["description", "summary", "shortDescription"]) ||
+        (product ? readString(product, ["description", "summary", "shortDescription"]) : "");
 
     return {
         title: title || (slug ? titleFromSlug(slug) : FALLBACK_TITLE),
         platform: Platforms.GOG,
         link: storeLink || (slug ? `https://www.gog.com/en/game/${slug}` : GOG_HOME_URL),
         img: image || FALLBACK_IMAGE,
+        ...(description ? { description } : {}),
     };
 }
 

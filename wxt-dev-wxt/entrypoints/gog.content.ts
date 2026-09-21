@@ -5,8 +5,9 @@ import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {closeCurrentTab, onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {recordLoginState} from "@/entrypoints/utils/loginState.ts";
-import {claimGiveaway, extractRedeemCodeParam, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
-import {incrementCounter, waitForElement, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
+import {claimGiveaway, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
+import {extractRedeemCodeParam, setControlledInputValue, submitRedeemCode} from "@/entrypoints/utils/redeemCode.ts";
+import {findButtonByText, incrementCounter, realClick, wait, waitForElement, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
 
 // Unlike the Epic and Steam scripts this one never touches the page's DOM — GOG
 // exposes the giveaway as JSON. It exists purely so the requests run in a
@@ -20,27 +21,40 @@ export default defineContentScript({
         }
 
         // A GOG-linked Prime Gaming claim (see primegaming.content.ts) lands
-        // here with the code in the URL. Prefilling it and stopping there — the
-        // redeem page's own Cloudflare Turnstile captcha gates its Continue
-        // button, and solving that is intentionally left to the user, never
-        // automated.
-        void prefillRedeemCodeIfPresent();
+        // here with the code in the URL. Confirmed live: a normal signed-in
+        // browser session redeems here without the Cloudflare Turnstile
+        // widget ever presenting an interactive challenge, so this fills the
+        // code and clicks Continue itself — but if Continue never becomes
+        // clickable (an interactive challenge did show up, or anything else
+        // is blocking it), it just stops and leaves the tab open rather than
+        // trying to solve that itself.
+        void redeemCurrentCode();
 
         onClaimMessage({getFreeGames: getFreeGamesList, claimGames: claimCurrentGiveaway});
 
-        async function prefillRedeemCodeIfPresent() {
+        async function redeemCurrentCode() {
             const code = extractRedeemCodeParam(location.search);
             if (!code) return;
 
             await waitForPageLoad();
-            const input = await waitForElement(document, '#codeInput');
+            const input = await waitForElement(document, '#codeInput') as HTMLInputElement | null;
             if (!input) return;
 
-            (input as HTMLInputElement).value = code;
-            // The redeem page is a Vue app whose v-model only syncs on a real
-            // 'input' event — setting .value alone leaves its internal state
-            // (and the Continue button's validation) unaware anything changed.
-            input.dispatchEvent(new Event('input', {bubbles: true}));
+            const outcome = await submitRedeemCode(
+                code,
+                input,
+                () => findButtonByText(document, 'Continue'),
+                setControlledInputValue,
+                realClick,
+                wait,
+            );
+
+            if (outcome === "redeemed") {
+                await incrementCounter();
+                await closeCurrentTab();
+            }
+            // "not-redeemed": leave the tab exactly where it is so the user
+            // can see whatever's blocking it and finish redeeming themselves.
         }
 
         async function getFreeGamesList() {

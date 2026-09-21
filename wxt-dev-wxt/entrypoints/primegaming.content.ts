@@ -3,7 +3,7 @@ import { browser } from "wxt/browser";
 import { FreeGamesResponse } from "@/entrypoints/types/freeGamesResponse.ts";
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
-import { getStorageItems, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
+import { getStorageItem, getStorageItems, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
 import { closeCurrentTab, onClaimMessage } from "@/entrypoints/utils/contentMessaging.ts";
 import { detectAndRecordLoginState } from "@/entrypoints/utils/loginState.ts";
 import {
@@ -13,6 +13,7 @@ import {
     EXTERNAL_PLATFORM_STORAGE_KEYS,
     ExternalPlatform,
     extractRedeemCode,
+    filterNewOffers,
     hasPrimeMembership,
     isInternalOfferCard,
     isOfferDetailsPage,
@@ -20,6 +21,7 @@ import {
     parseInternalOffers,
 } from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import { buildRedeemUrl } from "@/entrypoints/utils/gogGiveaway.ts";
+import { buildMicrosoftRedeemUrl } from "@/entrypoints/utils/microsoftRedeem.ts";
 import { findButtonByText, getRndInteger, incrementCounter, realClick, wait, waitForElement, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
 
 export default defineContentScript({
@@ -86,7 +88,7 @@ export default defineContentScript({
             }
 
             const allowedExternalPlatforms = await getAllowedExternalPlatforms();
-            const internalGames = parseInternalOffers(offerList);
+            const internalGames = parseInternalOffers(offerList, location.href);
             const externalGames = parseExternalOffers(offerList, allowedExternalPlatforms, location.href);
             const gamesArr: FreeGame[] = [...internalGames, ...externalGames];
             if (gamesArr.length === 0) {
@@ -99,10 +101,25 @@ export default defineContentScript({
                 return;
             }
 
+            // Unlike Epic/Steam/GOG/IndieGala, Prime's own claim step re-scrapes
+            // and re-evaluates every listed card regardless of what's sent here
+            // (see claimCurrentGames) — but skipping the message entirely when
+            // nothing is new avoids opening a second tab, every check, purely to
+            // find that claimOfferCard's already-claimed check has nothing to do.
+            const previouslySeen: FreeGame[] = (await getStorageItem("primeGamingGames")) || [];
+            const newGames = filterNewOffers(gamesArr, previouslySeen);
+
+            // Persisted regardless of whether anything is new, same as Epic/Steam,
+            // so the popup's Free Games tab always reflects what's currently listed.
             await setStorageItem("primeGamingGames", gamesArr);
 
+            if (newGames.length === 0) {
+                await closeCurrentTab();
+                return;
+            }
+
             const freeGamesResponse: FreeGamesResponse = {
-                freeGames: gamesArr,
+                freeGames: newGames,
                 loggedIn: true,
             };
             await browser.runtime.sendMessage({
@@ -167,13 +184,14 @@ export default defineContentScript({
 
             // Confirmed live: this "claimed" signal (the Get game button
             // disappearing on the same page) only means a real library claim for
-            // Epic's account-linking flow. GOG and Windows Store instead redeem
-            // via a one-time code shown on this same page once clicked — the
-            // button disappears there too, but nothing is actually claimed until
-            // the user pastes that code into gog.com or the Windows Store app
-            // themselves, so counting it here would be a false positive. The
-            // click still happens (it surfaces the code without the user having
-            // to find the offer manually) — it just isn't counted as claimed.
+            // Epic's account-linking flow. GOG and Windows Store instead show a
+            // one-time redeem code on this same page once clicked — counting
+            // that click here would be a false positive, since nothing is
+            // actually redeemed until the code is submitted on gog.com/redeem
+            // or account.microsoft.com/billing/redeem (handled by those sites'
+            // own content scripts, which do their own incrementCounter on
+            // success). The click still happens here (it surfaces the code
+            // without the user having to find the offer manually).
             const platform = detectExternalPlatform(location.pathname);
             const outcome = await claimExternalOfferPage(
                 () => findButtonByText(document, 'Get game'),
@@ -201,18 +219,20 @@ export default defineContentScript({
                 return;
             }
 
-            // GOG redeems via a one-time code shown on this same page rather than
-            // an in-library claim — hand it straight to gog.com/redeem so the
-            // user only has to solve the captcha and click Continue there. Never
-            // counted as claimed: redemption only actually completes once they
-            // do that themselves.
+            // GOG and Windows Store both redeem via a one-time code shown on
+            // this same page rather than an in-library claim — hand it
+            // straight to the platform's own redeem page, which attempts to
+            // finish the redemption itself (see gog.content.ts /
+            // microsoft.content.ts) and only falls back to leaving the tab
+            // open if that doesn't go through.
             if (platform === "GOG") {
                 const code = extractRedeemCode(document);
                 if (code) location.href = buildRedeemUrl(code);
             }
-            // Windows Store codes have nowhere a browser extension can hand them
-            // off to (no website — the native Store app does the redeeming), so
-            // this just leaves the code visible on the page for manual copying.
+            if (platform === "Windows") {
+                const code = extractRedeemCode(document);
+                if (code) location.href = buildMicrosoftRedeemUrl(code);
+            }
         }
     },
 });

@@ -9,17 +9,19 @@ export function isVisible(el: HTMLElement) {
 }
 
 export async function waitForElement(document: Document | HTMLElement, selector: string, timeout = 500, maxRetry = 10): Promise<HTMLElement | null> {
-    let retry = 0;
-    let el;
-    let visible = false;
-    while (retry < maxRetry) {
-            el = document.querySelector(selector) as HTMLElement;
-            visible = isVisible(el);
-        if (el && visible) {
+    return waitForMatch(() => document.querySelector(selector) as HTMLElement | null, timeout, maxRetry);
+}
+
+// Same polling shape as waitForElement, but for callers that can't express
+// what they're looking for as a single CSS selector (e.g. matching an input
+// by a hint across several attributes rather than one fixed id).
+export async function waitForMatch<T extends HTMLElement>(find: () => T | null, timeout = 500, maxRetry = 10): Promise<T | null> {
+    for (let retry = 0; retry < maxRetry; retry++) {
+        const el = find();
+        if (el && isVisible(el)) {
             return el;
         }
         await wait(timeout);
-        retry++;
     }
     return null;
 }

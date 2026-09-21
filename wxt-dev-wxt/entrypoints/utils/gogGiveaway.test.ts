@@ -126,6 +126,20 @@ describe('parseGiveawayStatus', () => {
     expect(parseGiveawayStatus({ id: '1', coverHorizontal: url })?.img).toBe(url);
     expect(parseGiveawayStatus({ id: '1', image: url })?.img).toBe(url);
   });
+
+  it('picks up a description when the payload carries any', () => {
+    expect(parseGiveawayStatus({ id: '1', description: 'A classic platformer.' })?.description)
+      .toBe('A classic platformer.');
+    expect(parseGiveawayStatus({ id: '1', summary: 'Short blurb.' })?.description)
+      .toBe('Short blurb.');
+    expect(parseGiveawayStatus({ id: '1', product: { description: 'Nested blurb.' } })?.description)
+      .toBe('Nested blurb.');
+  });
+
+  it('omits description entirely rather than an empty string when absent', () => {
+    const game = parseGiveawayStatus({ id: '1', title: 'Some Game' });
+    expect(game).not.toHaveProperty('description');
+  });
 });
 
 describe('fetchGiveaway', () => {

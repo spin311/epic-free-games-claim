@@ -37,12 +37,6 @@ body {
   min-height: 80vh;
 }
 
-h1 {
-  font-size: 1.8em;
-  margin: 0.2em 0;
-  text-align: center;
-}
-
 p {
   margin: 0.5em 0 1em 0;
   text-align: center;
@@ -125,7 +119,7 @@ button:focus-visible {
 .checkboxes {
   display: flex;
   flex-direction: column;
-  gap: 0.75em;
+  gap: 0.25em;
   width: 100%;
 }
 
@@ -133,9 +127,23 @@ button:focus-visible {
   flex-direction: row;
 }
 
-/* Direct children only: these are the platform rows. Without `>` this also hit
-   nested spans (the login badge and its dot), stretching them via flex-grow. */
-.checkboxes > span {
+/* One block per platform. A hairline divider between blocks (not after the
+   last) reads as separate sections without needing boxed/bordered cards. */
+.platform-group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5em;
+  padding: 0.5em 0;
+}
+
+.platform-group:not(:last-child) {
+  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+}
+
+/* The main checkbox row for a platform, and the two toggles above the free
+   games list (Future Games / Descriptions) — pill-styled either way. */
+.checkboxes > span,
+.platform-group > span {
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -158,12 +166,38 @@ button:focus-visible {
   cursor: pointer;
 }
 
-/* Steam-only review gate, indented under the Steam checkbox row. */
+/* A platform's sub-options, shown only while its main checkbox is checked —
+   indented to read as belonging to the row above. Shared by Steam's review
+   threshold, IndieGala's wheel toggle, and Prime Gaming's external-platform
+   toggles, so all three line up the same way instead of three near-duplicate
+   indentation rules. */
+.sub-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  padding-left: 1.35em;
+}
+
+/* Plain rather than pill-styled, unlike a platform's own main checkbox row —
+   keeps sub-options visually lighter-weight than the row they belong to. */
+.sub-options span {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.sub-options .hint {
+  margin: 0;
+  text-align: left;
+  font-size: 0.8em;
+  color: #8a8585;
+}
+
+/* Steam-only review gate. */
 .review-threshold {
   display: flex;
   flex-direction: column;
   gap: 0.4em;
-  padding: 0 0.75em 0.2em 2.1em;
   font-size: 0.85em;
 }
 
@@ -195,29 +229,6 @@ button:focus-visible {
   font-size: inherit;
 }
 
-/* Class rather than :has(:disabled) — :has() needs Firefox 121, and the
-   manifest supports back to 109. */
-.review-threshold.is-disabled {
-  opacity: 0.5;
-}
-
-/* IndieGala wheel sub-setting, indented under the IndieGala checkbox row and
-   plain rather than pill-styled — the same treatment review-threshold uses
-   for Steam's sub-setting. */
-.nested-checkbox {
-  padding: 0 0.75em 0.2em 2.1em;
-}
-
-.nested-checkbox span {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-}
-
-.nested-checkbox .is-disabled {
-  opacity: 0.5;
-}
-
 /* Sits after the row label (which is flex: 1), so it hugs the right edge. */
 .login-status {
   display: flex;
@@ -242,12 +253,20 @@ button:focus-visible {
   background-color: #60ea67;
 }
 
+/* Doubles as a link straight to that platform's login page — amber to read
+   as "action needed", matching the claiming-in-progress indicator's color. */
 .login-status.logged-out {
-  color: #e8734a;
+  color: #f0ad4e;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.login-status.logged-out:hover {
+  text-decoration: underline;
 }
 
 .login-status.logged-out .login-dot {
-  background-color: #e8734a;
+  background-color: #f0ad4e;
 }
 
 .tabs {
@@ -383,6 +402,41 @@ button:focus-visible {
   background-color: #1a1a1a;
   color: #ffffff;
   font-family: inherit;
+}
+
+/* Single row by design — nowrap plus horizontal scroll as a fallback rather
+   than wrapping to a second row, which read as cluttered with 5 platforms. */
+.platform-filter {
+  display: flex;
+  flex-wrap: nowrap;
+  overflow-x: auto;
+  gap: 0.3em;
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 0.75em;
+}
+
+.platform-chip {
+  flex-shrink: 0;
+  padding: 0.25em 0.6em;
+  border-radius: 999px;
+  border: 1px solid rgba(255, 255, 255, 0.15);
+  background-color: transparent;
+  color: #8a8585;
+  font-size: 0.8em;
+  font-weight: 500;
+  cursor: pointer;
+  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+}
+
+.platform-chip:hover {
+  border-color: #60ea67;
+}
+
+.platform-chip.active {
+  color: #60ea67;
+  border-color: #60ea67;
+  background-color: rgba(96, 234, 103, 0.1);
 }
 
 .center {

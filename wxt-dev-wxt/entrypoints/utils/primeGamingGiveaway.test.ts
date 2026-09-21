@@ -4,6 +4,7 @@ import {
   claimOfferCard,
   detectExternalPlatform,
   extractRedeemCode,
+  filterNewOffers,
   hasPrimeMembership,
   isInternalOfferCard,
   isOfferDetailsPage,
@@ -14,6 +15,7 @@ import {
   PRIME_GAMING_HOME_URL,
 } from './primeGamingGiveaway';
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
+import { FreeGame } from '@/entrypoints/types/freeGame.ts';
 
 function elFrom(html: string): Element {
   const doc = new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
@@ -51,9 +53,11 @@ describe('isInternalOfferCard', () => {
   });
 });
 
+const BASE_URL = 'https://luna.amazon.com/home';
+
 describe('parseOfferCard', () => {
   it('extracts title, link, and image from an internal card', () => {
-    const game = parseOfferCard(elFrom(INTERNAL_CARD));
+    const game = parseOfferCard(elFrom(INTERNAL_CARD), BASE_URL);
     expect(game).toEqual({
       title: 'Some Game',
       platform: Platforms.PrimeGaming,
@@ -64,25 +68,46 @@ describe('parseOfferCard', () => {
 
   it('returns null when the card has no title', () => {
     const card = elFrom(`<div class="item-card__action"><a href="/x"></a></div>`);
-    expect(parseOfferCard(card)).toBeNull();
+    expect(parseOfferCard(card, BASE_URL)).toBeNull();
   });
 
   it('falls back to the default icon when no image is present', () => {
     const card = elFrom(`<div class="item-card__action"><a href="/x"></a><div class="item-card-details__body__primary">T</div></div>`);
-    expect(parseOfferCard(card)?.img).toBe('/icon/128.png');
+    expect(parseOfferCard(card, BASE_URL)?.img).toBe('/icon/128.png');
+  });
+
+  // Amazon's card grid lazy-loads images, leaving `src` blank/placeholder
+  // until the card scrolls into view — the real URL lives on a data-*
+  // attribute instead, the same pattern Steam's scraper already handles.
+  it('falls back to a data-src lazy-load attribute when src is empty', () => {
+    const card = elFrom(`<div class="item-card__action"><a href="/x"></a><div class="item-card-details__body__primary">T</div><img class="tw-image" data-src="https://images/lazy.png"/></div>`);
+    expect(parseOfferCard(card, BASE_URL)?.img).toBe('https://images/lazy.png');
+  });
+
+  it('falls back to a data-lazy attribute when neither src nor data-src is present', () => {
+    const card = elFrom(`<div class="item-card__action"><a href="/x"></a><div class="item-card-details__body__primary">T</div><img class="tw-image" data-lazy="https://images/lazy2.png"/></div>`);
+    expect(parseOfferCard(card, BASE_URL)?.img).toBe('https://images/lazy2.png');
+  });
+
+  // Prime's own `link` field was already resolved against baseUrl; the image
+  // field never got the same treatment, so a relative/protocol-relative src
+  // rendered incorrectly inside the extension's popup origin.
+  it('resolves a relative image URL against the base URL', () => {
+    const card = elFrom(`<div class="item-card__action"><a href="/x"></a><div class="item-card-details__body__primary">T</div><img class="tw-image" src="/images/relative.png"/></div>`);
+    expect(parseOfferCard(card, BASE_URL)?.img).toBe('https://luna.amazon.com/images/relative.png');
   });
 });
 
 describe('parseInternalOffers', () => {
   it('returns only internal cards, skipping external ones', () => {
     const list = elFrom(`<div>${INTERNAL_CARD}${EXTERNAL_CARD}</div>`);
-    const games = parseInternalOffers(list);
+    const games = parseInternalOffers(list, BASE_URL);
     expect(games).toHaveLength(1);
     expect(games[0].title).toBe('Some Game');
   });
 
   it('returns an empty array when there are no offer cards', () => {
-    expect(parseInternalOffers(elFrom('<div></div>'))).toEqual([]);
+    expect(parseInternalOffers(elFrom('<div></div>'), BASE_URL)).toEqual([]);
   });
 });
 
@@ -167,6 +192,11 @@ describe('parseExternalOfferCard', () => {
   it('returns null when the card has no title', () => {
     const card = elFrom('<div class="item-card__action"><a href="/x"></a></div>');
     expect(parseExternalOfferCard(card, 'https://luna.amazon.com/home')).toBeNull();
+  });
+
+  it('resolves a relative image URL against the base URL', () => {
+    const card = elFrom(`<div class="item-card__action"><a href="/x"></a><div class="item-card-details__body__primary">T</div><img class="tw-image" src="/images/relative.png"/></div>`);
+    expect(parseExternalOfferCard(card, 'https://luna.amazon.com/home')?.img).toBe('https://luna.amazon.com/images/relative.png');
   });
 });
 
@@ -274,6 +304,28 @@ describe('claimExternalOfferPage', () => {
   });
 });
 
+describe('filterNewOffers', () => {
+  const seen: FreeGame = {
+    title: 'Already Claimed Game',
+    platform: Platforms.PrimeGaming,
+    link: PRIME_GAMING_HOME_URL,
+    img: '/icon/128.png',
+  };
+  const fresh: FreeGame = { ...seen, title: 'Brand New Game' };
+
+  it('excludes games whose title already appears in the previously-seen list', () => {
+    expect(filterNewOffers([seen, fresh], [seen])).toEqual([fresh]);
+  });
+
+  it('returns everything when nothing has been seen before', () => {
+    expect(filterNewOffers([seen, fresh], [])).toEqual([seen, fresh]);
+  });
+
+  it('returns nothing when every title was already seen', () => {
+    expect(filterNewOffers([seen], [seen])).toEqual([]);
+  });
+});
+
 describe('extractRedeemCode', () => {
   // Confirmed live: a GOG redeem code is one contiguous uppercase alphanumeric
   // string, no separators — e.g. "YRXG7D62AF07ADCE5B" (19 chars).
@@ -309,10 +361,33 @@ describe('extractRedeemCode', () => {
     const doc = docFrom('<div>YRXG7D62AF07ADCE5B first, then AB12CD34EF56GH78IJ second</div>');
     expect(extractRedeemCode(doc)).toBe('YRXG7D62AF07ADCE5B');
   });
+
+  // Confirmed live against a real DOOM Eternal (Windows) claim: Microsoft
+  // codes are hyphen-grouped, unlike GOG's contiguous ones, and a group is
+  // allowed to be all-letters (no digit) — "WXJKR" here has none.
+  it('extracts a hyphen-grouped Windows/Xbox redeem code', () => {
+    const doc = docFrom('<p>Your code: "DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ"</p>');
+    expect(extractRedeemCode(doc)).toBe('DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ');
+  });
+
+  it('does not match a lowercase-hex, differently-grouped item id as a Windows code', () => {
+    const doc = docFrom('<div>amzn1.pg.item.1c490f2e-c698-4077-94a6-6a69c98945e2</div>');
+    expect(extractRedeemCode(doc)).toBeNull();
+  });
+
+  // Confirmed live: the details page's "Copy code" button text runs directly
+  // into the code with no whitespace in flattened textContent
+  // ("...H2RMZCopy code"). A trailing \b can't see a boundary between two
+  // word characters ("Z" and "C"), which previously made this a false
+  // negative — regression guard for that.
+  it('extracts a Windows code even when immediately followed by more letters with no separator', () => {
+    const doc = docFrom('<p>Your code: DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ</p><button>Copy code</button>');
+    expect(extractRedeemCode(doc)).toBe('DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ');
+  });
 });
 
 describe('claimOfferCard', () => {
-  it('clicks the button and returns "claimed" when the collected marker is already present', async () => {
+  it('returns "already-claimed" without clicking when the collected marker is already present', async () => {
     const card = elFrom(CARD_WITH_CLAIM_BUTTON);
     const collected = card.ownerDocument.createElement('p');
     collected.textContent = 'Collected';
@@ -323,10 +398,10 @@ describe('claimOfferCard', () => {
 
     const outcome = await claimOfferCard(card, clickFn, waitFn);
 
-    expect(outcome).toBe('claimed');
-    expect(clickFn).toHaveBeenCalledTimes(1);
-    expect(clickFn).toHaveBeenCalledWith(card.querySelector('button'));
-    // The marker was readable on the very first check, so no poll was needed.
+    expect(outcome).toBe('already-claimed');
+    // A card claimed on a previous run must be left alone, not re-clicked and
+    // miscounted as freshly claimed every run.
+    expect(clickFn).not.toHaveBeenCalled();
     expect(waitFn).not.toHaveBeenCalled();
   });
 

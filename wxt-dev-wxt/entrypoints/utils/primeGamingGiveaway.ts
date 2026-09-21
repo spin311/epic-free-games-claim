@@ -13,10 +13,25 @@ export function isInternalOfferCard(card: Element): boolean {
   return card.querySelector('button[data-a-target="FGWPOffer"]') !== null;
 }
 
-export function parseOfferCard(card: Element): FreeGame | null {
+// Amazon's card grid lazy-loads images (src is blank/placeholder until a card
+// scrolls into view, the real URL living on a data-* attribute instead — the
+// same pattern Steam's scraper already handles), and cards only ever carry a
+// path-relative or protocol-relative src. Unlike the `link` field, which was
+// already resolved against baseUrl, `img` was read raw and used as-is, which
+// rendered incorrectly inside the extension popup's own origin.
+function readOfferImage(card: Element, baseUrl: string): string {
+  const img = card.querySelector('img.tw-image');
+  const raw =
+      img?.getAttribute('src')?.trim() ||
+      img?.getAttribute('data-src')?.trim() ||
+      img?.getAttribute('data-lazy')?.trim() ||
+      '';
+  return raw ? new URL(raw, baseUrl).toString() : '/icon/128.png';
+}
+
+export function parseOfferCard(card: Element, baseUrl: string): FreeGame | null {
   const title = card.querySelector('.item-card-details__body__primary')?.textContent?.trim();
   const href = card.querySelector('a')?.getAttribute('href');
-  const img = card.querySelector('img.tw-image')?.getAttribute('src');
   if (!title || !href) return null;
 
   return {
@@ -27,16 +42,16 @@ export function parseOfferCard(card: Element): FreeGame | null {
     // opens exactly one tab per claim run, and the content script claims every
     // unclaimed internal offer it finds in that one visit.
     link: PRIME_GAMING_HOME_URL,
-    img: img ?? "/icon/128.png",
+    img: readOfferImage(card, baseUrl),
   };
 }
 
-export function parseInternalOffers(offerList: Element): FreeGame[] {
+export function parseInternalOffers(offerList: Element, baseUrl: string): FreeGame[] {
   const cards = Array.from(offerList.querySelectorAll('.item-card__action'));
   const games: FreeGame[] = [];
   for (const card of cards) {
     if (!isInternalOfferCard(card)) continue;
-    const game = parseOfferCard(card);
+    const game = parseOfferCard(card, baseUrl);
     if (game) games.push(game);
   }
   return games;
@@ -81,7 +96,6 @@ export function detectExternalPlatform(href: string): ExternalPlatform | null {
 export function parseExternalOfferCard(card: Element, baseUrl: string): FreeGame | null {
   const title = card.querySelector('.item-card-details__body__primary')?.textContent?.trim();
   const href = card.querySelector('a')?.getAttribute('href');
-  const img = card.querySelector('img.tw-image')?.getAttribute('src');
   if (!title || !href) return null;
 
   return {
@@ -91,7 +105,7 @@ export function parseExternalOfferCard(card: Element, baseUrl: string): FreeGame
     // different mechanism entirely.
     platform: Platforms.PrimeGaming,
     link: new URL(href, baseUrl).toString(),
-    img: img ?? "/icon/128.png",
+    img: readOfferImage(card, baseUrl),
   };
 }
 
@@ -133,8 +147,11 @@ export function hasPrimeMembership(doc: Document): boolean {
 export type ClaimOutcome = "claimed" | "already-claimed" | "failed";
 
 // Confirmed by vogler/free-games-claimer's prime-gaming.js: an already-claimed
-// card shows a <p> containing "Collected" text. Polls briefly after the click
-// because the DOM update isn't necessarily synchronous with the click event.
+// card shows a <p> containing "Collected" text — checked BEFORE clicking so a
+// card claimed on a previous run is reported "already-claimed" and left alone,
+// rather than clicked again and miscounted as freshly "claimed" every run.
+// Polls briefly after a real click because the DOM update isn't necessarily
+// synchronous with the click event.
 export async function claimOfferCard(
     card: Element,
     clickFn: (el: HTMLElement) => void,
@@ -145,28 +162,51 @@ export async function claimOfferCard(
   const button = card.querySelector<HTMLButtonElement>('button[data-a-target="FGWPOffer"]');
   if (!button) return "failed";
 
+  const isCollected = () => Array.from(card.querySelectorAll('p')).some(
+      (p) => (p.textContent ?? '').trim().toLowerCase() === 'collected'
+  );
+
+  if (isCollected()) return "already-claimed";
+
   clickFn(button);
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const collected = Array.from(card.querySelectorAll('p')).some(
-        (p) => (p.textContent ?? '').trim().toLowerCase() === 'collected'
-    );
-    if (collected) return "claimed";
+    if (isCollected()) return "claimed";
     await waitFn(pollIntervalMs);
   }
   return "failed";
 }
 
-// Confirmed live: a GOG redeem code is a single contiguous uppercase
+// Mirrors the "newGames" filter Epic/Steam/GOG/IndieGala apply in background.ts
+// before claiming. Prime Gaming has no background-reachable listing endpoint —
+// its offer list only exists after an authenticated page render — so this is
+// applied in the content script instead, against whatever the previous run
+// persisted, rather than sending every currently-listed offer (including ones
+// already claimed on a prior run) off to be claimed again.
+export function filterNewOffers(games: FreeGame[], previouslySeen: FreeGame[]): FreeGame[] {
+  return games.filter((game) => !previouslySeen.some((seen) => seen?.title === game.title));
+}
+
+// Confirmed live: GOG and Windows/Xbox codes use two different shapes, so
+// this matches either. A GOG code is a single contiguous uppercase
 // alphanumeric string with no separators (e.g. "YRXG7D62AF07ADCE5B", 19
-// chars) — not the hyphen-grouped shape this originally assumed. Requiring
-// both a letter and a digit (via lookaheads) rules out plain all-caps words
-// and pure numbers; requiring uppercase rules out the lowercase-hex Luna item
-// id that's also present on every details page. Length is a guess bounded
-// around the one confirmed example — may need widening if other games' codes
-// turn out shorter or longer.
-const REDEEM_CODE_PATTERN = /\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{12,24}\b/;
+// chars) — requiring both a letter and a digit (via lookaheads) rules out
+// plain all-caps words and pure numbers; requiring uppercase rules out the
+// lowercase-hex Luna item id that's also present on every details page.
+// Length is a guess bounded around the one confirmed example — may need
+// widening if other games' codes turn out shorter or longer. A Windows/Xbox
+// code is always five uppercase-alphanumeric groups of five separated by
+// hyphens (e.g. "DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ") — Microsoft's own redeem
+// page confirms this shape ("Enter 25-character code" /
+// "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx") — and isn't required to mix letters and
+// digits per group, since a real group can be all-letters. No trailing \b:
+// confirmed live, Amazon's details page runs the code's text node directly
+// into the adjacent "Copy code" button's text with no whitespace between
+// them ("...H2RMZCopy code"), and \b can't detect a boundary between two
+// word characters ("Z" and "C") — the fixed-width groups already bound the
+// match correctly without it.
+const REDEEM_CODE_PATTERN = /\b[A-Z0-9]{5}(?:-[A-Z0-9]{5}){4}|\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{12,24}\b/;
 
 export function extractRedeemCode(root: Document | HTMLElement): string | null {
   // Document.textContent is spec'd to return null (only Elements have it) —

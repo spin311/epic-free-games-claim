@@ -16,7 +16,11 @@ export default defineConfig({
       "https://freebies.indiegala.com/*",
       "https://www.indiegala.com/*",
       "https://gaming.amazon.com/*",
-      "https://luna.amazon.com/*"
+      "https://luna.amazon.com/*",
+      "https://account.microsoft.com/*",
+      // The account.microsoft.com redeem page embeds the actual redeem form
+      // as a cross-origin iframe on this separate host — confirmed live.
+      "https://www.microsoft.com/store/purchase/buynowui/*"
     ],
     browser_specific_settings: {
       gecko: {

@@ -1,0 +1,110 @@
+import { findButtonByText } from "@/entrypoints/utils/helpers.ts";
+
+// Shared by gog.content.ts and microsoft.content.ts: both land on a real
+// redeem page (via primegaming.content.ts navigating a Prime-linked claim tab
+// there) and need to fill in a code and submit a form built by someone else's
+// SPA. Kept generic/injectable rather than page-specific so the same logic —
+// and its tests — cover both.
+
+// React (and some Vue) forms track their own copy of an input's value via the
+// framework's synthetic event wrapper, which overrides the native `value`
+// setter on the element instance. Assigning `.value` directly bypasses that
+// wrapper, so the framework never sees the change. Going through the
+// prototype's original setter, then firing a real 'input' event, is the
+// standard workaround and is harmless for plain (non-framework) inputs too.
+export function setControlledInputValue(input: HTMLInputElement, value: string): void {
+    const setter = Object.getOwnPropertyDescriptor(window.HTMLInputElement.prototype, 'value')?.set;
+    setter?.call(input, value);
+    input.dispatchEvent(new Event('input', { bubbles: true }));
+}
+
+// Redeem pages don't expose a stable id/name we can rely on across two
+// different companies' sites, so this matches on whatever hint text shows up
+// across the attributes a real label is likely to live in.
+export function findInputByHint(root: Document | HTMLElement, hint: RegExp): HTMLInputElement | null {
+    const inputs = Array.from(root.querySelectorAll<HTMLInputElement>('input'));
+    return inputs.find((el) => {
+        const haystack = [el.id, el.name, el.getAttribute('aria-label') ?? '', el.placeholder].join(' ');
+        return hint.test(haystack);
+    }) ?? null;
+}
+
+// Tries each candidate label in order and returns the first match — the exact
+// wording ("Next" vs "Redeem" vs "Continue") isn't confirmed for every site,
+// so this covers the plausible set rather than betting on one string.
+export function findButtonByAnyText(root: Document | HTMLElement, texts: string[]): HTMLButtonElement | null {
+    for (const text of texts) {
+        const button = findButtonByText(root, text);
+        if (button) return button;
+    }
+    return null;
+}
+
+function isClickable(button: HTMLButtonElement): boolean {
+    return !button.disabled && button.getAttribute('aria-disabled') !== 'true';
+}
+
+export type RedeemOutcome = "redeemed" | "not-redeemed";
+
+// Confirmed live against both real sites that a URL/route change is NOT a
+// usable success signal: Microsoft's redeem flow is multi-step (enter code ->
+// Next -> a *different* URL for a Confirm step -> a *third* URL only once
+// actually redeemed), so treating the first URL change as done fires too
+// early. GOG's is worse — its SPA moves to a new URL (the code becomes part
+// of the path) even when the code was already used and redemption FAILED, so
+// URL change there doesn't even correlate with success/failure.
+//
+// So this fills the code in, then repeatedly clicks whatever submit-like
+// button shows up (never the same element instance twice, so a button that's
+// enabled but genuinely stuck — bad code, unresolved captcha, terms
+// checkbox — gets exactly one click rather than being hammered), and treats
+// the button disappearing for a settled stretch (not just a one-tick gap
+// between two steps' renders) as success. This covers a single-click flow
+// (GOG's one "Continue") and a multi-step one (Next -> Confirm) without
+// needing to know in advance which shape a given site uses, and without ever
+// having to recognise that site's specific success text.
+export async function submitRedeemCode(
+    code: string,
+    input: HTMLInputElement,
+    findSubmitButton: () => HTMLButtonElement | null,
+    setInputValue: (input: HTMLInputElement, value: string) => void,
+    clickFn: (el: HTMLElement) => void,
+    waitFn: (ms: number) => Promise<void>,
+    timeoutMs = 20000,
+    pollIntervalMs = 250,
+    settleMs = 1000,
+): Promise<RedeemOutcome> {
+    setInputValue(input, code);
+
+    let lastClicked: HTMLButtonElement | null = null;
+    let hasClickedAtLeastOnce = false;
+    let noButtonSince: number | null = null;
+    const deadline = Date.now() + timeoutMs;
+
+    while (Date.now() < deadline) {
+        const button = findSubmitButton();
+        if (button) {
+            noButtonSince = null;
+            if (button !== lastClicked && isClickable(button)) {
+                clickFn(button);
+                lastClicked = button;
+                hasClickedAtLeastOnce = true;
+            }
+        } else if (hasClickedAtLeastOnce) {
+            noButtonSince ??= Date.now();
+            if (Date.now() - noButtonSince >= settleMs) return "redeemed";
+        }
+        await waitFn(pollIntervalMs);
+    }
+    return "not-redeemed";
+}
+
+// Our own marker, not a feature either redeem page actually implements —
+// primegaming.content.ts appends it before navigating so the destination's
+// content script (gog.content.ts / microsoft.content.ts) can read the code
+// back out after the cross-origin navigation completes.
+export const REDEEM_CODE_PARAM = "extCode";
+
+export function extractRedeemCodeParam(search: string): string | null {
+    return new URLSearchParams(search).get(REDEEM_CODE_PARAM);
+}
