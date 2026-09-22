@@ -1,6 +1,6 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
-import { REDEEM_CODE_PARAM } from "@/entrypoints/utils/redeemCode.ts";
+import { appendRedeemParams } from "@/entrypoints/utils/redeemCode.ts";
 
 // GOG's own store client (productcard bundle_min.js) resolves exactly these two
 // endpoints for its giveaway button, so we talk to them directly instead of
@@ -15,10 +15,8 @@ export const GOG_REDEEM_URL = "https://www.gog.com/redeem";
 // shared with microsoft.content.ts's redeem flow — see redeemCode.ts.
 export { extractRedeemCodeParam } from "@/entrypoints/utils/redeemCode.ts";
 
-export function buildRedeemUrl(code: string): string {
-    const url = new URL(GOG_REDEEM_URL);
-    url.searchParams.set(REDEEM_CODE_PARAM, code);
-    return url.toString();
+export function buildRedeemUrl(code: string, title?: string): string {
+    return appendRedeemParams(GOG_REDEEM_URL, code, title);
 }
 
 const FALLBACK_IMAGE = "/icon/128.png";

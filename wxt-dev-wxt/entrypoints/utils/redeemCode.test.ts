@@ -1,9 +1,12 @@
 import { describe, it, expect, vi } from 'vitest';
 import {
+    appendRedeemParams,
     extractRedeemCodeParam,
+    extractRedeemTitleParam,
     findButtonByAnyText,
     findInputByHint,
     REDEEM_CODE_PARAM,
+    REDEEM_TITLE_PARAM,
     setControlledInputValue,
     submitRedeemCode,
 } from '@/entrypoints/utils/redeemCode.ts';
@@ -63,6 +66,31 @@ describe('extractRedeemCodeParam', () => {
 
     it('returns null when absent', () => {
         expect(extractRedeemCodeParam('?other=1')).toBeNull();
+    });
+});
+
+describe('extractRedeemTitleParam', () => {
+    it('reads the extTitle param', () => {
+        expect(extractRedeemTitleParam(`?${REDEEM_TITLE_PARAM}=DOOM+Eternal`)).toBe('DOOM Eternal');
+    });
+
+    it('returns null when absent', () => {
+        expect(extractRedeemTitleParam('?other=1')).toBeNull();
+    });
+});
+
+describe('appendRedeemParams', () => {
+    it('sets only the code param when no title is given', () => {
+        const url = new URL(appendRedeemParams('https://example.com/redeem', 'ABC123'));
+        expect(url.searchParams.get(REDEEM_CODE_PARAM)).toBe('ABC123');
+        expect(url.searchParams.has(REDEEM_TITLE_PARAM)).toBe(false);
+    });
+
+    it('sets both params, round-tripping special characters in the title', () => {
+        const url = appendRedeemParams('https://example.com/redeem', 'ABC123', "Baldur's Gate 3");
+        const parsed = new URL(url);
+        expect(parsed.searchParams.get(REDEEM_CODE_PARAM)).toBe('ABC123');
+        expect(parsed.searchParams.get(REDEEM_TITLE_PARAM)).toBe("Baldur's Gate 3");
     });
 });
 

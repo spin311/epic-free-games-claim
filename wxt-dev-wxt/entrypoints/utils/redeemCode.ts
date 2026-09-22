@@ -99,12 +99,28 @@ export async function submitRedeemCode(
     return "not-redeemed";
 }
 
-// Our own marker, not a feature either redeem page actually implements —
-// primegaming.content.ts appends it before navigating so the destination's
+// Our own markers, not a feature either redeem page actually implements —
+// primegaming.content.ts appends them before navigating so the destination's
 // content script (gog.content.ts / microsoft.content.ts) can read the code
-// back out after the cross-origin navigation completes.
+// (and, best-effort, the game's title — used only for the pending-redemption
+// fallback UI, never required) back out after the cross-origin navigation
+// completes.
 export const REDEEM_CODE_PARAM = "extCode";
+export const REDEEM_TITLE_PARAM = "extTitle";
 
 export function extractRedeemCodeParam(search: string): string | null {
     return new URLSearchParams(search).get(REDEEM_CODE_PARAM);
+}
+
+export function extractRedeemTitleParam(search: string): string | null {
+    return new URLSearchParams(search).get(REDEEM_TITLE_PARAM);
+}
+
+// Shared by buildRedeemUrl (GOG) and buildMicrosoftRedeemUrl so both destinations
+// use the exact same param names — never duplicated ad hoc per site.
+export function appendRedeemParams(baseUrl: string, code: string, title?: string): string {
+    const url = new URL(baseUrl);
+    url.searchParams.set(REDEEM_CODE_PARAM, code);
+    if (title) url.searchParams.set(REDEEM_TITLE_PARAM, title);
+    return url.toString();
 }

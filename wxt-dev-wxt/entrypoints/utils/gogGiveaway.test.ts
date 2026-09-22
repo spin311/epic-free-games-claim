@@ -17,6 +17,11 @@ describe('buildRedeemUrl', () => {
     expect(buildRedeemUrl('YRXG7D62AF07ADCE5B'))
       .toBe(`${GOG_REDEEM_URL}?extCode=YRXG7D62AF07ADCE5B`);
   });
+
+  it('also carries the title as a query param when given', () => {
+    const url = new URL(buildRedeemUrl('YRXG7D62AF07ADCE5B', 'DOOM + DOOM II'));
+    expect(url.searchParams.get('extTitle')).toBe('DOOM + DOOM II');
+  });
 });
 
 describe('extractRedeemCodeParam', () => {

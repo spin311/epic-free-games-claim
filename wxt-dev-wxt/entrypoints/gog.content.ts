@@ -6,7 +6,8 @@ import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {closeCurrentTab, onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {recordLoginState} from "@/entrypoints/utils/loginState.ts";
 import {claimGiveaway, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
-import {extractRedeemCodeParam, setControlledInputValue, submitRedeemCode} from "@/entrypoints/utils/redeemCode.ts";
+import {extractRedeemCodeParam, extractRedeemTitleParam, setControlledInputValue, submitRedeemCode} from "@/entrypoints/utils/redeemCode.ts";
+import {recordRedeemFallback, removePendingRedemption} from "@/entrypoints/utils/pendingRedemptions.ts";
 import {findButtonByText, incrementCounter, realClick, wait, waitForElement, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
 
 // Unlike the Epic and Steam scripts this one never touches the page's DOM — GOG
@@ -35,26 +36,53 @@ export default defineContentScript({
         async function redeemCurrentCode() {
             const code = extractRedeemCodeParam(location.search);
             if (!code) return;
+            const title = extractRedeemTitleParam(location.search) ?? "GOG game";
+            // Captured before submitRedeemCode runs: GOG's SPA rewrites the URL
+            // once Continue is clicked (the code becomes part of the path), so
+            // this is the one point where location.href is still the clean,
+            // directly-reusable retry link.
+            const retryUrl = location.href;
 
-            await waitForPageLoad();
-            const input = await waitForElement(document, '#codeInput') as HTMLInputElement | null;
-            if (!input) return;
+            try {
+                await waitForPageLoad();
+                const input = await waitForElement(document, '#codeInput') as HTMLInputElement | null;
+                if (!input) {
+                    // No signal either way on WHY — could be signed out (GOG's
+                    // own sign-in state can't be read reliably from this page's
+                    // DOM; see loginState.ts's comment on the same problem), a
+                    // slow load, or the page's markup having changed. Whatever
+                    // the cause, the code itself must not be lost.
+                    await recordRedeemFallback(code, "GOG", title, retryUrl);
+                    return;
+                }
 
-            const outcome = await submitRedeemCode(
-                code,
-                input,
-                () => findButtonByText(document, 'Continue'),
-                setControlledInputValue,
-                realClick,
-                wait,
-            );
+                const outcome = await submitRedeemCode(
+                    code,
+                    input,
+                    () => findButtonByText(document, 'Continue'),
+                    setControlledInputValue,
+                    realClick,
+                    wait,
+                );
 
-            if (outcome === "redeemed") {
-                await incrementCounter();
-                await closeCurrentTab();
+                if (outcome === "redeemed") {
+                    await incrementCounter();
+                    // Clears any earlier failed attempt's leftover entry for
+                    // this same code, now that it's actually been redeemed.
+                    await removePendingRedemption(code);
+                    await closeCurrentTab();
+                    return;
+                }
+
+                // "not-redeemed": leave the tab exactly where it is so the user
+                // can see whatever's blocking it (captcha, already used, ...)
+                // and finish redeeming themselves — the fallback record and
+                // clipboard copy are extra safety, not a replacement for that.
+                await recordRedeemFallback(code, "GOG", title, retryUrl);
+            } catch (error: unknown) {
+                console.error("[gog] redeem attempt failed:", error);
+                await recordRedeemFallback(code, "GOG", title, retryUrl);
             }
-            // "not-redeemed": leave the tab exactly where it is so the user
-            // can see whatever's blocking it and finish redeeming themselves.
         }
 
         async function getFreeGamesList() {

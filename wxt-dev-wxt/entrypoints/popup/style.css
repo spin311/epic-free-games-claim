@@ -460,3 +460,75 @@ button:focus-visible {
   padding: 0.5em;
   font-size: 1.2em;
 }
+
+.pending-redemptions {
+  width: 100%;
+  box-sizing: border-box;
+  padding: 0 1em;
+  margin-bottom: 0.75em;
+}
+
+.pending-redemptions-title {
+  margin: 0 0 0.4em;
+  font-size: 0.85em;
+  font-weight: bold;
+  color: #ea9a60;
+}
+
+.pending-redemption {
+  border: 1px solid #ea9a60;
+  border-radius: 4px;
+  padding: 8px 10px;
+  margin-bottom: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.pending-redemption-info {
+  min-width: 0;
+}
+
+.pending-redemption-title {
+  margin: 0;
+  font-size: 0.9em;
+  font-weight: bold;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pending-redemption-platform {
+  font-weight: normal;
+  color: #888;
+}
+
+.pending-redemption-code {
+  font-size: 0.85em;
+  color: #555;
+}
+
+.pending-redemption-actions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  flex-shrink: 0;
+}
+
+.pending-redemption-actions button,
+.pending-redemption-actions a {
+  font-size: 0.8em;
+  padding: 3px 8px;
+  border: 1px solid #c0bbbb;
+  border-radius: 4px;
+  background: none;
+  cursor: pointer;
+  text-decoration: none;
+  color: inherit;
+}
+
+.pending-redemption-actions button:hover,
+.pending-redemption-actions a:hover {
+  border-color: #60ea67;
+}

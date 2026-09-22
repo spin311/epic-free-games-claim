@@ -1,5 +1,6 @@
 import GameCard from "@/entrypoints/components/GameCard.tsx";
 import {ManualClaimBtn} from "@/entrypoints/components/ManualClaimBtn.tsx";
+import PendingRedemptions from "@/entrypoints/components/PendingRedemptions.tsx";
 import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import Checkbox from "@/entrypoints/components/Checkbox.tsx";
@@ -24,6 +25,7 @@ function freeGamesList() {
 
     return (
         <div>
+            <PendingRedemptions/>
 
             {!allGames || allGames.length === 0 ? (
                 <div className="no-games">

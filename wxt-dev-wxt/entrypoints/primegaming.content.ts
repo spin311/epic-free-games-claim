@@ -176,6 +176,21 @@ export default defineContentScript({
         }
 
         async function claimCurrentExternalOffer() {
+            try {
+                await claimCurrentExternalOfferUnsafe();
+            } catch (error: unknown) {
+                // Whatever broke, this tab is now a dead end — leaving it open
+                // wouldn't give the user anything actionable (unlike the
+                // deliberate "not-redeemed"/"link-required" cases below), so
+                // it's closed rather than accumulating as an unexplained zombie
+                // tab. One offer's tab failing this way can't affect any other
+                // game either way — every claim runs in its own isolated tab.
+                console.error("[primegaming] claiming an external offer failed:", error);
+                await closeCurrentTab();
+            }
+        }
+
+        async function claimCurrentExternalOfferUnsafe() {
             const loginState = await detectAndRecordLoginState(Platforms.PrimeGaming);
             if (loginState === false) {
                 await closeCurrentTab();
@@ -220,18 +235,21 @@ export default defineContentScript({
             }
 
             // GOG and Windows Store both redeem via a one-time code shown on
-            // this same page rather than an in-library claim — hand it
+            // this same page rather than an in-library claim — hand it,
+            // together with the game's title (best-effort, purely for the
+            // pending-redemption fallback UI — a missing h1 just means a
+            // slightly less friendly popup entry, never a broken claim),
             // straight to the platform's own redeem page, which attempts to
             // finish the redemption itself (see gog.content.ts /
             // microsoft.content.ts) and only falls back to leaving the tab
             // open if that doesn't go through.
-            if (platform === "GOG") {
+            if (platform === "GOG" || platform === "Windows") {
                 const code = extractRedeemCode(document);
-                if (code) location.href = buildRedeemUrl(code);
-            }
-            if (platform === "Windows") {
-                const code = extractRedeemCode(document);
-                if (code) location.href = buildMicrosoftRedeemUrl(code);
+                if (!code) return;
+                const title = document.querySelector('h1')?.textContent?.trim();
+                location.href = platform === "GOG"
+                    ? buildRedeemUrl(code, title)
+                    : buildMicrosoftRedeemUrl(code, title);
             }
         }
     },
