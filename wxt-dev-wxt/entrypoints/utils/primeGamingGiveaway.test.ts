@@ -4,8 +4,10 @@ import {
   claimOfferCard,
   detectExternalPlatform,
   extractRedeemCode,
+  excludeCollectedOffers,
   filterNewOffers,
   hasPrimeMembership,
+  isCollectedOfferCard,
   isInternalOfferCard,
   isOfferDetailsPage,
   parseExternalOfferCard,
@@ -353,6 +355,61 @@ describe('claimExternalOfferPage', () => {
     );
 
     expect(outcome).toBe('failed');
+  });
+});
+
+// Confirmed live: a collected card (internal or external) carries a
+// <p>Collected</p> marker next to its title.
+const COLLECTED_EXTERNAL_CARD = `
+<div class="item-card__action">
+  <a data-a-target="FGWPOffer" href="/claims/rims-racing-epic/dp/amzn1.pg.item.2cf?ingress=amzn">
+    <img class="tw-image" src="https://images/rims.png"/>
+  </a>
+  <div class="item-card-details__body__primary">RiMS Racing</div>
+  <p>Collected</p>
+</div>`;
+
+describe('isCollectedOfferCard', () => {
+  it('is true when the card shows the "Collected" marker', () => {
+    expect(isCollectedOfferCard(elFrom(COLLECTED_EXTERNAL_CARD))).toBe(true);
+  });
+
+  it('is false for an unclaimed card', () => {
+    expect(isCollectedOfferCard(elFrom(EXTERNAL_CARD))).toBe(false);
+  });
+});
+
+// Regression (found live): every manual "Claim now" reopened all 7
+// already-collected external offers, since only unseen titles were filtered.
+describe('excludeCollectedOffers', () => {
+  const offer = (title: string): FreeGame => ({
+    title,
+    platform: Platforms.PrimeGaming,
+    link: `https://luna.amazon.com/claims/${title}/dp/x`,
+    img: '/icon/128.png',
+  });
+
+  it('drops games whose card on the offer list is marked collected', () => {
+    const offerList = elFrom(`<div>${EXTERNAL_CARD}${COLLECTED_EXTERNAL_CARD}</div>`);
+
+    expect(excludeCollectedOffers([offer('Other Game'), offer('RiMS Racing')], offerList))
+      .toEqual([offer('Other Game')]);
+  });
+
+  // Two cards can share a title (e.g. re-listed offers); one being collected
+  // must not drop the other, unclaimed one.
+  it('keeps a title that also has an uncollected card', () => {
+    const uncollectedTwin = EXTERNAL_CARD.replace('Other Game', 'RiMS Racing');
+    const offerList = elFrom(`<div>${COLLECTED_EXTERNAL_CARD}${uncollectedTwin}</div>`);
+
+    expect(excludeCollectedOffers([offer('RiMS Racing')], offerList)).toEqual([offer('RiMS Racing')]);
+  });
+
+  it('keeps everything when nothing is collected', () => {
+    const offerList = elFrom(`<div>${INTERNAL_CARD}${EXTERNAL_CARD}</div>`);
+
+    expect(excludeCollectedOffers([offer('Some Game'), offer('Other Game')], offerList))
+      .toEqual([offer('Some Game'), offer('Other Game')]);
   });
 });
 

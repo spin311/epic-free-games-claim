@@ -11,6 +11,7 @@ import {
     claimOfferCard,
     detectExternalPlatform,
     EXTERNAL_PLATFORM_STORAGE_KEYS,
+    excludeCollectedOffers,
     ExternalPlatform,
     extractRedeemCode,
     filterNewOffers,
@@ -108,7 +109,7 @@ export default defineContentScript({
             // nothing is new avoids opening a second tab, every check, purely to
             // find that claimOfferCard's already-claimed check has nothing to do.
             const previouslySeen: FreeGame[] = (await getStorageItem("primeGamingGames")) || [];
-            const newGames = filterNewOffers(gamesArr, previouslySeen);
+            const newGames = excludeCollectedOffers(filterNewOffers(gamesArr, previouslySeen), offerList);
 
             // Persisted regardless of whether anything is new, same as Epic/Steam,
             // so the popup's Free Games tab always reflects what's currently listed.

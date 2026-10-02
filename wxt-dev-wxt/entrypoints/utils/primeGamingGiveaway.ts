@@ -146,6 +146,32 @@ export function hasPrimeMembership(doc: Document): boolean {
 
 export type ClaimOutcome = "claimed" | "already-claimed" | "failed";
 
+// Confirmed by vogler/free-games-claimer's prime-gaming.js (internal cards)
+// and live (external cards): a collected offer shows a <p> reading
+// "Collected".
+export function isCollectedOfferCard(card: Element): boolean {
+  return Array.from(card.querySelectorAll('p')).some(
+      (p) => (p.textContent ?? '').trim().toLowerCase() === 'collected'
+  );
+}
+
+// Keyed by title (the same identity filterNewOffers uses) since FreeGame
+// carries no reference back to its card. A title is only dropped when every
+// card carrying it is collected, so a collected twin can't hide an unclaimed
+// offer. Without this, any run whose previously-seen list is empty (first
+// run, or a manual "Claim now", which clears it) re-opened a claim tab for
+// every already-collected offer.
+export function excludeCollectedOffers(games: FreeGame[], offerList: Element): FreeGame[] {
+  const collectedTitles = new Set<string>();
+  const unclaimedTitles = new Set<string>();
+  for (const card of Array.from(offerList.querySelectorAll('.item-card__action'))) {
+    const title = card.querySelector('.item-card-details__body__primary')?.textContent?.trim();
+    if (!title) continue;
+    (isCollectedOfferCard(card) ? collectedTitles : unclaimedTitles).add(title);
+  }
+  return games.filter((game) => !collectedTitles.has(game.title) || unclaimedTitles.has(game.title));
+}
+
 // Confirmed by vogler/free-games-claimer's prime-gaming.js: an already-claimed
 // card shows a <p> containing "Collected" text — checked BEFORE clicking so a
 // card claimed on a previous run is reported "already-claimed" and left alone,
@@ -162,9 +188,7 @@ export async function claimOfferCard(
   const button = card.querySelector<HTMLButtonElement>('button[data-a-target="FGWPOffer"]');
   if (!button) return "failed";
 
-  const isCollected = () => Array.from(card.querySelectorAll('p')).some(
-      (p) => (p.textContent ?? '').trim().toLowerCase() === 'collected'
-  );
+  const isCollected = () => isCollectedOfferCard(card);
 
   if (isCollected()) return "already-claimed";
 
