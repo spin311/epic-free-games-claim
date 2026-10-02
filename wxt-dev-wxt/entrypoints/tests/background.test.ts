@@ -279,6 +279,43 @@ describe('checkPrimeGaming', () => {
   });
 });
 
+describe('manual claim', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  // Regression (found live): pressing "Claim now" a second time the same day
+  // silently skipped Prime Gaming, because only the "Log in" recheck bypassed
+  // its day-of-week gate.
+  it('forces the Prime Gaming check past its day-of-week gate', async () => {
+    const runner = Object.create(background);
+    runner.clearGamesList = async () => {};
+    const forcedArgs: boolean[] = [];
+    runner.runFreeGamesChecks = async (force: boolean) => { forcedArgs.push(force); };
+
+    await runner.handleMessage({ target: 'background', action: 'claim' });
+
+    expect(forcedArgs).toEqual([true]);
+  });
+
+  it('runFreeGamesChecks forwards force to checkPrimeGaming', async () => {
+    await setStorageItem('primeGamingCheck', true);
+    const runner = Object.create(background);
+    runner.getEpicGamesList = async () => {};
+    runner.getSteamGamesList = async () => {};
+    runner.getGogGamesList = async () => {};
+    runner.checkIndieGalaWheel = async () => {};
+    runner.getIndieGalaGamesList = async () => {};
+    const primeArgs: [boolean, boolean][] = [];
+    runner.checkPrimeGaming = async (shouldCheck: boolean, force: boolean) => { primeArgs.push([shouldCheck, force]); };
+
+    await runner.runFreeGamesChecks(true);
+    await runner.runFreeGamesChecks();
+
+    expect(primeArgs).toEqual([[true, true], [true, false]]);
+  });
+});
+
 describe('checkPlatformLogin', () => {
   beforeEach(() => {
     fakeBrowser.reset();

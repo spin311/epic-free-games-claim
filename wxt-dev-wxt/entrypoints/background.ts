@@ -338,13 +338,16 @@ export const background = {
   // popup (via the isClaiming storage flag) and the toolbar badge both need
   // to know a run that can open many tabs and take a while is happening,
   // rather than giving no feedback until (or unless) it finishes.
-  async getFreeGamesList() {
+  // `force` is set only for the popup's manual "Claim now" (see handleMessage):
+  // an explicit request to check now should not be skipped by Prime Gaming's
+  // automatic day-of-week throttle.
+  async getFreeGamesList(force: boolean = false) {
     this.claimedSomethingThisRun = false;
     await setStorageItem("isClaiming", true);
     await this.setBadgeText("…");
     await setActionBadgeBackgroundColor(CLAIMING_BADGE_COLOR);
     try {
-      await this.runFreeGamesChecks();
+      await this.runFreeGamesChecks(force);
     } finally {
       await setStorageItem("isClaiming", false);
       // Leave the count claimGames() already set alone; only clear the "in
@@ -353,7 +356,7 @@ export const background = {
     }
   },
 
-  async runFreeGamesChecks() {
+  async runFreeGamesChecks(force: boolean = false) {
     const { steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck, indieGalaWheelCheck } = await getStorageItems([
       "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck", "indieGalaWheelCheck",
     ]);
@@ -398,7 +401,7 @@ export const background = {
       if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
     }
     try {
-      await this.checkPrimeGaming(claimPrimeGaming);
+      await this.checkPrimeGaming(claimPrimeGaming, force);
     } catch (e) {
       console.error("checkPrimeGaming failed:", e);
     }
@@ -530,7 +533,7 @@ export const background = {
 
     if (request.action === "claim") {
       await this.clearGamesList();
-      await this.getFreeGamesList();
+      await this.getFreeGamesList(true);
     } else if (request.action === "claimFreeGames") {
       if (request.data?.loggedIn === false) return;
       const games: FreeGame[] = request.data.freeGames;
@@ -745,8 +748,9 @@ export const background = {
   // restricts *how often* that tab opens to the days it can actually find
   // something new.
   // `force` bypasses the day-of-week/catch-up gate above — used only by an
-  // explicit user action (clicking "Log in" for Prime Gaming; see
-  // checkPlatformLogin), never by the automatic startup/alarm path, since the
+  // explicit user action (clicking "Log in" for Prime Gaming, see
+  // checkPlatformLogin; or the popup's manual "Claim now", see
+  // getFreeGamesList), never by the automatic startup/alarm path, since the
   // whole point of a manual trigger is to ignore automatic throttling.
   async checkPrimeGaming(shouldCheck: boolean, force: boolean = false) {
     if (!shouldCheck) return;
