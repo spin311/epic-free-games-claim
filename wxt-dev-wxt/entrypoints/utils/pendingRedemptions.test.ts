@@ -87,7 +87,31 @@ describe('copyToClipboardBestEffort', () => {
     });
 });
 
+describe('copyToClipboardBestEffort timeout', () => {
+    // Confirmed live: from a content script's isolated world the write can
+    // stay pending indefinitely instead of rejecting.
+    it('returns false once the clipboard write has not settled within the timeout', async () => {
+        vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(() => new Promise(() => {})) } });
+
+        await expect(copyToClipboardBestEffort('ABC123', 10)).resolves.toBe(false);
+
+        vi.unstubAllGlobals();
+    });
+});
+
 describe('recordRedeemFallback', () => {
+    it('persists the pending entry even when the clipboard write never settles', async () => {
+        vi.stubGlobal('navigator', { clipboard: { writeText: vi.fn(() => new Promise(() => {})) } });
+
+        void recordRedeemFallback('NEVER1', 'GOG', 'DOOM', 'https://www.gog.com/redeem?extCode=NEVER1');
+        await vi.waitFor(async () => {
+            const stored = await getStorageItem<PendingRedemption[]>(PENDING_REDEMPTIONS_STORAGE_KEY);
+            expect(stored?.map((entry) => entry.code)).toEqual(['NEVER1']);
+        });
+
+        vi.unstubAllGlobals();
+    });
+
     it('copies the code and persists a pending entry, and never throws even if the clipboard is denied', async () => {
         const writeText = vi.fn().mockRejectedValue(new Error('denied'));
         vi.stubGlobal('navigator', { clipboard: { writeText } });

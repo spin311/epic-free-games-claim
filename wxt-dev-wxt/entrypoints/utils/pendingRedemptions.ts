@@ -16,13 +16,23 @@ export const PENDING_REDEMPTIONS_STORAGE_KEY = "pendingRedemptions";
 // be denied by the browser regardless of permissions, so a failure here must
 // never be treated as the fallback itself failing — the storage record (and
 // the tab staying open) is what actually preserves the code either way.
-export async function copyToClipboardBestEffort(text: string): Promise<boolean> {
+// Confirmed live: from a content script's isolated world the write can stay
+// pending forever instead of rejecting, so it's bounded by a timeout.
+const CLIPBOARD_TIMEOUT_MS = 2000;
+
+export async function copyToClipboardBestEffort(text: string, timeoutMs = CLIPBOARD_TIMEOUT_MS): Promise<boolean> {
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const timedOut = new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error(`clipboard write timed out after ${timeoutMs}ms`)), timeoutMs);
+    });
     try {
-        await navigator.clipboard.writeText(text);
+        await Promise.race([navigator.clipboard.writeText(text), timedOut]);
         return true;
     } catch (error: unknown) {
         console.warn("[pendingRedemptions] clipboard copy failed:", error);
         return false;
+    } finally {
+        clearTimeout(timer);
     }
 }
 
@@ -64,6 +74,8 @@ export async function recordRedeemFallback(
     title: string,
     redeemUrl: string,
 ): Promise<void> {
-    await copyToClipboardBestEffort(code);
+    // Stored first: the record is what actually preserves the code; the
+    // clipboard copy is a convenience that must never be able to block it.
     await addPendingRedemption({ code, platform, title, redeemUrl, addedAt: new Date().toISOString() });
+    await copyToClipboardBestEffort(code);
 }
