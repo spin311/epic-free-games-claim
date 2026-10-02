@@ -57,15 +57,19 @@ export function parseInternalOffers(offerList: Element, baseUrl: string): FreeGa
   return games;
 }
 
-// External offers are opt-in per platform (see EXTERNAL_PLATFORM_STORAGE_KEYS)
-// since claiming them means navigating to that store's own account and, if
+// Offers are opt-in per platform (see EXTERNAL_PLATFORM_STORAGE_KEYS) since
+// claiming most of them means navigating to that store's own account and, if
 // unlinked, its linking flow — a bigger step than an internal in-place claim.
-export type ExternalPlatform = "Epic" | "GOG" | "Windows";
+// AmazonGames is Amazon's own library (claimed in place, no other store), and
+// Legacy redeems a code on Legacy Games with an email the user sets.
+export type ExternalPlatform = "Epic" | "GOG" | "Windows" | "AmazonGames" | "Legacy";
 
 export const EXTERNAL_PLATFORM_STORAGE_KEYS: Record<ExternalPlatform, string> = {
   Epic: "primeGamingClaimEpic",
   GOG: "primeGamingClaimGog",
   Windows: "primeGamingClaimWindows",
+  AmazonGames: "primeGamingClaimAmazonGames",
+  Legacy: "primeGamingClaimLegacy",
 };
 
 // Off unless explicitly enabled: an unset key (fresh install) reads as off.
@@ -81,13 +85,15 @@ export function readAllowedExternalPlatforms(stored: Record<string, unknown>): S
 // the redeem platform anywhere on them — the only signal is the claim slug
 // itself, which Amazon suffixes with the platform: .../claims/drop-duchy-epic/
 // dp/..., .../claims/weakless-gog/dp/..., .../claims/doom-eternal-microsoft/
-// dp/.... Also seen: "-aga" (Amazon's own native launcher app), which isn't
-// one of the three platforms this extension supports and is deliberately
-// left unmatched.
+// dp/.... Also confirmed live (Oct 2026): .../claims/wall-world-2-aga/dp/...
+// (Amazon Games App; Luna's API flags these isDirectEntitlement) and
+// .../claims/the-da-vinci-cryptex-legacy/dp/... (published by Legacy Games).
 const EXTERNAL_PLATFORM_SLUG_SUFFIXES: [ExternalPlatform, string][] = [
   ["Epic", "-epic"],
   ["GOG", "-gog"],
   ["Windows", "-microsoft"],
+  ["AmazonGames", "-aga"],
+  ["Legacy", "-legacy"],
 ];
 
 export function detectExternalPlatform(href: string): ExternalPlatform | null {
@@ -222,13 +228,16 @@ export async function claimOfferCard(
 // hyphens (e.g. "DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ") — Microsoft's own redeem
 // page confirms this shape ("Enter 25-character code" /
 // "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx") — and isn't required to mix letters and
-// digits per group, since a real group can be all-letters. No trailing \b:
+// digits per group, since a real group can be all-letters. A Legacy Games
+// code is the same shape cut to three groups (confirmed live, Oct 2026:
+// "318NG-31VCU-SK083"); the group count is greedy, so a Windows code always
+// matches whole. No trailing \b:
 // confirmed live, Amazon's details page runs the code's text node directly
 // into the adjacent "Copy code" button's text with no whitespace between
 // them ("...H2RMZCopy code"), and \b can't detect a boundary between two
 // word characters ("Z" and "C") — the fixed-width groups already bound the
 // match correctly without it.
-const REDEEM_CODE_PATTERN = /\b[A-Z0-9]{5}(?:-[A-Z0-9]{5}){4}|\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{12,24}\b/;
+const REDEEM_CODE_PATTERN = /\b[A-Z0-9]{5}(?:-[A-Z0-9]{5}){2,4}|\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{12,24}\b/;
 
 export function extractRedeemCode(root: Document | HTMLElement): string | null {
   // Document.textContent is spec'd to return null (only Elements have it) —

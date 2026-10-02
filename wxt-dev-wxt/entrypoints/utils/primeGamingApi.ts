@@ -17,14 +17,17 @@ const REQUEST_TIMEOUT_MS = 15_000;
 
 // Confirmed live: these exact selections return per-user eligibility.
 // Trimmed variants (e.g. a literal pageSize, no operation name) came back
-// with every eligibility null, so treat this as known-good and change it only
-// with a live re-check.
+// with every eligibility null — and currentUser as signed out — so treat
+// this as known-good and change it only with a live re-check. currentUser
+// and canClaim were added and re-checked live in Oct 2026; currentUser is
+// the same selection Luna's own Entry_Points_User query makes.
 const FREE_GAMES_QUERY = `query PrimeFreeGames($pageSize: Int) {
+  currentUser { isSignedIn isAmazonPrime isTwitchPrime }
   games: items(collectionType: FREE_GAMES, pageSize: $pageSize) {
     items {
       id isFGWP isDirectEntitlement
       assets { title externalClaimLink cardMedia { defaultMedia { src1x } } }
-      offers { id endTime offerSelfConnection { eligibility { offerState isClaimed } } }
+      offers { id endTime offerSelfConnection { eligibility { offerState isClaimed canClaim } } }
     }
   }
 }`;
@@ -34,8 +37,18 @@ export type PrimeOffer = {
   // null = Amazon returned no per-user eligibility, so the state is unknown.
   isClaimed: boolean | null;
   isLive: boolean;
+  // Amazon's own "this user may claim this now"; null when not reported.
+  // Confirmed live: false once claimed (maxOrdersExceeded), true while open.
+  canClaim: boolean | null;
   externalPlatform: ExternalPlatform | null;
 };
+
+// Signed-out and no-Prime are definitive answers, not failures: neither can
+// claim anything, so the caller records the state and opens no tab at all.
+export type PrimeLookup =
+  | { status: "signed-out" }
+  | { status: "no-prime" }
+  | { status: "ok"; offers: PrimeOffer[] };
 
 // Confirmed live: <input type='hidden' name='csrf-key' value='...' />.
 export function extractCsrfToken(html: string): string | null {
@@ -45,7 +58,7 @@ export function extractCsrfToken(html: string): string | null {
 
 // Only an eligibility with a real boolean isClaimed counts as known: a
 // partial schema change must read as "unknown", never as "unclaimed".
-type KnownEligibility = { isLive: boolean; isClaimed: boolean };
+type KnownEligibility = { isLive: boolean; isClaimed: boolean; canClaim: boolean | null };
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null ? value as Record<string, unknown> : null;
@@ -57,7 +70,11 @@ function readKnownEligibilities(item: Record<string, unknown>): KnownEligibility
   for (const offer of offers) {
     const eligibility = asObject(asObject(asObject(offer)?.offerSelfConnection)?.eligibility);
     if (typeof eligibility?.isClaimed !== "boolean") continue;
-    known.push({ isLive: eligibility.offerState === "LIVE", isClaimed: eligibility.isClaimed });
+    known.push({
+      isLive: eligibility.offerState === "LIVE",
+      isClaimed: eligibility.isClaimed,
+      canClaim: typeof eligibility.canClaim === "boolean" ? eligibility.canClaim : null,
+    });
   }
   return known;
 }
@@ -71,6 +88,11 @@ function toLunaClaimLink(externalClaimLink: string): string | null {
   } catch {
     return null;
   }
+}
+
+function readCanClaim(eligibilities: KnownEligibility[]): boolean | null {
+  const reported = eligibilities.flatMap((e) => (e.canClaim === null ? [] : [e.canClaim]));
+  return reported.length === 0 ? null : reported.some(Boolean);
 }
 
 function parseItem(raw: unknown): PrimeOffer | null {
@@ -98,6 +120,7 @@ function parseItem(raw: unknown): PrimeOffer | null {
     },
     isClaimed: relevant.length === 0 ? null : relevant.some((e) => e.isClaimed),
     isLive: live.length > 0,
+    canClaim: readCanClaim(relevant),
     externalPlatform: claimLink ? detectExternalPlatform(claimLink) : null,
   };
 }
@@ -109,6 +132,38 @@ export function parsePrimeOffers(payload: unknown): PrimeOffer[] {
   const items = asObject(asObject(asObject(payload)?.data)?.games)?.items;
   if (!Array.isArray(items)) throw new Error("Prime Gaming offers response had an unexpected shape");
   return items.map(parseItem).filter((offer): offer is PrimeOffer => offer !== null);
+}
+
+type AccountStatus = "signed-out" | "no-prime" | "unknown";
+
+// Confirmed live (Oct 2026): signed out, currentUser is { isSignedIn: false,
+// isAmazonPrime: false, isTwitchPrime: false } and every eligibility is null.
+// No non-Prime account was available to confirm that state, so it's read
+// conservatively: both Prime flags must be an explicit false, and any offer
+// Amazon itself marks claimable (Luna Premium subscribers can claim without
+// Prime) overrides them. Anything malformed is "unknown", never signed out.
+function readAccountStatus(currentUser: unknown, offers: PrimeOffer[]): AccountStatus {
+  const user = asObject(currentUser);
+  if (user?.isSignedIn === false) return "signed-out";
+  if (user?.isSignedIn !== true) return "unknown";
+  const lacksPrime = user.isAmazonPrime === false && user.isTwitchPrime === false;
+  return lacksPrime && !offers.some((offer) => offer.canClaim === true) ? "no-prime" : "unknown";
+}
+
+// Throws when the answer can't be trusted (see parsePrimeOffers), so the
+// caller can fall back to the claims page.
+export function parsePrimeLookup(payload: unknown): PrimeLookup {
+  const offers = parsePrimeOffers(payload);
+  const status = readAccountStatus(asObject(asObject(payload)?.data)?.currentUser, offers);
+  if (status !== "unknown") return { status };
+
+  // At least one known claim state is the evidence this is a signed-in,
+  // trustworthy answer; an empty list or all-unknown can't be told apart from
+  // an odd response and must not wipe the popup's list.
+  if (!offers.some((offer) => offer.isClaimed !== null)) {
+    throw new Error("Prime Gaming offers carried no per-user claim state (signed out?)");
+  }
+  return { status: "ok", offers };
 }
 
 // Amazon's own isClaimed is the source of truth — unlike Epic/Steam's
@@ -160,9 +215,9 @@ export function updateClaimAttempts(
   };
 }
 
-// Throws on any failure (signed out, markup/API change, transport error) so
-// the background can fall back to the old open-the-claims-page check.
-export async function fetchPrimeOffers(fetchImpl: typeof fetch = fetch): Promise<PrimeOffer[]> {
+// Throws on any failure (markup/API change, transport error) so the
+// background can fall back to the old open-the-claims-page check.
+export async function fetchPrimeLookup(fetchImpl: typeof fetch = fetch): Promise<PrimeLookup> {
   const page = await fetchImpl(LUNA_CLAIMS_URL, { credentials: "include", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   if (!page.ok) throw new Error(`Luna claims page responded ${page.status}`);
   const csrfToken = extractCsrfToken(await page.text());
@@ -181,15 +236,7 @@ export async function fetchPrimeOffers(fetchImpl: typeof fetch = fetch): Promise
     body: JSON.stringify({ operationName: "PrimeFreeGames", variables: { pageSize: 999 }, query: FREE_GAMES_QUERY }),
   });
   if (!response.ok) throw new Error(`Luna GraphQL responded ${response.status}`);
-
-  // At least one known claim state is the evidence this is a signed-in,
-  // trustworthy answer; an empty list or all-unknown can't be told apart from
-  // a signed-out/odd response and must not wipe the popup's list.
-  const offers = parsePrimeOffers(JSON.parse(await response.text()));
-  if (!offers.some((offer) => offer.isClaimed !== null)) {
-    throw new Error("Prime Gaming offers carried no per-user claim state (signed out?)");
-  }
-  return offers;
+  return parsePrimeLookup(JSON.parse(await response.text()));
 }
 
 export const LUNA_ORIGIN_RULE_ID = 1;

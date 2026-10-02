@@ -16,7 +16,8 @@ import {
   ClaimAttempts,
   ensureLunaOriginRule,
   excludeRecentlyAttempted,
-  fetchPrimeOffers,
+  fetchPrimeLookup,
+  PrimeLookup,
   PrimeOffer,
   selectClaimableOffers,
   updateClaimAttempts,
@@ -755,11 +756,12 @@ export const background = {
     await setStorageItem("indieGalaWheelLastCheck", today);
   },
 
-  // Fetch-first, like Epic/Steam: the background lookup (loadPrimeOffers)
+  // Fetch-first, like Epic/Steam: the background lookup (loadPrimeLookup)
   // opens no tab unless something is actually claimable, so it isn't
-  // day-gated. Only if the lookup itself fails (no declarativeNetRequest,
-  // signed out, API change, ...) does this fall back to opening the claims
-  // page, which is gated by shouldCheckPrimeGamingToday.
+  // day-gated. A signed-out or non-Prime account is a definitive answer too
+  // (recorded, no tab). Only if the lookup itself fails (no
+  // declarativeNetRequest, API change, ...) does this fall back to opening
+  // the claims page, which is gated by shouldCheckPrimeGamingToday.
   // `force` skips the automatic throttles (that day gate and the per-offer
   // retry cooldown) — used only by an explicit user action (clicking "Log in"
   // for Prime Gaming, see checkPlatformLogin; or the popup's manual "Claim
@@ -767,16 +769,28 @@ export const background = {
   async checkPrimeGaming(shouldCheck: boolean, force: boolean = false) {
     if (!shouldCheck) return;
 
-    let offers: PrimeOffer[] | null = null;
+    let lookup: PrimeLookup | null = null;
     try {
-      offers = await this.loadPrimeOffers();
+      lookup = await this.loadPrimeLookup();
     } catch (e) {
       console.warn("Prime Gaming background lookup failed; falling back to the claims page:", e);
     }
+    if (lookup?.status === "signed-out") {
+      await recordLoginState(Platforms.PrimeGaming, false);
+      // An explicit user action still gets the page's own verdict below: the
+      // worker's cookie jar can differ from the tabs' (e.g. first-party
+      // isolation), and this way that never locks Prime Gaming out for good.
+      if (!force) return;
+    }
+    if (lookup?.status === "no-prime") {
+      console.warn("Prime Gaming: signed in without a Prime membership; nothing to claim");
+      await recordLoginState(Platforms.PrimeGaming, true);
+      return;
+    }
     // Outside the try on purpose: a failure here may come after claim tabs
     // already opened, and must not also open the claims page.
-    if (offers) {
-      await this.claimPrimeOffers(offers, force);
+    if (lookup?.status === "ok") {
+      await this.claimPrimeOffers(lookup.offers, force);
       return;
     }
 
@@ -793,13 +807,13 @@ export const background = {
 
   // Separate from claimPrimeOffers so tests can stand in for the network +
   // declarativeNetRequest side. Throws when the answer can't be trusted (see
-  // fetchPrimeOffers).
-  async loadPrimeOffers(): Promise<PrimeOffer[]> {
+  // fetchPrimeLookup).
+  async loadPrimeLookup(): Promise<PrimeLookup> {
     // The extension's own request origin as the browser reports it (the
     // extension id on Chrome, an internal UUID on Firefox).
     const extensionHost = new URL(browser.runtime.getURL("/")).host;
     await ensureLunaOriginRule(browser.declarativeNetRequest, extensionHost);
-    return fetchPrimeOffers();
+    return fetchPrimeLookup();
   },
 
   async claimPrimeOffers(offers: PrimeOffer[], force: boolean = false) {

@@ -24,6 +24,7 @@ import {
 } from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import { buildRedeemUrl } from "@/entrypoints/utils/gogGiveaway.ts";
 import { buildMicrosoftRedeemUrl } from "@/entrypoints/utils/microsoftRedeem.ts";
+import { buildLegacyRedeemUrl, findLegacyRedeemUrl } from "@/entrypoints/utils/legacyGamesRedeem.ts";
 import { findButtonByText, getRndInteger, incrementCounter, realClick, wait, waitForElement, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
 
 export default defineContentScript({
@@ -189,16 +190,25 @@ export default defineContentScript({
                 await closeCurrentTab();
                 return;
             }
+            // Backstop for the background's own no-Prime check: on a non-Prime
+            // account "Get game" only leads to Prime sign-up, and that tab
+            // would otherwise be left open as if it were account linking.
+            if (!hasPrimeMembership(document)) {
+                console.warn("[primegaming] no Prime membership detected; not claiming");
+                await closeCurrentTab();
+                return;
+            }
 
             // Confirmed live: this "claimed" signal (the Get game button
             // disappearing on the same page) only means a real library claim for
-            // Epic's account-linking flow. GOG and Windows Store instead show a
-            // one-time redeem code on this same page once clicked — counting
-            // that click here would be a false positive, since nothing is
-            // actually redeemed until the code is submitted on gog.com/redeem
-            // or account.microsoft.com/billing/redeem (handled by those sites'
-            // own content scripts, which do their own incrementCounter on
-            // success). The click still happens here (it surfaces the code
+            // Epic's account-linking flow and the Amazon Games App. GOG,
+            // Windows Store and Legacy Games instead show a one-time redeem
+            // code on this same page once clicked — counting that click here
+            // would be a false positive, since nothing is actually redeemed
+            // until the code is submitted on gog.com/redeem,
+            // account.microsoft.com/billing/redeem or promo.legacygames.com
+            // (handled by those sites' own content scripts, which do their
+            // own incrementCounter on success). The click still happens here (it surfaces the code
             // without the user having to find the offer manually).
             const platform = detectExternalPlatform(location.pathname);
             const outcome = await claimExternalOfferPage(
@@ -221,31 +231,40 @@ export default defineContentScript({
                 return;
             }
 
-            if (platform === "Epic") {
+            // Both claim straight into a library (Epic's, or Amazon's own
+            // Amazon Games App one) — nothing left to redeem.
+            if (platform === "Epic" || platform === "AmazonGames") {
                 await incrementCounter();
                 await closeCurrentTab();
                 return;
             }
 
-            // GOG and Windows Store both redeem via a one-time code shown on
+            // GOG, Windows Store and Legacy Games redeem via a one-time code shown on
             // this same page rather than an in-library claim — hand it,
             // together with the game's title (best-effort, purely for the
             // pending-redemption fallback UI — a missing h1 just means a
             // slightly less friendly popup entry, never a broken claim),
             // straight to the platform's own redeem page, which attempts to
             // finish the redemption itself (see gog.content.ts /
-            // microsoft.content.ts) and only falls back to leaving the tab
+            // microsoft.content.ts / legacygames.content.ts) and only falls back to leaving the tab
             // open if that doesn't go through.
-            if (platform === "GOG" || platform === "Windows") {
+            if (platform === "GOG" || platform === "Windows" || platform === "Legacy") {
                 // The /details success page renders after its route change,
                 // so the code may not be in the DOM the instant we get here.
                 const code = await pollFor(() => extractRedeemCode(document), wait, 5000, 250);
                 if (!code) return;
                 const title = document.querySelector('h1')?.textContent?.trim();
-                location.href = platform === "GOG"
-                    ? buildRedeemUrl(code, title)
-                    : buildMicrosoftRedeemUrl(code, title);
+                const redeemUrl = buildCodeRedeemUrl(platform, code, title);
+                // No known redeem page: left open on the code, like a missing code.
+                if (redeemUrl) location.href = redeemUrl;
             }
+        }
+
+        function buildCodeRedeemUrl(platform: "GOG" | "Windows" | "Legacy", code: string, title?: string): string | null {
+            if (platform === "GOG") return buildRedeemUrl(code, title);
+            if (platform === "Windows") return buildMicrosoftRedeemUrl(code, title);
+            const promoUrl = findLegacyRedeemUrl(document, location.href);
+            return promoUrl ? buildLegacyRedeemUrl(promoUrl, code, title) : null;
         }
     },
 });
