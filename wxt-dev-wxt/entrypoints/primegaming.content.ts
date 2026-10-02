@@ -19,6 +19,7 @@ import {
     isOfferDetailsPage,
     parseExternalOffers,
     parseInternalOffers,
+    pollFor,
 } from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import { buildRedeemUrl } from "@/entrypoints/utils/gogGiveaway.ts";
 import { buildMicrosoftRedeemUrl } from "@/entrypoints/utils/microsoftRedeem.ts";
@@ -217,7 +218,7 @@ export default defineContentScript({
 
             // Both are silent no-ops by design — never thrown, so one unlinked
             // platform can't block the rest of the claim run.
-            if (outcome === "failed") {
+            if (outcome === "failed" || outcome === "already-claimed") {
                 await closeCurrentTab();
                 return;
             }
@@ -244,7 +245,9 @@ export default defineContentScript({
             // microsoft.content.ts) and only falls back to leaving the tab
             // open if that doesn't go through.
             if (platform === "GOG" || platform === "Windows") {
-                const code = extractRedeemCode(document);
+                // The /details success page renders after its route change,
+                // so the code may not be in the DOM the instant we get here.
+                const code = await pollFor(() => extractRedeemCode(document), wait, 5000, 250);
                 if (!code) return;
                 const title = document.querySelector('h1')?.textContent?.trim();
                 location.href = platform === "GOG"

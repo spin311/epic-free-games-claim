@@ -269,6 +269,20 @@ describe('claimExternalOfferPage', () => {
     expect(clickFn).toHaveBeenCalledWith(button);
   });
 
+  // Confirmed live (Oct 2026): a successful claim now routes to the offer's
+  // own ".../details" sub-page ("Success, ...") instead of updating in place.
+  it('returns "claimed" when the URL changes to the offer\'s /details success page', async () => {
+    let url = DETAILS_URL;
+    const button = document.createElement('button');
+    const waitFn = vi.fn(async () => {
+      url = 'https://luna.amazon.com/claims/space-grunts-epic/dp/amzn1.pg.item.abc/details?ingress=amzn';
+    });
+
+    const outcome = await claimExternalOfferPage(() => button, vi.fn(), waitFn, () => url);
+
+    expect(outcome).toBe('claimed');
+  });
+
   it('returns "link-required" when the URL changes away from the details page (not linked)', async () => {
     let url = DETAILS_URL;
     const button = document.createElement('button');
@@ -279,6 +293,44 @@ describe('claimExternalOfferPage', () => {
     const outcome = await claimExternalOfferPage(() => button, vi.fn(), waitFn, () => url);
 
     expect(outcome).toBe('link-required');
+  });
+
+  // Confirmed live: the header's login signal renders ~300ms before the
+  // "Get game" button, so the button is routinely absent on the first look.
+  it('waits for a "Get game" button that renders after the first lookup', async () => {
+    const button = document.createElement('button');
+    const clickFn = vi.fn();
+    let lookups = 0;
+    let clicked = false;
+    clickFn.mockImplementation(() => { clicked = true; });
+
+    const outcome = await claimExternalOfferPage(
+      () => {
+        lookups++;
+        if (clicked) return null;
+        return lookups >= 3 ? button : null;
+      },
+      clickFn,
+      vi.fn(async () => {}),
+      () => DETAILS_URL,
+    );
+
+    expect(clickFn).toHaveBeenCalledWith(button);
+    expect(outcome).toBe('claimed');
+  });
+
+  // Confirmed live: an already-collected offer still renders "Get game", but
+  // disabled — clicking it does nothing, so it must not be treated as a claim
+  // attempt that then times out.
+  it('returns "already-claimed" without clicking when the "Get game" button is disabled', async () => {
+    const button = document.createElement('button');
+    button.disabled = true;
+    const clickFn = vi.fn();
+
+    const outcome = await claimExternalOfferPage(() => button, clickFn, vi.fn(async () => {}), () => DETAILS_URL);
+
+    expect(outcome).toBe('already-claimed');
+    expect(clickFn).not.toHaveBeenCalled();
   });
 
   it('returns "failed" without clicking when no "Get game" button is found', async () => {
@@ -332,6 +384,17 @@ describe('extractRedeemCode', () => {
   it('extracts a contiguous uppercase alphanumeric redeem code from the page text', () => {
     const doc = docFrom('<div class="code-panel"><p>Your code:</p><p>YRXG7D62AF07ADCE5B</p></div>');
     expect(extractRedeemCode(doc)).toBe('YRXG7D62AF07ADCE5B');
+  });
+
+  // Confirmed live: the post-claim /details page shows the code only as a
+  // readonly input's value (not text content), alongside a hidden csrf input.
+  it('extracts the code from a readonly input value, ignoring hidden inputs', () => {
+    const doc = docFrom(
+      '<input type="hidden" name="csrf-key" value="ABCDEF1234567890XY">' +
+      '<h1>Success, you received a code to redeem DOOM.</h1>' +
+      '<input type="text" readonly value="TKT86D6B64FBD15B97">'
+    );
+    expect(extractRedeemCode(doc)).toBe('TKT86D6B64FBD15B97');
   });
 
   it('returns null when no code-like pattern is present', () => {

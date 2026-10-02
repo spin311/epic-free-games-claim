@@ -213,11 +213,19 @@ export function extractRedeemCode(root: Document | HTMLElement): string | null {
   // callers pass `document` itself, so this must fall back to .body. Duck-typed
   // rather than `instanceof Document` to stay realm-agnostic in tests.
   const node = 'body' in root && root.body ? root.body : (root as HTMLElement);
-  const match = REDEEM_CODE_PATTERN.exec(node.textContent ?? '');
-  return match ? match[0] : null;
+  // Confirmed live: the post-claim /details page shows the code only as a
+  // readonly <input>'s value, which textContent never includes. Hidden inputs
+  // are skipped — the page also carries a base64 csrf-key one.
+  const inputValues = Array.from(node.querySelectorAll<HTMLInputElement>('input:not([type="hidden"])'))
+      .map((input) => input.value);
+  for (const text of [...inputValues, node.textContent ?? '']) {
+    const match = REDEEM_CODE_PATTERN.exec(text);
+    if (match) return match[0];
+  }
+  return null;
 }
 
-export type ExternalClaimOutcome = "claimed" | "link-required" | "failed";
+export type ExternalClaimOutcome = "claimed" | "already-claimed" | "link-required" | "failed";
 
 // "Get game" on an external offer's details page either claims in place
 // (account already linked to that store) or navigates to Amazon's
@@ -229,25 +237,60 @@ export type ExternalClaimOutcome = "claimed" | "link-required" | "failed";
 // button disappearing on the SAME page means it claimed in place. Neither
 // non-"claimed" outcome may ever throw — the caller must be able to skip an
 // unlinked platform and keep claiming the rest of the run.
+//
+// Confirmed live (Oct 2026): a successful claim routes to the offer's own
+// ".../dp/{itemId}/details" sub-page ("Success, ..."), so a URL change alone
+// no longer implies being sent off to account linking.
+//
+// Confirmed live: the button renders ~300ms AFTER the header's login signal
+// (which is what the caller waits on), so it's polled for rather than looked
+// up once — a single lookup always missed it and every offer silently
+// "failed". An already-collected offer renders the same button, disabled.
 export async function claimExternalOfferPage(
-    findGetGameButton: () => HTMLElement | null,
+    findGetGameButton: () => HTMLButtonElement | null,
     clickFn: (el: HTMLElement) => void,
     waitFn: (ms: number) => Promise<void>,
     getUrl: () => string,
     timeoutMs = 8000,
     pollIntervalMs = 250
 ): Promise<ExternalClaimOutcome> {
-  const button = findGetGameButton();
+  const button = await pollFor(findGetGameButton, waitFn, timeoutMs, pollIntervalMs);
   if (!button) return "failed";
+  if (button.disabled) return "already-claimed";
 
   const startUrl = getUrl();
   clickFn(button);
 
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    if (getUrl() !== startUrl) return "link-required";
+    const currentUrl = getUrl();
+    if (currentUrl !== startUrl) {
+      return isClaimSuccessUrl(startUrl, currentUrl) ? "claimed" : "link-required";
+    }
     if (!findGetGameButton()) return "claimed";
     await waitFn(pollIntervalMs);
   }
   return "failed";
+}
+
+// Attempt-counted rather than wall-clock-bounded so an injected no-op waitFn
+// (tests) still terminates promptly instead of spinning until the deadline.
+export async function pollFor<T>(
+    find: () => T | null,
+    waitFn: (ms: number) => Promise<void>,
+    timeoutMs: number,
+    pollIntervalMs: number
+): Promise<T | null> {
+  const maxAttempts = Math.max(1, Math.ceil(timeoutMs / pollIntervalMs));
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const found = find();
+    if (found) return found;
+    await waitFn(pollIntervalMs);
+  }
+  return find();
+}
+
+function isClaimSuccessUrl(startUrl: string, currentUrl: string): boolean {
+  const startPath = new URL(startUrl).pathname.replace(/\/$/, '');
+  return new URL(currentUrl).pathname.replace(/\/$/, '') === `${startPath}/details`;
 }
