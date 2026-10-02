@@ -68,6 +68,15 @@ export const EXTERNAL_PLATFORM_STORAGE_KEYS: Record<ExternalPlatform, string> = 
   Windows: "primeGamingClaimWindows",
 };
 
+// Off unless explicitly enabled: an unset key (fresh install) reads as off.
+export function readAllowedExternalPlatforms(stored: Record<string, unknown>): Set<ExternalPlatform> {
+  const allowed = new Set<ExternalPlatform>();
+  for (const [platform, key] of Object.entries(EXTERNAL_PLATFORM_STORAGE_KEYS)) {
+    if (stored[key] === true) allowed.add(platform as ExternalPlatform);
+  }
+  return allowed;
+}
+
 // Confirmed live: cards carry no icon, alt text, title, or aria-label naming
 // the redeem platform anywhere on them — the only signal is the claim slug
 // itself, which Amazon suffixes with the platform: .../claims/drop-duchy-epic/
@@ -155,8 +164,7 @@ export function isCollectedOfferCard(card: Element): boolean {
   );
 }
 
-// Keyed by title (the same identity filterNewOffers uses) since FreeGame
-// carries no reference back to its card. A title is only dropped when every
+// Keyed by title since FreeGame carries no reference back to its card. A title is only dropped when every
 // card carrying it is collected, so a collected twin can't hide an unclaimed
 // offer. Without this, any run whose previously-seen list is empty (first
 // run, or a manual "Claim now", which clears it) re-opened a claim tab for
@@ -200,16 +208,6 @@ export async function claimOfferCard(
     await waitFn(pollIntervalMs);
   }
   return "failed";
-}
-
-// Mirrors the "newGames" filter Epic/Steam/GOG/IndieGala apply in background.ts
-// before claiming. Prime Gaming has no background-reachable listing endpoint —
-// its offer list only exists after an authenticated page render — so this is
-// applied in the content script instead, against whatever the previous run
-// persisted, rather than sending every currently-listed offer (including ones
-// already claimed on a prior run) off to be claimed again.
-export function filterNewOffers(games: FreeGame[], previouslySeen: FreeGame[]): FreeGame[] {
-  return games.filter((game) => !previouslySeen.some((seen) => seen?.title === game.title));
 }
 
 // Confirmed live: GOG and Windows/Xbox codes use two different shapes, so

@@ -8,7 +8,7 @@ export default defineConfig({
   },
   manifest: {
     name: "Free Game Claimer for Steam, Epic, GOG, IndieGala & Prime Gaming",
-    permissions: ['storage', "tabs", "scripting", "alarms"],
+    permissions: ['storage', "tabs", "scripting", "alarms", "declarativeNetRequestWithHostAccess"],
     host_permissions: [
       'https://store.steampowered.com/*',
       "https://store-site-backend-static-ipv4.ak.epicgames.com/*",

@@ -5,7 +5,6 @@ import {
   detectExternalPlatform,
   extractRedeemCode,
   excludeCollectedOffers,
-  filterNewOffers,
   hasPrimeMembership,
   isCollectedOfferCard,
   isInternalOfferCard,
@@ -410,28 +409,6 @@ describe('excludeCollectedOffers', () => {
 
     expect(excludeCollectedOffers([offer('Some Game'), offer('Other Game')], offerList))
       .toEqual([offer('Some Game'), offer('Other Game')]);
-  });
-});
-
-describe('filterNewOffers', () => {
-  const seen: FreeGame = {
-    title: 'Already Claimed Game',
-    platform: Platforms.PrimeGaming,
-    link: PRIME_GAMING_HOME_URL,
-    img: '/icon/128.png',
-  };
-  const fresh: FreeGame = { ...seen, title: 'Brand New Game' };
-
-  it('excludes games whose title already appears in the previously-seen list', () => {
-    expect(filterNewOffers([seen, fresh], [seen])).toEqual([fresh]);
-  });
-
-  it('returns everything when nothing has been seen before', () => {
-    expect(filterNewOffers([seen, fresh], [])).toEqual([seen, fresh]);
-  });
-
-  it('returns nothing when every title was already seen', () => {
-    expect(filterNewOffers([seen], [seen])).toEqual([]);
   });
 });
 

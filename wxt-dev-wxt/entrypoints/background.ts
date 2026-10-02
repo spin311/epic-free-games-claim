@@ -7,8 +7,21 @@ import {parse} from 'node-html-parser';
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
-import {PRIME_GAMING_HOME_URL} from "@/entrypoints/utils/primeGamingGiveaway.ts";
-import {LoginState} from "@/entrypoints/utils/loginState.ts";
+import {
+  EXTERNAL_PLATFORM_STORAGE_KEYS,
+  PRIME_GAMING_HOME_URL,
+  readAllowedExternalPlatforms,
+} from "@/entrypoints/utils/primeGamingGiveaway.ts";
+import {
+  ClaimAttempts,
+  ensureLunaOriginRule,
+  excludeRecentlyAttempted,
+  fetchPrimeOffers,
+  PrimeOffer,
+  selectClaimableOffers,
+  updateClaimAttempts,
+} from "@/entrypoints/utils/primeGamingApi.ts";
+import {LoginState, recordLoginState} from "@/entrypoints/utils/loginState.ts";
 import {
   setBadgeBackgroundColor as setActionBadgeBackgroundColor,
   setBadgeText as setActionBadgeText,
@@ -62,10 +75,11 @@ export function isActive(active: unknown): boolean {
 // Confirmed (against Prime Gaming's own reference scraper and third-party
 // lineup trackers): new titles land almost exclusively on Thursdays — a larger
 // batch on the month's first Thursday, then a weekly trickle — with only rare
-// off-cycle bonus adds. Unlike Epic/Steam/GOG/IndieGala, Prime has no
-// background-reachable listing endpoint (see checkPrimeGaming), so opening a
-// real tab on every claimFrequency tick (which can be as often as hourly)
-// finds nothing new on 5 of 7 days. Restricting the check to Thu/Fri (a
+// off-cycle bonus adds. These gates apply only to the claims-page fallback
+// (see checkPrimeGaming): opening a real tab on every claimFrequency tick
+// (which can be as often as hourly) finds nothing new on 5 of 7 days, while
+// the normal background lookup opens no tab and isn't gated. Restricting the
+// fallback to Thu/Fri (a
 // one-day buffer for late/timezone drops) cuts that overhead without missing
 // drops; the interval catch-up guarantees an off-cycle title or a missed
 // Thu/Fri window is never more than PRIME_GAMING_MAX_CHECK_INTERVAL_DAYS stale.
@@ -339,8 +353,8 @@ export const background = {
   // to know a run that can open many tabs and take a while is happening,
   // rather than giving no feedback until (or unless) it finishes.
   // `force` is set only for the popup's manual "Claim now" (see handleMessage):
-  // an explicit request to check now should not be skipped by Prime Gaming's
-  // automatic day-of-week throttle.
+  // an explicit request to check now should skip Prime Gaming's automatic
+  // throttles (the fallback's day gate and the per-offer retry cooldown).
   async getFreeGamesList(force: boolean = false) {
     this.claimedSomethingThisRun = false;
     await setStorageItem("isClaiming", true);
@@ -741,19 +755,30 @@ export const background = {
     await setStorageItem("indieGalaWheelLastCheck", today);
   },
 
-  // See shouldCheckPrimeGamingToday: Prime has no background-reachable listing
-  // endpoint (gaming.amazon.com/home is a client-rendered SPA that only exists
-  // after an authenticated page load, unlike Epic/Steam/GOG/IndieGala's
-  // fetch-first paths), so checking still means opening a real tab — this just
-  // restricts *how often* that tab opens to the days it can actually find
-  // something new.
-  // `force` bypasses the day-of-week/catch-up gate above — used only by an
-  // explicit user action (clicking "Log in" for Prime Gaming, see
-  // checkPlatformLogin; or the popup's manual "Claim now", see
-  // getFreeGamesList), never by the automatic startup/alarm path, since the
-  // whole point of a manual trigger is to ignore automatic throttling.
+  // Fetch-first, like Epic/Steam: the background lookup (loadPrimeOffers)
+  // opens no tab unless something is actually claimable, so it isn't
+  // day-gated. Only if the lookup itself fails (no declarativeNetRequest,
+  // signed out, API change, ...) does this fall back to opening the claims
+  // page, which is gated by shouldCheckPrimeGamingToday.
+  // `force` skips the automatic throttles (that day gate and the per-offer
+  // retry cooldown) — used only by an explicit user action (clicking "Log in"
+  // for Prime Gaming, see checkPlatformLogin; or the popup's manual "Claim
+  // now", see getFreeGamesList), never by the automatic startup/alarm path.
   async checkPrimeGaming(shouldCheck: boolean, force: boolean = false) {
     if (!shouldCheck) return;
+
+    let offers: PrimeOffer[] | null = null;
+    try {
+      offers = await this.loadPrimeOffers();
+    } catch (e) {
+      console.warn("Prime Gaming background lookup failed; falling back to the claims page:", e);
+    }
+    // Outside the try on purpose: a failure here may come after claim tabs
+    // already opened, and must not also open the claims page.
+    if (offers) {
+      await this.claimPrimeOffers(offers, force);
+      return;
+    }
 
     const now = new Date();
     const lastCheck = await getStorageItem<string>("primeGamingLastCheck");
@@ -764,6 +789,36 @@ export const background = {
     // the next due check must still retry rather than silently skipping ahead.
     await this.openTabAndSendActionToContent(PRIME_GAMING_HOME_URL, "getFreeGames");
     await setStorageItem("primeGamingLastCheck", now.toISOString());
+  },
+
+  // Separate from claimPrimeOffers so tests can stand in for the network +
+  // declarativeNetRequest side. Throws when the answer can't be trusted (see
+  // fetchPrimeOffers).
+  async loadPrimeOffers(): Promise<PrimeOffer[]> {
+    // The extension's own request origin as the browser reports it (the
+    // extension id on Chrome, an internal UUID on Firefox).
+    const extensionHost = new URL(browser.runtime.getURL("/")).host;
+    await ensureLunaOriginRule(browser.declarativeNetRequest, extensionHost);
+    return fetchPrimeOffers();
+  },
+
+  async claimPrimeOffers(offers: PrimeOffer[], force: boolean = false) {
+    const listed = offers.map((offer) => offer.game);
+    // Same as Epic/Steam: persisted regardless, so the popup lists what's live.
+    await setStorageItem("primeGamingGames", listed);
+    // loadPrimeOffers only succeeds with per-user claim state, which only a
+    // signed-in session gets.
+    await recordLoginState(Platforms.PrimeGaming, true);
+
+    const stored = await getStorageItems(Object.values(EXTERNAL_PLATFORM_STORAGE_KEYS));
+    const unclaimed = selectClaimableOffers(offers, readAllowedExternalPlatforms(stored));
+    const now = new Date();
+    const attempts = (await getStorageItem<ClaimAttempts>("primeGamingClaimAttempts")) ?? {};
+    const toClaim = force ? unclaimed : excludeRecentlyAttempted(unclaimed, attempts, now);
+    // Recorded before claiming, so even a run that dies mid-claim still
+    // counts as an attempt and can't turn into a reopen-every-run loop.
+    await setStorageItem("primeGamingClaimAttempts", updateClaimAttempts(attempts, toClaim, listed, now));
+    if (toClaim.length > 0) await this.claimGames(toClaim);
   },
 
   // Triggered by clicking a platform's "Log in" link in the popup (see

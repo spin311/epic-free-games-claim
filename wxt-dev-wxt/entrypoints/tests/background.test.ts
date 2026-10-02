@@ -177,7 +177,160 @@ describe('shouldCheckPrimeGamingToday', () => {
   });
 });
 
+// The background lookup opens no tab; these stand in for it.
+const apiFails = async () => { throw new Error('Luna GraphQL responded 403'); };
+
+function primeOffer(title: string, isClaimed: boolean | null, externalPlatform: 'Epic' | 'GOG' | 'Windows' | null) {
+  return {
+    game: { title, platform: Platforms.PrimeGaming, link: `https://luna.amazon.com/claims/${title}/dp/x`, img: '' },
+    isClaimed,
+    isLive: true,
+    externalPlatform,
+  };
+}
+
 describe('checkPrimeGaming', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  // The whole point of the API lookup: like Epic/Steam, a check opens no tab
+  // at all unless something is actually claimable.
+  it('checks via the background lookup without opening the claims page', async () => {
+    const runner = Object.create(background);
+    let lookups = 0;
+    runner.loadPrimeOffers = async () => [];
+    runner.claimPrimeOffers = async () => { lookups++; };
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await runner.checkPrimeGaming(true);
+
+    expect(lookups).toBe(1);
+    expect(opened).toEqual([]);
+  });
+
+  // A tab-free lookup costs two requests, so the Thu/Fri throttle (which
+  // exists to limit opened tabs) doesn't apply to it.
+  it('runs the background lookup even on a day the claims-page fallback would skip', async () => {
+    await setStorageItem('primeGamingLastCheck', new Date('2026-09-18T12:00:00Z').toISOString()); // Friday
+    const runner = Object.create(background);
+    let lookups = 0;
+    runner.loadPrimeOffers = async () => [];
+    runner.claimPrimeOffers = async () => { lookups++; };
+
+    vi.useFakeTimers();
+    vi.setSystemTime(new Date('2026-09-19T12:00:00Z')); // Saturday
+    try {
+      await runner.checkPrimeGaming(true);
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect(lookups).toBe(1);
+  });
+
+  // Only a failed *lookup* means "use the claims page instead"; a failure
+  // after claim tabs may already have opened must not open another one.
+  it('does not fall back to the claims page when claiming fails after a successful lookup', async () => {
+    const runner = Object.create(background);
+    runner.loadPrimeOffers = async () => [];
+    runner.claimPrimeOffers = async () => { throw new Error('storage quota'); };
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await expect(runner.checkPrimeGaming(true)).rejects.toThrow('storage quota');
+    expect(opened).toEqual([]);
+  });
+
+  it('passes force through so a manual claim skips the retry cooldown', async () => {
+    const runner = Object.create(background);
+    runner.loadPrimeOffers = async () => [];
+    const forced: boolean[] = [];
+    runner.claimPrimeOffers = async (_offers: unknown, force: boolean) => { forced.push(force); };
+
+    await runner.checkPrimeGaming(true, true);
+    await runner.checkPrimeGaming(true);
+
+    expect(forced).toEqual([true, false]);
+  });
+});
+
+describe('claimPrimeOffers', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  it('claims only offers Amazon reports as not yet claimed, on enabled platforms', async () => {
+    await setStorageItem('primeGamingClaimGog', true);
+    await setStorageItem('primeGamingClaimEpic', false);
+    const runner = Object.create(background);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+
+    await runner.claimPrimeOffers([
+      primeOffer('DOOM', true, 'GOG'),
+      primeOffer('Zoria', false, 'GOG'),
+      primeOffer('Hue', false, 'Epic'),
+      primeOffer('Wall World 2', false, null),
+    ]);
+
+    expect(claimed).toEqual([['Zoria']]);
+  });
+
+  it('opens nothing when every listed offer is already claimed', async () => {
+    await setStorageItem('primeGamingClaimGog', true);
+    const runner = Object.create(background);
+    let claimCalls = 0;
+    runner.claimGames = async () => { claimCalls++; };
+
+    await runner.claimPrimeOffers([primeOffer('DOOM', true, 'GOG'), primeOffer('Weakless', true, 'GOG')]);
+
+    expect(claimCalls).toBe(0);
+  });
+
+  it('stores every listed offer for the popup and records the signed-in state', async () => {
+    const runner = Object.create(background);
+    runner.claimGames = async () => {};
+
+    await runner.claimPrimeOffers([primeOffer('DOOM', true, 'GOG'), primeOffer('Zoria', false, 'GOG')]);
+
+    const stored = await getStorageItem<{ title: string }[]>('primeGamingGames');
+    expect(stored?.map((g) => g.title)).toEqual(['DOOM', 'Zoria']);
+    expect(await getStorageItem<boolean>('primeGamingLoggedIn')).toBe(true);
+  });
+
+  // Regression guard: Amazon keeps an offer "unclaimed" while its claim
+  // can't finish (e.g. Epic not linked) — an hourly schedule must not
+  // reopen its tab every hour.
+  it('does not retry the same unclaimed offer within a day on scheduled runs', async () => {
+    await setStorageItem('primeGamingClaimGog', true);
+    const runner = Object.create(background);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+    const offers = [primeOffer('Zoria', false, 'GOG')];
+
+    await runner.claimPrimeOffers(offers);
+    await runner.claimPrimeOffers(offers);
+
+    expect(claimed).toEqual([['Zoria']]);
+  });
+
+  it('a manual claim (force) retries it anyway', async () => {
+    await setStorageItem('primeGamingClaimGog', true);
+    const runner = Object.create(background);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+    const offers = [primeOffer('Zoria', false, 'GOG')];
+
+    await runner.claimPrimeOffers(offers);
+    await runner.claimPrimeOffers(offers, true);
+
+    expect(claimed).toEqual([['Zoria'], ['Zoria']]);
+  });
+});
+
+describe('checkPrimeGaming fallback (API lookup failed)', () => {
   beforeEach(() => {
     fakeBrowser.reset();
   });
@@ -185,6 +338,7 @@ describe('checkPrimeGaming', () => {
   it('does nothing when disabled', async () => {
     const opened: string[] = [];
     const runner = Object.create(background);
+    runner.loadPrimeOffers = apiFails;
     runner.openTabAndSendActionToContent = async (url: string) => {
       opened.push(url);
     };
@@ -197,6 +351,7 @@ describe('checkPrimeGaming', () => {
   it('opens the tab when enabled and never checked before', async () => {
     const opened: { url: string; action: string }[] = [];
     const runner = Object.create(background);
+    runner.loadPrimeOffers = apiFails;
     runner.openTabAndSendActionToContent = async (url: string, action: string) => {
       opened.push({ url, action });
     };
@@ -209,6 +364,7 @@ describe('checkPrimeGaming', () => {
   it('does not re-open the tab twice on the same calendar day', async () => {
     const opened: string[] = [];
     const runner = Object.create(background);
+    runner.loadPrimeOffers = apiFails;
     runner.openTabAndSendActionToContent = async (url: string) => {
       opened.push(url);
     };
@@ -226,6 +382,7 @@ describe('checkPrimeGaming', () => {
 
     const opened: string[] = [];
     const runner = Object.create(background);
+    runner.loadPrimeOffers = apiFails;
     runner.openTabAndSendActionToContent = async (url: string) => {
       opened.push(url);
     };
@@ -243,6 +400,7 @@ describe('checkPrimeGaming', () => {
 
   it('does not record the last-check date when opening the tab fails, so the next due call retries', async () => {
     const runner = Object.create(background);
+    runner.loadPrimeOffers = apiFails;
     runner.openTabAndSendActionToContent = async () => {
       throw new Error('Could not establish connection');
     };
@@ -263,6 +421,7 @@ describe('checkPrimeGaming', () => {
 
     const opened: string[] = [];
     const runner = Object.create(background);
+    runner.loadPrimeOffers = apiFails;
     runner.openTabAndSendActionToContent = async (url: string) => {
       opened.push(url);
     };

@@ -3,7 +3,7 @@ import { browser } from "wxt/browser";
 import { FreeGamesResponse } from "@/entrypoints/types/freeGamesResponse.ts";
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
-import { getStorageItem, getStorageItems, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
+import { getStorageItems, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
 import { closeCurrentTab, onClaimMessage } from "@/entrypoints/utils/contentMessaging.ts";
 import { detectAndRecordLoginState } from "@/entrypoints/utils/loginState.ts";
 import {
@@ -14,13 +14,13 @@ import {
     excludeCollectedOffers,
     ExternalPlatform,
     extractRedeemCode,
-    filterNewOffers,
     hasPrimeMembership,
     isInternalOfferCard,
     isOfferDetailsPage,
     parseExternalOffers,
     parseInternalOffers,
     pollFor,
+    readAllowedExternalPlatforms,
 } from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import { buildRedeemUrl } from "@/entrypoints/utils/gogGiveaway.ts";
 import { buildMicrosoftRedeemUrl } from "@/entrypoints/utils/microsoftRedeem.ts";
@@ -59,13 +59,7 @@ export default defineContentScript({
         // navigating away to that store's own account (and possibly its
         // account-linking flow), a bigger step than an internal in-place claim.
         async function getAllowedExternalPlatforms(): Promise<Set<ExternalPlatform>> {
-            const keys = Object.values(EXTERNAL_PLATFORM_STORAGE_KEYS);
-            const stored = await getStorageItems(keys);
-            const allowed = new Set<ExternalPlatform>();
-            for (const [platform, key] of Object.entries(EXTERNAL_PLATFORM_STORAGE_KEYS)) {
-                if (stored[key] === true) allowed.add(platform as ExternalPlatform);
-            }
-            return allowed;
+            return readAllowedExternalPlatforms(await getStorageItems(Object.values(EXTERNAL_PLATFORM_STORAGE_KEYS)));
         }
 
         async function getFreeGamesList() {
@@ -103,25 +97,22 @@ export default defineContentScript({
                 return;
             }
 
-            // Unlike Epic/Steam/GOG/IndieGala, Prime's own claim step re-scrapes
-            // and re-evaluates every listed card regardless of what's sent here
-            // (see claimCurrentGames) — but skipping the message entirely when
-            // nothing is new avoids opening a second tab, every check, purely to
-            // find that claimOfferCard's already-claimed check has nothing to do.
-            const previouslySeen: FreeGame[] = (await getStorageItem("primeGamingGames")) || [];
-            const newGames = excludeCollectedOffers(filterNewOffers(gamesArr, previouslySeen), offerList);
+            // Same rule as the background lookup (selectClaimableOffers): claim
+            // whatever Amazon doesn't show as collected yet, so a claim that
+            // failed on an earlier run is retried rather than skipped as "seen".
+            const claimableGames = excludeCollectedOffers(gamesArr, offerList);
 
-            // Persisted regardless of whether anything is new, same as Epic/Steam,
-            // so the popup's Free Games tab always reflects what's currently listed.
+            // Persisted regardless of whether anything is claimable, same as
+            // Epic/Steam, so the popup's Free Games tab reflects what's listed.
             await setStorageItem("primeGamingGames", gamesArr);
 
-            if (newGames.length === 0) {
+            if (claimableGames.length === 0) {
                 await closeCurrentTab();
                 return;
             }
 
             const freeGamesResponse: FreeGamesResponse = {
-                freeGames: newGames,
+                freeGames: claimableGames,
                 loggedIn: true,
             };
             await browser.runtime.sendMessage({
