@@ -55,14 +55,23 @@ export type RedeemOutcome = "redeemed" | "not-redeemed";
 // URL change there doesn't even correlate with success/failure.
 //
 // So this fills the code in, then repeatedly clicks whatever submit-like
-// button shows up (never the same element instance twice, so a button that's
+// button shows up (never the same button twice, so a button that's
 // enabled but genuinely stuck — bad code, unresolved captcha, terms
-// checkbox — gets exactly one click rather than being hammered), and treats
-// the button disappearing for a settled stretch (not just a one-tick gap
-// between two steps' renders) as success. This covers a single-click flow
-// (GOG's one "Continue") and a multi-step one (Next -> Confirm) without
-// needing to know in advance which shape a given site uses, and without ever
-// having to recognise that site's specific success text.
+// checkbox — gets exactly one click rather than being hammered; "same" means
+// same element AND same label, since GOG's Vue form patches its "Continue"
+// <button> in place into the next step's "Redeem"; capped at
+// MAX_SUBMIT_CLICKS so a button that keeps flipping labels can't be submitted
+// over and over), and reports the button disappearing for a settled stretch
+// (not just a one-tick gap between two steps' renders) as "redeemed". That is
+// only a candidate signal: confirmed live on GOG, the button can vanish
+// without anything being redeemed, so callers that can check positively
+// (gog.content.ts — see waitForRedeemConfirmation) must do so. This covers
+// a single-step flow and a multi-step one (GOG's Continue -> Redeem,
+// Microsoft's Next -> Confirm) without needing to know in advance which shape
+// a given site uses.
+// Real flows need 2 (GOG: Continue -> Redeem; Microsoft: Next -> Confirm).
+const MAX_SUBMIT_CLICKS = 4;
+
 export async function submitRedeemCode(
     code: string,
     input: HTMLInputElement,
@@ -77,7 +86,8 @@ export async function submitRedeemCode(
     setInputValue(input, code);
 
     let lastClicked: HTMLButtonElement | null = null;
-    let hasClickedAtLeastOnce = false;
+    let lastClickedLabel = '';
+    let clickCount = 0;
     let noButtonSince: number | null = null;
     const deadline = Date.now() + timeoutMs;
 
@@ -85,12 +95,15 @@ export async function submitRedeemCode(
         const button = findSubmitButton();
         if (button) {
             noButtonSince = null;
-            if (button !== lastClicked && isClickable(button)) {
+            const label = (button.textContent ?? '').trim();
+            const isNewStep = button !== lastClicked || label !== lastClickedLabel;
+            if (isNewStep && isClickable(button) && clickCount < MAX_SUBMIT_CLICKS) {
                 clickFn(button);
                 lastClicked = button;
-                hasClickedAtLeastOnce = true;
+                lastClickedLabel = label;
+                clickCount++;
             }
-        } else if (hasClickedAtLeastOnce) {
+        } else if (clickCount > 0) {
             noButtonSince ??= Date.now();
             if (Date.now() - noButtonSince >= settleMs) return "redeemed";
         }

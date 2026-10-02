@@ -6,9 +6,13 @@ import {
   GOG_HOME_URL,
   GOG_REDEEM_URL,
   GOG_STATUS_URL,
+  GOG_OWNED_GAMES_URL,
   claimGiveaway,
   fetchGiveaway,
+  fetchOwnedGameIds,
   parseGiveawayStatus,
+  hasRedeemSuccessScreen,
+  waitForRedeemConfirmation,
 } from './gogGiveaway';
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
 
@@ -262,5 +266,111 @@ describe('claimGiveaway', () => {
     const fetchImpl = vi.fn().mockResolvedValue(response(200, { message: 'Giveaway has ended' }));
 
     await expect(claimGiveaway(fetchImpl)).resolves.toBe('failed');
+  });
+});
+
+describe('fetchOwnedGameIds', () => {
+  // Confirmed live: same-origin endpoint answering {"owned": number[]}.
+  it('returns the owned product ids, sending the session cookie', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response(200, { owned: [1111421371, 1207658755] }));
+
+    const owned = await fetchOwnedGameIds(fetchImpl);
+
+    expect(owned).toEqual(new Set([1111421371, 1207658755]));
+    expect(fetchImpl).toHaveBeenCalledWith(
+      GOG_OWNED_GAMES_URL,
+      expect.objectContaining({ credentials: 'include' })
+    );
+  });
+
+  it('returns null on a non-OK response', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response(401, { message: 'Unauthorized' }));
+
+    await expect(fetchOwnedGameIds(fetchImpl)).resolves.toBeNull();
+  });
+
+  it('returns null when the payload has no owned array', async () => {
+    const fetchImpl = vi.fn().mockResolvedValue(response(200, '<html>login</html>'));
+
+    await expect(fetchOwnedGameIds(fetchImpl)).resolves.toBeNull();
+  });
+
+  it('returns null when the request itself fails', async () => {
+    const fetchImpl = vi.fn().mockRejectedValue(new TypeError('Failed to fetch'));
+
+    await expect(fetchOwnedGameIds(fetchImpl)).resolves.toBeNull();
+  });
+});
+
+describe('hasRedeemSuccessScreen', () => {
+  // Confirmed live (redeem bundle + success page): GOG's success step renders
+  // a .success-message header, independent of the UI language.
+  it('is true when GOG renders its success message', () => {
+    document.body.innerHTML = '<form><div class="success-message">Code redeemed successfully!</div></form>';
+    expect(hasRedeemSuccessScreen(document)).toBe(true);
+  });
+
+  it('is false on the code-entry / confirmation steps', () => {
+    document.body.innerHTML = '<form><h1>Redeem code</h1><button>Redeem</button></form>';
+    expect(hasRedeemSuccessScreen(document)).toBe(false);
+  });
+});
+
+describe('waitForRedeemConfirmation', () => {
+  const before = new Set([1, 2]);
+  const noSuccessScreen = () => false;
+
+  it('returns true once a product id not owned before shows up', async () => {
+    const fetchOwned = vi.fn()
+      .mockResolvedValueOnce(new Set([1, 2]))
+      .mockResolvedValueOnce(new Set([1, 2, 1367161365]));
+
+    await expect(waitForRedeemConfirmation(before, fetchOwned, noSuccessScreen, vi.fn(async () => {}))).resolves.toBe(true);
+    expect(fetchOwned).toHaveBeenCalledTimes(2);
+  });
+
+  it('keeps polling past a failed lookup', async () => {
+    const fetchOwned = vi.fn()
+      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce(new Set([1, 2, 3]));
+
+    await expect(waitForRedeemConfirmation(before, fetchOwned, noSuccessScreen, vi.fn(async () => {}))).resolves.toBe(true);
+  });
+
+  it('returns false when nothing new appears before the timeout', async () => {
+    const fetchOwned = vi.fn().mockResolvedValue(new Set([1, 2]));
+
+    await expect(waitForRedeemConfirmation(before, fetchOwned, noSuccessScreen, vi.fn(async () => {}), 3000, 1000)).resolves.toBe(false);
+    expect(fetchOwned).toHaveBeenCalledTimes(3);
+  });
+
+  // GOG warns the library can lag behind a redeem ("might take a little
+  // longer to appear in your Owned Games"), so its own success screen must
+  // be enough on its own.
+  it('returns true on GOG\'s success screen without waiting for the library', async () => {
+    const fetchOwned = vi.fn().mockResolvedValue(new Set([1, 2]));
+
+    await expect(waitForRedeemConfirmation(before, fetchOwned, () => true, vi.fn(async () => {}))).resolves.toBe(true);
+    expect(fetchOwned).not.toHaveBeenCalled();
+  });
+
+  // gog.content.ts uses a zero timeout for a "not-redeemed" button flow:
+  // one look, no waiting.
+  it('with a zero timeout, checks exactly once without waiting', async () => {
+    const fetchOwned = vi.fn().mockResolvedValue(new Set([1, 2]));
+    const waitFn = vi.fn(async () => {});
+
+    await expect(waitForRedeemConfirmation(before, fetchOwned, noSuccessScreen, waitFn, 0)).resolves.toBe(false);
+    expect(fetchOwned).toHaveBeenCalledTimes(1);
+    expect(waitFn).not.toHaveBeenCalled();
+  });
+
+  // No baseline means a library diff can't tell new from already-owned — only
+  // the success screen can confirm.
+  it('without a "before" snapshot, never consults the library', async () => {
+    const fetchOwned = vi.fn().mockResolvedValue(new Set([1, 2, 3]));
+
+    await expect(waitForRedeemConfirmation(null, fetchOwned, noSuccessScreen, vi.fn(async () => {}), 3000, 1000)).resolves.toBe(false);
+    expect(fetchOwned).not.toHaveBeenCalled();
   });
 });

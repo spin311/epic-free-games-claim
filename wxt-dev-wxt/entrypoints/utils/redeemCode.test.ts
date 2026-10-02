@@ -130,6 +130,60 @@ describe('submitRedeemCode', () => {
     // *different* Confirm button on a re-rendered page -> success. Neither
     // intermediate button disappearing briefly (a re-render gap) nor the
     // first click alone may count as done.
+    // Confirmed live on GOG: Vue patches the step-1 "Continue" <button> in
+    // place into step 2's "Redeem" — same element instance, new label.
+    it('clicks the same element again once its label changes to the next step', async () => {
+        const input = makeInput();
+        const button = document.createElement('button');
+        button.textContent = 'Continue';
+        let isGone = false;
+        const clickFn = vi.fn(() => {
+            if (button.textContent === 'Continue') button.textContent = 'Redeem';
+            else isGone = true;
+        });
+
+        const outcome = await submitRedeemCode(
+            'ABC123',
+            input,
+            () => (isGone ? null : button),
+            vi.fn(),
+            clickFn,
+            vi.fn(async () => {}),
+            1000,
+            5,
+            20,
+        );
+
+        expect(outcome).toBe('redeemed');
+        expect(clickFn).toHaveBeenCalledTimes(2);
+    });
+
+    // Re-clicking on a label change must stay bounded: a button that keeps
+    // flipping labels (e.g. Redeem -> Continue -> Redeem after errors) must not
+    // be submitted over and over for the whole timeout window.
+    it('caps how many times it clicks a button that keeps changing label', async () => {
+        const button = document.createElement('button');
+        button.textContent = 'Continue';
+        const clickFn = vi.fn(() => {
+            button.textContent = button.textContent === 'Continue' ? 'Redeem' : 'Continue';
+        });
+
+        const outcome = await submitRedeemCode(
+            'ABC123',
+            makeInput(),
+            () => button,
+            vi.fn(),
+            clickFn,
+            vi.fn(async () => {}),
+            200,
+            5,
+            20,
+        );
+
+        expect(outcome).toBe('not-redeemed');
+        expect(clickFn).toHaveBeenCalledTimes(4);
+    });
+
     it('clicks a freshly rendered second button (multi-step confirm flow) before reporting redeemed', async () => {
         const input = makeInput();
         const nextButton = document.createElement('button');

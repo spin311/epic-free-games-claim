@@ -10,6 +10,9 @@ export const GOG_HOME_URL = "https://www.gog.com/";
 export const GOG_STATUS_URL = "https://www.gog.com/giveaway/status";
 export const GOG_CLAIM_URL = "https://www.gog.com/giveaway/claim";
 export const GOG_REDEEM_URL = "https://www.gog.com/redeem";
+// Confirmed live: same-origin, answers {"owned": number[]} for the signed-in
+// account — the one positive signal that a redeem actually landed.
+export const GOG_OWNED_GAMES_URL = "https://www.gog.com/user/data/games";
 
 // The extCode handoff (appended here, read back out by gog.content.ts) is
 // shared with microsoft.content.ts's redeem flow — see redeemCode.ts.
@@ -159,4 +162,59 @@ export async function claimGiveaway(fetchImpl: typeof fetch = fetch): Promise<Cl
         console.error("[gog] claim request failed:", error);
         return "failed";
     }
+}
+
+// Never throws: null means "couldn't tell" (signed out, transport error, or an
+// unexpected payload), which callers must treat as unverified, not as owned.
+export async function fetchOwnedGameIds(fetchImpl: typeof fetch = fetch): Promise<Set<number> | null> {
+    try {
+        const response = await fetchImpl(GOG_OWNED_GAMES_URL, {
+            credentials: "include",
+            headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+            console.warn(`[gog] owned-games lookup responded ${response.status}`);
+            return null;
+        }
+        const owned = asRecord(parseJsonBody(await response.text()))?.owned;
+        if (!Array.isArray(owned)) return null;
+        return new Set(owned.filter((id): id is number => typeof id === "number"));
+    } catch (error: unknown) {
+        console.warn("[gog] owned-games lookup failed:", error);
+        return null;
+    }
+}
+
+// Confirmed live (redeem bundle + rendered page): GOG's success step renders
+// a .success-message header ("Code redeemed successfully!"). Matched by
+// markup rather than text so it works whatever the account's UI language.
+export function hasRedeemSuccessScreen(root: Document | HTMLElement): boolean {
+    return root.querySelector(".success-message") !== null;
+}
+
+// Confirmed live: neither the "Continue" button vanishing nor the URL change
+// means anything was redeemed — both happen on the way to a second "Redeem"
+// step. So success needs a positive signal: GOG's own success screen, or the
+// library gaining a product it didn't have before (a fallback for a success
+// screen we fail to recognise). The library alone isn't enough: GOG redeems
+// asynchronously and warns it "might take a little longer to appear".
+export async function waitForRedeemConfirmation(
+    before: ReadonlySet<number> | null,
+    fetchOwned: () => Promise<Set<number> | null>,
+    isSuccessShown: () => boolean,
+    waitFn: (ms: number) => Promise<void>,
+    timeoutMs = 15000,
+    pollIntervalMs = 1500
+): Promise<boolean> {
+    const maxAttempts = Math.max(1, Math.ceil(timeoutMs / pollIntervalMs));
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (isSuccessShown()) return true;
+        // No baseline means a diff can't tell new from already-owned.
+        if (before) {
+            const owned = await fetchOwned();
+            if (owned && [...owned].some((id) => !before.has(id))) return true;
+        }
+        if (attempt < maxAttempts - 1) await waitFn(pollIntervalMs);
+    }
+    return false;
 }

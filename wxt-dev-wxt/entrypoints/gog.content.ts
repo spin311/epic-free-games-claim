@@ -5,10 +5,15 @@ import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {closeCurrentTab, onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {recordLoginState} from "@/entrypoints/utils/loginState.ts";
-import {claimGiveaway, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
-import {extractRedeemCodeParam, extractRedeemTitleParam, setControlledInputValue, submitRedeemCode} from "@/entrypoints/utils/redeemCode.ts";
+import {claimGiveaway, fetchGiveaway, fetchOwnedGameIds, hasRedeemSuccessScreen, waitForRedeemConfirmation} from "@/entrypoints/utils/gogGiveaway.ts";
+import {extractRedeemCodeParam, extractRedeemTitleParam, findButtonByAnyText, setControlledInputValue, submitRedeemCode} from "@/entrypoints/utils/redeemCode.ts";
 import {recordRedeemFallback, removePendingRedemption} from "@/entrypoints/utils/pendingRedemptions.ts";
-import {findButtonByText, incrementCounter, realClick, wait, waitForElement, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
+import {incrementCounter, realClick, wait, waitForElement, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
+
+// Confirmed live: redeeming is two steps — "Continue" previews the code's
+// product, then a separate "Redeem" button actually adds it to the library.
+const GOG_SUBMIT_LABELS = ['Continue', 'Redeem'];
+const REDEEM_CONFIRM_TIMEOUT_MS = 15_000;
 
 // Unlike the Epic and Steam scripts this one never touches the page's DOM — GOG
 // exposes the giveaway as JSON. It exists purely so the requests run in a
@@ -56,16 +61,33 @@ export default defineContentScript({
                     return;
                 }
 
+                // Snapshot taken before submitting: the button flow alone can't
+                // tell a real redeem from GOG's UI just moving between steps.
+                const ownedBefore = await fetchOwnedGameIds();
+                if (!ownedBefore) {
+                    console.warn("[gog] couldn't snapshot owned games; only GOG's success screen can confirm this redeem");
+                }
                 const outcome = await submitRedeemCode(
                     code,
                     input,
-                    () => findButtonByText(document, 'Continue'),
+                    () => findButtonByAnyText(document, GOG_SUBMIT_LABELS),
                     setControlledInputValue,
                     realClick,
                     wait,
                 );
+                // The button flow is only a hint either way: a "redeemed" one
+                // gets the full wait for GOG to confirm, a "not-redeemed" one
+                // still gets a single look in case GOG's success screen is up
+                // anyway.
+                const isRedeemed = await waitForRedeemConfirmation(
+                    ownedBefore,
+                    () => fetchOwnedGameIds(),
+                    () => hasRedeemSuccessScreen(document),
+                    wait,
+                    outcome === "redeemed" ? REDEEM_CONFIRM_TIMEOUT_MS : 0,
+                );
 
-                if (outcome === "redeemed") {
+                if (isRedeemed) {
                     await incrementCounter();
                     // Clears any earlier failed attempt's leftover entry for
                     // this same code, now that it's actually been redeemed.
@@ -74,10 +96,14 @@ export default defineContentScript({
                     return;
                 }
 
-                // "not-redeemed": leave the tab exactly where it is so the user
-                // can see whatever's blocking it (captcha, already used, ...)
-                // and finish redeeming themselves — the fallback record and
-                // clipboard copy are extra safety, not a replacement for that.
+                if (outcome === "redeemed") {
+                    console.warn("[gog] redeem flow finished without GOG confirming it; keeping the code");
+                }
+                // Not confirmed redeemed: leave the tab exactly where it is so
+                // the user can see whatever's blocking it (captcha, already
+                // used, ...) and finish redeeming themselves — the fallback
+                // record and clipboard copy are extra safety, not a
+                // replacement for that.
                 await recordRedeemFallback(code, "GOG", title, retryUrl);
             } catch (error: unknown) {
                 console.error("[gog] redeem attempt failed:", error);
