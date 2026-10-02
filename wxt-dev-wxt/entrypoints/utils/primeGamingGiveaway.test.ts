@@ -14,6 +14,7 @@ import {
   parseInternalOffers,
   parseOfferCard,
   PRIME_GAMING_HOME_URL,
+  readAllowedExternalPlatforms,
 } from './primeGamingGiveaway';
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
 import { FreeGame } from '@/entrypoints/types/freeGame.ts';
@@ -122,6 +123,29 @@ describe('hasPrimeMembership', () => {
     const doc = docFrom('<button>Try Prime</button>');
     expect(hasPrimeMembership(doc)).toBe(false);
   });
+
+  // Confirmed live (Oct 2026): Luna's header wraps the label in a <p>, next
+  // to "Sign in" for a signed-out session; a Prime member's header has neither.
+  it("reads Luna's header markup, where the label sits inside a <p>", () => {
+    expect(hasPrimeMembership(docFrom('<button><p>Sign in</p></button><button><p>Try Prime</p></button>'))).toBe(false);
+    expect(hasPrimeMembership(docFrom('<button><p>Claim Games</p></button><button><p>Janez</p></button>'))).toBe(true);
+  });
+});
+
+describe('readAllowedExternalPlatforms', () => {
+  it('enables only the platforms explicitly set to true', () => {
+    const allowed = readAllowedExternalPlatforms({
+      primeGamingClaimEpic: true,
+      primeGamingClaimGog: false,
+      primeGamingClaimAmazonGames: true,
+      primeGamingClaimLegacy: true,
+    });
+    expect([...allowed].sort()).toEqual(['AmazonGames', 'Epic', 'Legacy']);
+  });
+
+  it('enables nothing on a fresh install (no keys stored)', () => {
+    expect(readAllowedExternalPlatforms({}).size).toBe(0);
+  });
 });
 
 const CARD_WITH_CLAIM_BUTTON = `
@@ -168,10 +192,18 @@ describe('detectExternalPlatform', () => {
     expect(detectExternalPlatform('https://luna.amazon.com/claims/drop-duchy-epic/dp/amzn1.pg.item.ccc?ingress=amzn')).toBe('Epic');
   });
 
-  // "-aga" is Amazon's own native-launcher app — a real platform seen live,
-  // just not one of the three this extension supports.
-  it('returns null for an unsupported platform suffix (Amazon Games App)', () => {
-    expect(detectExternalPlatform('/claims/havendock-aga/dp/amzn1.pg.item.ddd?ingress=amzn')).toBeNull();
+  // Confirmed live: "-aga" is Amazon's own Amazon Games App library.
+  it('detects the Amazon Games App from the claim href\'s slug suffix', () => {
+    expect(detectExternalPlatform('/claims/havendock-aga/dp/amzn1.pg.item.ddd?ingress=amzn')).toBe('AmazonGames');
+  });
+
+  // Confirmed live: "-legacy" offers are redeemed with a code on Legacy Games.
+  it('detects Legacy Games from the claim href\'s slug suffix', () => {
+    expect(detectExternalPlatform('/claims/the-da-vinci-cryptex-legacy/dp/amzn1.pg.item.6cd3?ingress=amzn')).toBe('Legacy');
+  });
+
+  it('returns null for an unsupported platform suffix', () => {
+    expect(detectExternalPlatform('/claims/some-game-ubisoft/dp/amzn1.pg.item.eee?ingress=amzn')).toBeNull();
   });
 
   it('returns null when the href has no /claims/ segment at all', () => {
@@ -465,6 +497,29 @@ describe('extractRedeemCode', () => {
   it('extracts a hyphen-grouped Windows/Xbox redeem code', () => {
     const doc = docFrom('<p>Your code: "DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ"</p>');
     expect(extractRedeemCode(doc)).toBe('DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ');
+  });
+
+  // Confirmed live (Oct 2026, The Da Vinci Cryptex): Legacy Games codes are
+  // three hyphenated groups of five, shown in the same readonly inputs.
+  it('extracts a three-group Legacy Games code from the details page inputs', () => {
+    const doc = docFrom(`
+      <p>Success, you received a code to redeem The Da Vinci Cryptex.</p>
+      <input type="text" readonly value="318NG-31VCU-SK083"><input type="text" name="copy-button" readonly value="318NG-31VCU-SK083">
+      <button>Copy code</button>`);
+    expect(extractRedeemCode(doc)).toBe('318NG-31VCU-SK083');
+  });
+
+  it('extracts a Legacy Games code from text that runs straight into "Copy code"', () => {
+    expect(extractRedeemCode(docFrom('<p>318NG-31VCU-SK083Copy code</p>'))).toBe('318NG-31VCU-SK083');
+  });
+
+  // Longer codes are tried first, so a Windows code is never cut to three groups.
+  it('still reads all five groups of a Windows code', () => {
+    expect(extractRedeemCode(docFrom('<p>DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ</p>'))).toBe('DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ');
+  });
+
+  it('does not match two hyphenated groups', () => {
+    expect(extractRedeemCode(docFrom('<p>ABCDE-12345</p>'))).toBeNull();
   });
 
   it('does not match a lowercase-hex, differently-grouped item id as a Windows code', () => {

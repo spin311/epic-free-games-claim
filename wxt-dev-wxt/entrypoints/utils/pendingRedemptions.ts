@@ -1,6 +1,6 @@
 import { getStorageItem, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
 
-export type RedeemPlatform = "GOG" | "Windows";
+export type RedeemPlatform = "GOG" | "Windows" | "Legacy";
 
 export interface PendingRedemption {
     code: string;

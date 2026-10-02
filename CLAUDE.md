@@ -48,6 +48,9 @@ avoid an esbuild/jsdom `TextEncoder` clash. Test files live next to sources as `
   alarms-based scheduling, claim logic
 - `epic.content.ts` / `steam.content.ts` / `gog.content.ts` / `indiegala.content.ts` /
   `primegaming.content.ts` — content scripts injected on store pages
+- `microsoft.content.ts` / `legacygames.content.ts` — redeem a Prime Gaming code on that
+  store's own page (GOG's lives in `gog.content.ts`); anything that doesn't confirm lands in
+  the popup's pending-redemptions list
 - `popup/` — React popup UI (`App.tsx`, `main.tsx`)
 - `components/` — React components (Settings, GamesList, GameCard, FrequencySelect, …)
 - `hooks/useStorage.ts` — typed wrapper over `browser.storage`
@@ -56,7 +59,8 @@ avoid an esbuild/jsdom `TextEncoder` clash. Test files live next to sources as `
 - `utils/` — `helpers.ts`, `oncePerPageRun.ts`, `contentMessaging.ts`, `badge.ts`,
   `loginState.ts`, `steamReviews.ts`, `gogGiveaway.ts`, `indieGalaGiveaway.ts`,
   `primeGamingGiveaway.ts`, `primeGamingApi.ts` (background Luna GraphQL lookup: Prime Gaming is
-  checked without opening a tab; the claims-page tab is only a fallback)
+  checked without opening a tab, signed-out / no-Prime accounts included; the claims-page tab
+  is only a fallback), `legacyGamesRedeem.ts` (Legacy Games promo-form helpers)
 - `wxt.config.ts` — manifest, permissions, browser targets. `@/*` aliases the project root.
   `declarativeNetRequestWithHostAccess` exists only so the background lookup can send Luna's
   Origin on its own GraphQL request (Luna rejects the extension origin with 403).
