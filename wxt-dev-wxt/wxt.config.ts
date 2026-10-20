@@ -10,7 +10,8 @@ export default defineConfig({
     '@': '.',
   },
   manifest: {
-    name: "Free Game Claimer for Steam, Epic, GOG, IndieGala & Prime Gaming",
+    // addons.mozilla.org rejects names over 45 characters.
+    name: "Free Game Claimer: Epic, Steam, GOG, Prime",
     permissions: ['storage', "tabs", "scripting", "alarms", "declarativeNetRequestWithHostAccess"],
     // Only the hosts 2.6.1 shipped with: Chrome disables an extension on update
     // until the user approves any new install-time host. Every other host is
@@ -22,7 +23,9 @@ export default defineConfig({
     browser_specific_settings: {
       gecko: {
         id: '{116f2aed-395e-42cd-8bf1-1b221519911d}',
-        strict_min_version: '109.0',
+        // declarativeNetRequestWithHostAccess (the Luna lookup's Origin
+        // rewrite) needs Firefox 113.
+        strict_min_version: '113.0',
       },
     },
   },
