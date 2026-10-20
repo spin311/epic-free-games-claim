@@ -3,6 +3,7 @@ import {
   ACCESS_GROUP_ORIGINS,
   AccessGroup,
   accessOrigins,
+  requestOrigins,
   hasAccessFor,
   OPTIONAL_ORIGINS,
   readGrantedAccessGroups,
@@ -60,6 +61,37 @@ describe('accessOrigins', () => {
   });
 });
 
+describe('requestOrigins', () => {
+  const PRIME_BUNDLE = [
+    'https://gaming.amazon.com/*',
+    'https://luna.amazon.com/*',
+    'https://www.gog.com/*',
+    'https://account.microsoft.com/*',
+    'https://www.microsoft.com/store/purchase/buynowui/*',
+    'https://legacygames.com/*',
+    'https://promo.legacygames.com/*',
+  ];
+
+  // One prompt for Prime Gaming rather than one per store it can redeem on.
+  it('asks for every Prime Gaming store at once, from any Prime Gaming toggle', () => {
+    for (const toggle of ['primeGamingCheck', 'primeGamingClaimEpic', 'primeGamingClaimGog', 'primeGamingClaimLegacy'] as const) {
+      expect([...requestOrigins(toggle)].sort()).toEqual([...PRIME_BUNDLE].sort());
+    }
+  });
+
+  it('asks only for its own hosts outside Prime Gaming', () => {
+    expect(requestOrigins('gogCheck')).toEqual(['https://www.gog.com/*']);
+    expect(requestOrigins('indieGalaWheelCheck')).toEqual(accessOrigins('indieGalaWheelCheck'));
+  });
+
+  // What a toggle needs to work stays per store: a site removed later in the
+  // browser's settings switches off only the options that depend on it.
+  it('still only needs its own groups to count as granted', () => {
+    expect(hasAccessFor('primeGamingClaimEpic', new Set<AccessGroup>(['primeGaming']))).toBe(true);
+    expect(hasAccessFor('primeGamingClaimGog', new Set<AccessGroup>(['primeGaming']))).toBe(false);
+  });
+});
+
 describe('readGrantedAccessGroups', () => {
   it('reports a group only when every one of its origins is granted', async () => {
     const contains = containsFor([
@@ -89,7 +121,7 @@ describe('toggleWithAccess', () => {
     toggleWithAccess('primeGamingClaimWindows', true, (value) => calls.push(`set:${value}`), { request },
         (pending: Pending) => calls.push(`pending:${pending?.toggle ?? null}`));
 
-    expect(request).toHaveBeenCalledWith({ origins: accessOrigins('primeGamingClaimWindows') });
+    expect(request).toHaveBeenCalledWith({ origins: requestOrigins('primeGamingClaimWindows') });
     expect(calls).toEqual(['request', 'pending:primeGamingClaimWindows']);
   });
 

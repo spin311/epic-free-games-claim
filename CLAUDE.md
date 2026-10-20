@@ -71,7 +71,8 @@ avoid an esbuild/jsdom `TextEncoder` clash. Test files live next to sources as `
   Epic's API) — any new install-time host makes Chrome disable the extension on update until the
   user approves it. Every other host is an optional group in `utils/optionalAccess.ts`
   (`ACCESS_GROUP_ORIGINS`; `TOGGLE_ACCESS_GROUPS` maps each storage toggle to the groups it needs),
-  requested from the popup (`hooks/useOptionalAccess.ts`) when the user turns that toggle on. A
+  requested from the popup (`hooks/useOptionalAccess.ts`) when the user turns that toggle on — any
+  Prime Gaming toggle requests every Prime-related group in one prompt (`requestOrigins`). A
   feature is effective only when its flag is on **and** its groups are granted — background and
   popup both apply that rule; never gate on the flag alone. The gog / indiegala / indiegalaWheel /
   primegaming / microsoft / legacygames content scripts are `registration: "runtime"` (options in

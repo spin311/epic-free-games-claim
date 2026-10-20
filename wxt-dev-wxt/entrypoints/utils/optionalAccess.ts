@@ -48,8 +48,30 @@ export function hasAccessFor(toggle: AccessToggle, granted: ReadonlySet<AccessGr
   return TOGGLE_ACCESS_GROUPS[toggle].every((group) => granted.has(group));
 }
 
+function originsOf(groups: readonly AccessGroup[]): string[] {
+  return [...new Set(groups.flatMap((group) => ACCESS_GROUP_ORIGINS[group]))];
+}
+
 export function accessOrigins(toggle: AccessToggle): string[] {
-  return [...new Set(TOGGLE_ACCESS_GROUPS[toggle].flatMap((group) => ACCESS_GROUP_ORIGINS[group]))];
+  return originsOf(TOGGLE_ACCESS_GROUPS[toggle]);
+}
+
+// Every group some Prime Gaming toggle needs (Amazon's own hosts plus each
+// store a Prime code is redeemed on).
+const PRIME_GAMING_GROUPS: readonly AccessGroup[] = [...new Set(
+    Object.values(TOGGLE_ACCESS_GROUPS)
+        .filter((groups) => (groups as readonly AccessGroup[]).includes("primeGaming"))
+        .flat()
+)];
+
+// What turning a toggle on asks for. Any Prime Gaming toggle asks for every
+// Prime Gaming store at once, so enabling it is one prompt rather than one per
+// store option. What each toggle *needs* stays per store (hasAccessFor), so a
+// site removed later in the browser's settings switches off only the options
+// that depend on it.
+export function requestOrigins(toggle: AccessToggle): string[] {
+  const groups: readonly AccessGroup[] = TOGGLE_ACCESS_GROUPS[toggle];
+  return originsOf(groups.includes("primeGaming") ? PRIME_GAMING_GROUPS : groups);
 }
 
 type OriginPermissions = { origins?: string[] };
@@ -112,7 +134,7 @@ export function toggleWithAccess(
 
   let request: Promise<boolean>;
   try {
-    request = permissions.request({ origins: accessOrigins(toggle) });
+    request = permissions.request({ origins: requestOrigins(toggle) });
   } catch (e) {
     request = Promise.reject(e);
   }
