@@ -3,7 +3,7 @@ import {getStorageItem, getStorageItems, setStorageItem} from "@/entrypoints/hoo
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFrequency.ts";
-import {parse} from 'node-html-parser';
+import {addToCartInMainWorld, parseSteamFreeGames, STEAM_GAMES_URL} from "@/entrypoints/utils/steamGames.ts";
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
@@ -29,208 +29,22 @@ import {
 } from "@/entrypoints/utils/badge.ts";
 import {shouldClaimSteamGame} from "@/entrypoints/utils/steamReviews.ts";
 import {browser, type Browser} from "wxt/browser";
-import {EpicElement, EpicKeyImage, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
-
-const EPIC_API_URL = "https://store-site-backend-static-ipv4.ak.epicgames.com/freeGamesPromotions?locale=en-US";
-const EPIC_GAMES_URL =
-    "https://store.epicgames.com/";
-// Product pages are built on store.epicgames.com rather than
-// www.epicgames.com/store/...: the www form is a redirect, and Epic bounces
-// some slugs onto /site/... paths that 404 *and* fall outside the Epic content
-// script's match patterns, so the claim tab ends up with no script injected.
-const EPIC_PRODUCT_BASE = "https://store.epicgames.com/en-US";
-export const EPIC_FREE_GAMES_URL = "https://store.epicgames.com/en-US/free-games";
-const STEAM_GAMES_URL =
-    "https://store.steampowered.com/search/?sort_by=Price_ASC&maxprice=free&category1=998&specials=1&ndl=1";
+import {EpicElement, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
+import {
+  EPIC_API_URL,
+  EPIC_GAMES_URL,
+  formatEpicFreeGame,
+  partitionEpicPromotions,
+  withEpicEnglishLocale,
+} from "@/entrypoints/utils/epicGames.ts";
+import {areDatesDifferent, didEnoughTimePass, isActive, shouldCheckPrimeGamingToday} from "@/entrypoints/utils/scheduling.ts";
+import {resolvePlatformToggles} from "@/entrypoints/utils/platformToggles.ts";
 
 const ALARM_NAME = "checkFreeGames";
 let isChecking = false;
 // Distinct from the green claimed-count badge (see handleInstall) so "still
 // working" never reads as "N games claimed".
 const CLAIMING_BADGE_COLOR = "#f0ad4e";
-
-// --- Pure helpers (module-level and exported so they're unit-testable) ---
-
-export function areDatesDifferent(date1: string, date2: string): boolean {
-  return !!date1 && new Date(date1).toDateString() !== new Date(date2).toDateString();
-}
-
-export function didEnoughTimePass(lastOpened: string, requiredMinutes: number): boolean {
-  const lastDate = new Date(lastOpened);
-  const now = new Date();
-  const minutesElapsed = (now.getTime() - lastDate.getTime()) / (1000 * 60);
-  return minutesElapsed >= requiredMinutes;
-}
-
-// `active` defaults to enabled (see OnButton's useStorage default) — unset
-// storage (nothing persisted yet, e.g. before the popup has ever rendered)
-// must read as active, not inactive. The same asymmetric-default class of bug
-// already fixed for the platform toggles in resolvePlatformToggles: without
-// this, a fresh install's alarm never gets created and its first scheduled
-// check never runs, since nothing writes `active` to storage until OnButton
-// itself mounts.
-export function isActive(active: unknown): boolean {
-  return active !== false;
-}
-
-// Confirmed (against Prime Gaming's own reference scraper and third-party
-// lineup trackers): new titles land almost exclusively on Thursdays — a larger
-// batch on the month's first Thursday, then a weekly trickle — with only rare
-// off-cycle bonus adds. These gates apply only to the claims-page fallback
-// (see checkPrimeGaming): opening a real tab on every claimFrequency tick
-// (which can be as often as hourly) finds nothing new on 5 of 7 days, while
-// the normal background lookup opens no tab and isn't gated. Restricting the
-// fallback to Thu/Fri (a
-// one-day buffer for late/timezone drops) cuts that overhead without missing
-// drops; the interval catch-up guarantees an off-cycle title or a missed
-// Thu/Fri window is never more than PRIME_GAMING_MAX_CHECK_INTERVAL_DAYS stale.
-export const PRIME_GAMING_CHECK_DAYS_OF_WEEK = [4, 5]; // Date#getDay(): Thu, Fri
-export const PRIME_GAMING_MAX_CHECK_INTERVAL_DAYS = 6;
-
-// GOG defaults ON for existing behavior; IndieGala and Prime Gaming default
-// OFF on a fresh install — so an unset ("never stored") value must resolve
-// opposite ways for the two groups. This is a pure, testable extraction of
-// that asymmetry: getStorageItems returns raw storage, not the useStorage
-// hook's own defaultValue, and the popup's default only lands in storage once
-// the popup has actually been opened — this alarm-driven (and install-time)
-// path can run first.
-//
-// Steam/Epic are included too even though they default ON like GOG: passing
-// a raw `null` straight into getEpicGamesList(shouldClaim: boolean = true)
-// does NOT fall back to the default — JS default parameters only trigger for
-// `undefined`, and getStorageItems resolves an unset key to `null`. Without
-// resolving it here first, the very first (install-time) run silently never
-// claims or detects login state for Steam/Epic on a fresh install.
-export function resolvePlatformToggles(flags: {
-  steamCheck?: boolean | null;
-  epicCheck?: boolean | null;
-  gogCheck?: boolean | null;
-  indieGalaCheck?: boolean | null;
-  primeGamingCheck?: boolean | null;
-}): {
-  claimSteam: boolean;
-  claimEpic: boolean;
-  claimGog: boolean;
-  claimIndieGala: boolean;
-  claimPrimeGaming: boolean;
-} {
-  return {
-    claimSteam: flags.steamCheck !== false,
-    claimEpic: flags.epicCheck !== false,
-    claimGog: flags.gogCheck !== false,
-    claimIndieGala: flags.indieGalaCheck === true,
-    claimPrimeGaming: flags.primeGamingCheck === true,
-  };
-}
-
-export function shouldCheckPrimeGamingToday(lastCheck: string | null, now: Date): boolean {
-  if (!lastCheck) return true;
-  if (!areDatesDifferent(lastCheck, now.toISOString())) return false;
-
-  const daysSinceLastCheck = (now.getTime() - new Date(lastCheck).getTime()) / (24 * 60 * 60 * 1000);
-  if (daysSinceLastCheck >= PRIME_GAMING_MAX_CHECK_INTERVAL_DAYS) return true;
-
-  return PRIME_GAMING_CHECK_DAYS_OF_WEEK.includes(now.getDay());
-}
-
-// Force Epic claim pages into English (?lang=en-US) so the content script can match
-// confirmation buttons ("Add to library", etc.) by text regardless of the user's
-// account language. Non-Epic URLs (e.g. Steam) are returned unchanged.
-export function withEpicEnglishLocale(url: string): string {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.endsWith("epicgames.com")) {
-      parsed.searchParams.set("lang", "en-US");
-      return parsed.toString();
-    }
-  } catch {
-    // Not an absolute URL — leave it as-is.
-  }
-  return url;
-}
-
-// Epic exposes the same product under several slug fields and they are not
-// interchangeable. `productSlug` is a legacy *path* that often carries a
-// "/home" suffix (e.g. "cardpocalypse/home"), which produces a 404 product URL;
-// the page-mapping tables carry the bare slug ("cardpocalypse"). Prefer those,
-// and normalise whatever we get so a stray path segment can never leak into the
-// URL again.
-export function resolveEpicSlug(game: EpicElement): string {
-  const candidates = [
-    ...(game.catalogNs?.mappings ?? []).map((m) => m?.pageSlug),
-    ...(game.offerMappings ?? []).map((m) => m?.pageSlug),
-    game.productSlug,
-  ];
-
-  for (const candidate of candidates) {
-    const slug = normalizeEpicSlug(candidate);
-    if (slug) return slug;
-  }
-  return "";
-}
-
-function normalizeEpicSlug(raw: string | undefined | null): string {
-  const trimmed = (raw ?? "").trim().replace(/^\/+|\/+$/g, "");
-  if (!trimmed) return "";
-  // "cardpocalypse/home" -> "cardpocalypse". Any other multi-segment slug is
-  // reduced to its first segment for the same reason: /p/ takes one segment.
-  return trimmed.split("/")[0] ?? "";
-}
-
-// Splits an Epic search payload into the games that are free right now and the
-// ones announced as free next. A game must appear in exactly one bucket — Epic
-// can report both a current and an upcoming free offer for the same title
-// during the weekly changeover, and listing it twice made the popup show
-// duplicates.
-export function partitionEpicPromotions(games: EpicElement[]): {
-  current: EpicElement[];
-  future: EpicElement[];
-} {
-  const current = games.filter((game) =>
-      game.price?.totalPrice?.discountPrice === 0 &&
-      (game.promotions?.promotionalOffers?.length ?? 0) > 0
-  );
-  const currentTitles = new Set(current.map((game) => game.title));
-
-  const future = games.filter((game) =>
-      !currentTitles.has(game.title) &&
-      game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]
-          ?.discountSetting?.discountPercentage === 0
-  );
-
-  return { current, future };
-}
-
-export function formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame {
-  const slug = resolveEpicSlug(game);
-
-  const isEpicBundle =
-      Array.isArray(game.categories) &&
-      game.categories.some((c) => c?.path === "bundles");
-
-  const path = isEpicBundle ? "bundle" : "p";
-
-  const promo =
-      (future
-          ? game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]
-          : game.promotions?.promotionalOffers?.[0]?.promotionalOffers?.[0]) ?? {};
-
-  return {
-    title: game.title ?? "",
-    platform: Platforms.Epic,
-    // No resolvable slug would mean a bare "/p/" 404, so fall back to the
-    // free-games hub: still claimable, and the content script runs there.
-    link: slug ? `${EPIC_PRODUCT_BASE}/${path}/${slug}` : EPIC_FREE_GAMES_URL,
-    img:
-        game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ||
-        game.keyImages?.[0]?.url ||
-        "/icon/128.png",
-    description: game.description ?? "",
-    startDate: new Date(promo.startDate ?? 0).toISOString(),
-    endDate: new Date(promo.endDate ?? 0).toISOString(),
-    future,
-  };
-}
 
 export const background = {
   // Set by claimGames() during a run so getFreeGamesList's finally block
@@ -477,37 +291,7 @@ export const background = {
       target: { tabId },
       world: "MAIN",
       args: [appId],
-      func: (appId: number) => {
-        const fn =
-            (window as any).addToCart ||
-            (window as any).AddToCart ||
-            (window as any).g_cartAddToCart ||
-            (window as any).g_AddToCart;
-
-        if (typeof fn === "function") {
-          try {
-            fn(appId);
-            return true;
-          } catch (e) {
-            console.error("addToCart call failed:", e);
-            return false;
-          }
-        }
-
-        // fallback: simulate click in MAIN world
-        const el = document.querySelector(
-            `div.btn_addtocart a[href^="javascript:addToCart(${appId})"]`
-        );
-        if (el) {
-          el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
-          el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
-          el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-          return true;
-        }
-
-        console.warn("No addToCart function or button found for", appId);
-        return false;
-      },
+      func: addToCartInMainWorld,
     });
   },
 
@@ -646,39 +430,8 @@ export const background = {
   async getSteamGamesList(shouldClaim: boolean = true) {
     const html = await fetch(STEAM_GAMES_URL).then(r => r.text());
 
-    const root = parse(html);
-
-    const resolveUrl = (u: string) =>
-        u ? new URL(u, 'https://store.steampowered.com').toString() : '';
-
-    const container = root.querySelector('div#search_result_container');
-    const freeGameNodes = container
-        ? container.querySelectorAll('a.search_result_row')
-        : [];
-    if (freeGameNodes.length === 0) return;
-
-    const gamesArr: FreeGame[] = [];
-
-    for (const node of freeGameNodes) {
-      const href = node.getAttribute('href') ?? '';
-      const title = node.querySelector('span.title')?.text?.trim() ?? '';
-
-      const imgEl = node.querySelector('img');
-      const imgRaw =
-          imgEl?.getAttribute('src')?.trim() ||
-          imgEl?.getAttribute('data-src')?.trim() ||
-          imgEl?.getAttribute('data-lazy')?.trim() ||
-          '';
-
-      if (href && title) {
-        gamesArr.push({
-          link: resolveUrl(href),
-          img: imgRaw ? resolveUrl(imgRaw) : '',
-          title,
-          platform: Platforms.Steam,
-        });
-      }
-    }
+    const gamesArr = parseSteamFreeGames(html);
+    if (!gamesArr) return;
 
     const currFreeGames: FreeGame[] = await getStorageItem("steamGames") || [];
     const newGames: FreeGame[] = gamesArr.filter(game =>
