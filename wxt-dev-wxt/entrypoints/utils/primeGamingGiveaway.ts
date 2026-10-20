@@ -1,6 +1,7 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { findButtonByText } from "@/entrypoints/utils/helpers.ts";
+import type { AccessToggle } from "@/entrypoints/utils/optionalAccess.ts";
 
 export const PRIME_GAMING_HOME_URL = "https://gaming.amazon.com/home";
 
@@ -65,7 +66,9 @@ export function parseInternalOffers(offerList: Element, baseUrl: string): FreeGa
 // Legacy redeems a code on Legacy Games with an email the user sets.
 export type ExternalPlatform = "Epic" | "GOG" | "Windows" | "AmazonGames" | "Legacy";
 
-export const EXTERNAL_PLATFORM_STORAGE_KEYS: Record<ExternalPlatform, string> = {
+// Typed as access toggles so each key must have an entry in
+// TOGGLE_ACCESS_GROUPS (the optional hosts it needs).
+export const EXTERNAL_PLATFORM_STORAGE_KEYS: Record<ExternalPlatform, AccessToggle> = {
   Epic: "primeGamingClaimEpic",
   GOG: "primeGamingClaimGog",
   Windows: "primeGamingClaimWindows",
@@ -115,6 +118,13 @@ export function detectExternalPlatform(href: string): ExternalPlatform | null {
     if (slug.endsWith(suffix)) return platform;
   }
   return null;
+}
+
+// The toggle whose optional hosts a Prime Gaming claim needs: a store-linked
+// offer's own toggle (its redeem store's group too), else Prime Gaming's.
+export function primeGameAccessToggle(link: string): AccessToggle {
+  const platform = detectExternalPlatform(link);
+  return platform ? EXTERNAL_PLATFORM_STORAGE_KEYS[platform] : "primeGamingCheck";
 }
 
 // Unlike internal offers, every external offer has its own distinct claims-page

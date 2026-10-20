@@ -9,18 +9,21 @@ import {claimGiveaway, fetchGiveaway, fetchOwnedGameIds, hasRedeemSuccessScreen,
 import {extractRedeemCodeParam, extractRedeemTitleParam, findButtonByAnyText, setControlledInputValue, submitRedeemCode} from "@/entrypoints/utils/redeemCode.ts";
 import {recordRedeemFallback, removePendingRedemption} from "@/entrypoints/utils/pendingRedemptions.ts";
 import {incrementCounter, realClick, wait, waitForElement, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
+import {runtimeContentScriptOptions} from "@/entrypoints/utils/runtimeContentScripts.ts";
 
 // Confirmed live: redeeming is two steps — "Continue" previews the code's
 // product, then a separate "Redeem" button actually adds it to the library.
 const GOG_SUBMIT_LABELS = ['Continue', 'Redeem'];
 const REDEEM_CONFIRM_TIMEOUT_MS = 15_000;
 
+const { matches, runAt, allFrames, registration } = runtimeContentScriptOptions('gog');
+
 // Unlike the Epic and Steam scripts this one never touches the page's DOM — GOG
 // exposes the giveaway as JSON. It exists purely so the requests run in a
 // first-party gog.com context, where the session cookie is guaranteed to be
 // attached; the background service worker cannot promise that.
 export default defineContentScript({
-    matches: ['https://www.gog.com/*'],
+    matches, runAt, allFrames, registration,
     main(_: any) {
         if (!oncePerPageRun('_myGogContentScriptInjected' as keyof Window)) {
             return;

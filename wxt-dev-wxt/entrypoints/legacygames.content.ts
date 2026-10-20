@@ -14,9 +14,12 @@ import {
     normalizeEmail,
     readLegacyRedeemResult,
 } from "@/entrypoints/utils/legacyGamesRedeem.ts";
+import {runtimeContentScriptOptions} from "@/entrypoints/utils/runtimeContentScripts.ts";
 import {incrementCounter, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
 
 const DEFAULT_TITLE = "Legacy Games game";
+
+const { matches, runAt, allFrames, registration } = runtimeContentScriptOptions('legacygames');
 
 // A Legacy-Games-linked Prime Gaming claim (see primegaming.content.ts) lands
 // on the game's promo page with the code in our extCode param. Confirmed
@@ -26,9 +29,9 @@ const DEFAULT_TITLE = "Legacy Games game";
 // back via the submission stashed in extension storage, since the code param
 // doesn't survive the POST. Confirmed live: success lands on a per-game
 // legacygames.com/amazon-luna-x-legacy-games-{game}/ page, an error back on
-// the promo page — hence both patterns.
+// the promo page — hence both patterns in its RUNTIME_CONTENT_SCRIPTS entry.
 export default defineContentScript({
-    matches: ['https://promo.legacygames.com/*', 'https://legacygames.com/amazon-luna-x-legacy-games-*'],
+    matches, runAt, allFrames, registration,
     main(_: any) {
         if (!oncePerPageRun('_myLegacyGamesContentScriptInjected' as keyof Window)) {
             return;

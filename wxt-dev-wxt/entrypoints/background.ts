@@ -10,6 +10,7 @@ import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
 import {
   EXTERNAL_PLATFORM_STORAGE_KEYS,
   PRIME_GAMING_HOME_URL,
+  primeGameAccessToggle,
   readAllowedExternalPlatforms,
 } from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import {
@@ -38,13 +39,26 @@ import {
   withEpicEnglishLocale,
 } from "@/entrypoints/utils/epicGames.ts";
 import {areDatesDifferent, didEnoughTimePass, isActive, shouldCheckPrimeGamingToday} from "@/entrypoints/utils/scheduling.ts";
-import {resolvePlatformToggles} from "@/entrypoints/utils/platformToggles.ts";
+import {PLATFORM_ACCESS_TOGGLES, resolvePlatformToggles} from "@/entrypoints/utils/platformToggles.ts";
+import {
+  AccessGroup,
+  hasAccessFor,
+  PENDING_ACCESS_REQUEST_KEY,
+  readGrantedAccessGroups,
+  toggleToCompleteAfterGrant,
+  TOGGLES_ENABLED_WITH,
+} from "@/entrypoints/utils/optionalAccess.ts";
+import {syncRuntimeContentScripts} from "@/entrypoints/utils/runtimeContentScripts.ts";
 
 const ALARM_NAME = "checkFreeGames";
 let isChecking = false;
 // Distinct from the green claimed-count badge (see handleInstall) so "still
 // working" never reads as "N games claimed".
 const CLAIMING_BADGE_COLOR = "#f0ad4e";
+// Chains every syncContentScripts call: main() and a permissions event can
+// start one at the same moment (a grant wakes the worker), and two overlapping
+// syncs would both try to register the same script id.
+let contentScriptSync: Promise<void> = Promise.resolve();
 
 export const background = {
   // Set by claimGames() during a run so getFreeGamesList's finally block
@@ -66,9 +80,53 @@ export const background = {
       }
     });
 
+    // A grant from the popup, or a revoke from the browser's own extension
+    // settings, changes which runtime content scripts may run.
+    browser.permissions.onAdded.addListener(() => {
+      void this.syncContentScripts();
+      void this.completePendingAccessRequest();
+    });
+    browser.permissions.onRemoved.addListener(() => void this.syncContentScripts());
+
+    // Runtime registrations don't outlive the browser session, so every start
+    // re-syncs. Started before the alarm setup so a claim run, which waits for
+    // it (see runFreeGamesChecks), can't get ahead of it.
+    const contentScriptsSynced = this.syncContentScripts();
+
     // Initialize alarms on startup
     await this.initializeAlarms();
+    await contentScriptsSynced;
+  },
 
+  // Separate so tests can stand in for the permissions API.
+  readGrantedAccess(): Promise<ReadonlySet<AccessGroup>> {
+    return readGrantedAccessGroups(browser.permissions);
+  },
+
+  // Never rejects: a failed sync is logged and the next start or permission
+  // change retries it, rather than breaking background start-up.
+  syncContentScripts(): Promise<void> {
+    contentScriptSync = contentScriptSync
+        .then(async () => syncRuntimeContentScripts(browser.scripting, await this.readGrantedAccess()))
+        .catch((e) => console.error("syncContentScripts failed:", e));
+    return contentScriptSync;
+  },
+
+  // The popup turns a toggle on itself once its request is granted, but it
+  // may have closed while the prompt was open (Firefox closes it), leaving
+  // nobody to — see toggleWithAccess.
+  async completePendingAccessRequest() {
+    try {
+      const pending = await getStorageItem(PENDING_ACCESS_REQUEST_KEY);
+      const toggle = toggleToCompleteAfterGrant(pending, await this.readGrantedAccess(), new Date());
+      if (!toggle) return;
+      for (const enabled of [toggle, ...(TOGGLES_ENABLED_WITH[toggle] ?? [])]) {
+        await setStorageItem(enabled, true);
+      }
+      await setStorageItem(PENDING_ACCESS_REQUEST_KEY, null);
+    } catch (e) {
+      console.error("completePendingAccessRequest failed:", e);
+    }
   },
 
   async handleStartup() {
@@ -189,8 +247,19 @@ export const background = {
     const { steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck, indieGalaWheelCheck } = await getStorageItems([
       "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck", "indieGalaWheelCheck",
     ]);
-    const { claimSteam, claimEpic, claimGog, claimIndieGala, claimPrimeGaming } =
-        resolvePlatformToggles({ steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck });
+    const toggles = resolvePlatformToggles({ steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck });
+    // Flag AND granted hosts (see hasAccessFor): GOG's flag defaults on, but
+    // with no gog access it is effectively off.
+    const granted = await this.readGrantedAccess();
+    const { claimSteam, claimEpic } = toggles;
+    const claimGog = toggles.claimGog && hasAccessFor("gogCheck", granted);
+    const canReachIndieGala = hasAccessFor("indieGalaCheck", granted);
+    const claimIndieGala = toggles.claimIndieGala && canReachIndieGala;
+    const spinWheel = claimIndieGala && indieGalaWheelCheck === true && hasAccessFor("indieGalaWheelCheck", granted);
+    const claimPrimeGaming = toggles.claimPrimeGaming && hasAccessFor("primeGamingCheck", granted);
+    // A claim tab opened before its content script is registered would just
+    // sit there unclaimed.
+    await contentScriptSync;
     try {
       await this.getEpicGamesList(claimEpic);
     } catch (e) {
@@ -219,15 +288,19 @@ export const background = {
     // independent (different storage keys, different tab targets), so the
     // order is purely a preference, not a correctness requirement.
     try {
-      await this.checkIndieGalaWheel(claimIndieGala && indieGalaWheelCheck === true);
+      await this.checkIndieGalaWheel(spinWheel);
     } catch (e) {
       console.error("checkIndieGalaWheel failed:", e);
     }
-    try {
-      await this.getIndieGalaGamesList(claimIndieGala);
-    } catch (e) {
-      console.error("getIndieGalaGamesList failed:", e);
-      if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
+    // Listing only (no claim) still needs the host: without it the browser
+    // blocks the cross-origin fetch, which would just fail every run.
+    if (canReachIndieGala) {
+      try {
+        await this.getIndieGalaGamesList(claimIndieGala);
+      } catch (e) {
+        console.error("getIndieGalaGamesList failed:", e);
+        if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
+      }
     }
     try {
       await this.checkPrimeGaming(claimPrimeGaming, force);
@@ -336,7 +409,7 @@ export const background = {
     } else if (request.action === "claimFreeGames") {
       if (request.data?.loggedIn === false) return;
       const games: FreeGame[] = request.data.freeGames;
-      await this.claimGames(games);
+      await this.claimGames(await this.filterAccessibleGames(games));
     } else if (request.action === "steamAddToCart") {
       const appId = Number(request.data?.appId ?? request.data?.appid);
       const tabId = sender?.tab?.id;
@@ -360,6 +433,16 @@ export const background = {
         }
       }
     }
+  },
+
+  // Content scripts can't read permissions, so the claims-page fallback reports
+  // every offer the toggles allow; one whose redeem store lacks access is
+  // dropped here, for the same reason as in claimPrimeOffers.
+  async filterAccessibleGames(games: FreeGame[]): Promise<FreeGame[]> {
+    const granted = await this.readGrantedAccess();
+    return games.filter((game) =>
+        game.platform !== Platforms.PrimeGaming || hasAccessFor(primeGameAccessToggle(game.link), granted)
+    );
   },
 
   wait(ms: number) {
@@ -578,7 +661,12 @@ export const background = {
     await recordLoginState(Platforms.PrimeGaming, true);
 
     const stored = await getStorageItems(Object.values(EXTERNAL_PLATFORM_STORAGE_KEYS));
-    const unclaimed = selectClaimableOffers(offers, readAllowedExternalPlatforms(stored));
+    // Flag AND access: claiming a GOG-linked offer without gog access would
+    // reveal its Amazon code, then lose it on a gog.com page with no script.
+    const granted = await this.readGrantedAccess();
+    const accessible = [...readAllowedExternalPlatforms(stored)]
+        .filter((platform) => hasAccessFor(EXTERNAL_PLATFORM_STORAGE_KEYS[platform], granted));
+    const unclaimed = selectClaimableOffers(offers, new Set(accessible));
     const now = new Date();
     const attempts = (await getStorageItem<ClaimAttempts>("primeGamingClaimAttempts")) ?? {};
     const toClaim = force ? unclaimed : excludeRecentlyAttempted(unclaimed, attempts, now);
@@ -596,6 +684,14 @@ export const background = {
   // gets, since the popup that triggered this has already closed by the time
   // the click's target="_blank" tab opens.
   async checkPlatformLogin(platform: Platforms) {
+    // The popup only offers "Log in" for an effective platform, but access
+    // can be revoked while it's open.
+    const toggle = PLATFORM_ACCESS_TOGGLES[platform];
+    if (toggle && !hasAccessFor(toggle, await this.readGrantedAccess())) return;
+    // Same as runFreeGamesChecks: a "Log in" click right after a grant must
+    // not open its tab before the content script is registered.
+    await contentScriptSync;
+
     // Mirrors runFreeGamesChecks's per-platform fallback: Epic/Steam/GOG/
     // IndieGala's fast background-fetch path can fail for reasons (including
     // an ambiguous 401) that a real page visit resolves, so a failure here

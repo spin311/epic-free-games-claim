@@ -7,13 +7,16 @@ import { closeCurrentTab, onClaimMessage } from "@/entrypoints/utils/contentMess
 import { detectAndRecordLoginState } from "@/entrypoints/utils/loginState.ts";
 import { claimFreebie, extractProductId, fetchFreebies } from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import { findAdultCheckConfirm, getRndInteger, incrementCounter, realClick, wait, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
+import { runtimeContentScriptOptions } from "@/entrypoints/utils/runtimeContentScripts.ts";
+
+const { matches, runAt, allFrames, registration } = runtimeContentScriptOptions('indiegala');
 
 // Listing is public and normally satisfied by background.ts's direct fetch; this
 // script exists as the fallback path (guaranteed cookies for claiming, and a
 // backup listing path if the background fetch ever fails) — the same role
 // gog.content.ts plays for GOG.
 export default defineContentScript({
-    matches: ['https://freebies.indiegala.com/*'],
+    matches, runAt, allFrames, registration,
     main(_: any) {
         if (!oncePerPageRun('_myIndieGalaContentScriptInjected' as keyof Window)) {
             return;

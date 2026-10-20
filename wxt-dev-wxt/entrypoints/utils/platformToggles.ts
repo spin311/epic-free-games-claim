@@ -1,3 +1,14 @@
+import {Platforms} from "@/entrypoints/enums/platforms.ts";
+import {AccessToggle} from "@/entrypoints/utils/optionalAccess.ts";
+
+// The toggle whose optional hosts each platform's own check needs (see
+// optionalAccess.ts); Steam and Epic use only required hosts.
+export const PLATFORM_ACCESS_TOGGLES: Partial<Record<Platforms, AccessToggle>> = {
+  [Platforms.GOG]: "gogCheck",
+  [Platforms.IndieGala]: "indieGalaCheck",
+  [Platforms.PrimeGaming]: "primeGamingCheck",
+};
+
 // GOG defaults ON for existing behavior; IndieGala and Prime Gaming default
 // OFF on a fresh install — so an unset ("never stored") value must resolve
 // opposite ways for the two groups. This is a pure, testable extraction of

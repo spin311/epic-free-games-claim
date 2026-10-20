@@ -29,14 +29,14 @@ import { buildRedeemUrl } from "@/entrypoints/utils/gogGiveaway.ts";
 import { buildMicrosoftRedeemUrl } from "@/entrypoints/utils/microsoftRedeem.ts";
 import { buildLegacyRedeemUrl, findLegacyRedeemUrl } from "@/entrypoints/utils/legacyGamesRedeem.ts";
 import { getRndInteger, incrementCounter, realClick, wait, waitForElement, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
+import { runtimeContentScriptOptions } from "@/entrypoints/utils/runtimeContentScripts.ts";
+
+const { matches, runAt, allFrames, registration } = runtimeContentScriptOptions('primegaming');
 
 export default defineContentScript({
-    // gaming.amazon.com/home now redirects to luna.amazon.com/claims/home — the
-    // page that actually renders the offer list and per-game claim links lives
-    // on luna.amazon.com, so both hosts must be matched for the script to ever
-    // get injected (same reasoning as epic.content.ts matching both of Epic's
-    // product-page hosts).
-    matches: ['https://gaming.amazon.com/*', 'https://luna.amazon.com/*'],
+    // Matches both gaming.amazon.com and luna.amazon.com — see its entry in
+    // RUNTIME_CONTENT_SCRIPTS.
+    matches, runAt, allFrames, registration,
     main(_: any) {
         if (!oncePerPageRun('_myPrimeGamingContentScriptInjected' as keyof Window)) {
             return;

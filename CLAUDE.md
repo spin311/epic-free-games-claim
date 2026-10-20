@@ -53,17 +53,34 @@ avoid an esbuild/jsdom `TextEncoder` clash. Test files live next to sources as `
   the popup's pending-redemptions list
 - `popup/` — React popup UI (`App.tsx`, `main.tsx`)
 - `components/` — React components (Settings, GamesList, GameCard, FrequencySelect, …)
-- `hooks/useStorage.ts` — typed wrapper over `browser.storage`
+- `hooks/useStorage.ts` — typed wrapper over `browser.storage`; `hooks/useOptionalAccess.ts` — granted
+  optional-host groups, live, plus the request-on-enable toggle helper
 - `types/` — shared TypeScript types
 - `enums/` — `claimFrequency`, `platforms`, `activeTabs`, `storageValues`
 - `utils/` — `helpers.ts`, `oncePerPageRun.ts`, `contentMessaging.ts`, `badge.ts`,
   `loginState.ts`, `steamReviews.ts`, `gogGiveaway.ts`, `indieGalaGiveaway.ts`,
   `primeGamingGiveaway.ts`, `primeGamingApi.ts` (background Luna GraphQL lookup: Prime Gaming is
   checked without opening a tab, signed-out / no-Prime accounts included; the claims-page tab
-  is only a fallback), `legacyGamesRedeem.ts` (Legacy Games promo-form helpers)
+  is only a fallback), `legacyGamesRedeem.ts` (Legacy Games promo-form helpers),
+  `optionalAccess.ts` / `runtimeContentScripts.ts` (optional host access — see `wxt.config.ts` below)
 - `wxt.config.ts` — manifest, permissions, browser targets. `@/*` aliases the project root.
   `declarativeNetRequestWithHostAccess` exists only so the background lookup can send Luna's
-  Origin on its own GraphQL request (Luna rejects the extension origin with 403).
+  Origin on its own GraphQL request (Luna rejects the extension origin with 403); it carries no
+  install warning, so it stays required.
+  **Optional host access:** `host_permissions` holds only the two hosts 2.6.1 shipped with (Steam,
+  Epic's API) — any new install-time host makes Chrome disable the extension on update until the
+  user approves it. Every other host is an optional group in `utils/optionalAccess.ts`
+  (`ACCESS_GROUP_ORIGINS`; `TOGGLE_ACCESS_GROUPS` maps each storage toggle to the groups it needs),
+  requested from the popup (`hooks/useOptionalAccess.ts`) when the user turns that toggle on. A
+  feature is effective only when its flag is on **and** its groups are granted — background and
+  popup both apply that rule; never gate on the flag alone. The gog / indiegala / indiegalaWheel /
+  primegaming / microsoft / legacygames content scripts are `registration: "runtime"` (options in
+  `utils/runtimeContentScripts.ts`); the background registers each while its group is granted
+  (`syncContentScripts`, on every start and on `permissions.onAdded`/`onRemoved`). A
+  `build:manifestGenerated` hook strips the optional origins and runtime matches from
+  `host_permissions` and declares them as `optional_host_permissions` (MV3) or
+  `optional_permissions` (MV2/Firefox). New hosts go in a group, not `host_permissions`; check
+  `dist/chrome-mv3/manifest.json` after a build.
 
 ## Conventions
 
@@ -74,4 +91,5 @@ avoid an esbuild/jsdom `TextEncoder` clash. Test files live next to sources as `
 - **PR workflow:** feature branches (e.g. `feat/<topic>`) merged via PR with **merge commits**
   (history is not squashed).
 - **Browser APIs:** use the `browser` namespace from `wxt/browser` (not raw `chrome`).
-- Extension `permissions`/`host_permissions` live in `wxt.config.ts` — keep them minimal.
+- Extension `permissions`/`host_permissions` live in `wxt.config.ts` — keep them minimal; new
+  hosts are optional (see the `wxt.config.ts` bullet above).

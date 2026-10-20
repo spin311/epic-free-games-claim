@@ -15,6 +15,7 @@ import {
   parseInternalOffers,
   parseOfferCard,
   PRIME_GAMING_HOME_URL,
+  primeGameAccessToggle,
   readAllowedExternalPlatforms,
   readOfferTitle,
 } from './primeGamingGiveaway';
@@ -212,6 +213,17 @@ const GOG_EXTERNAL_CARD = `
   </a>
   <div class="item-card-details__body__primary">Weakless</div>
 </div>`;
+
+describe('primeGameAccessToggle', () => {
+  it("maps a store-linked offer to its redeem store's toggle", () => {
+    expect(primeGameAccessToggle('https://luna.amazon.com/claims/weakless-gog/dp/amzn1.pg.item.1?ingress=amzn')).toBe('primeGamingClaimGog');
+    expect(primeGameAccessToggle('https://luna.amazon.com/claims/doom-eternal-microsoft/dp/amzn1.pg.item.2')).toBe('primeGamingClaimWindows');
+  });
+
+  it('maps an internal offer (the shared claims page) to Prime Gaming itself', () => {
+    expect(primeGameAccessToggle(PRIME_GAMING_HOME_URL)).toBe('primeGamingCheck');
+  });
+});
 
 describe('detectExternalPlatform', () => {
   it('detects Epic from the claim href\'s slug suffix', () => {

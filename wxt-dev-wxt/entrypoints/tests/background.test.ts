@@ -11,8 +11,19 @@ import { getStorageItem, setStorageItem } from '../hooks/useStorage';
 import { INDIEGALA_WHEEL_URL } from '../utils/indieGalaWheel';
 import { ExternalPlatform, PRIME_GAMING_HOME_URL } from '../utils/primeGamingGiveaway';
 import { GOG_HOME_URL } from '../utils/gogGiveaway';
+import { AccessGroup } from '../utils/optionalAccess';
 
+// fake-browser implements neither `permissions` nor `scripting`. Every optional
+// host reads as granted by default, so the suites below run with the full
+// access those hosts had while they were still required; the access-specific
+// tests narrow it per runner via readGrantedAccess.
+beforeEach(() => {
+  vi.spyOn(fakeBrowser.permissions, 'contains').mockResolvedValue(true as never);
+});
 
+function withAccess(runner: { readGrantedAccess: () => Promise<ReadonlySet<AccessGroup>> }, groups: AccessGroup[]) {
+  runner.readGrantedAccess = async () => new Set(groups);
+}
 
 describe('handleInstall', () => {
   beforeEach(() => {
@@ -641,5 +652,267 @@ describe('checkIndieGalaWheel', () => {
     };
     await runner.checkIndieGalaWheel(true);
     expect(opened).toEqual([INDIEGALA_WHEEL_URL]);
+  });
+});
+
+// A feature is effective only when its flag is on AND its optional hosts are
+// granted. Updating from a release without these hosts leaves every flag as it
+// was but grants nothing, so the flag alone must never be enough.
+describe('optional host access', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  function checksRunner() {
+    const runner = Object.create(background);
+    runner.getEpicGamesList = async () => {};
+    runner.getSteamGamesList = async () => {};
+    const calls: Record<string, unknown[]> = { gog: [], wheel: [], indieGala: [], prime: [] };
+    runner.getGogGamesList = async (shouldClaim: boolean) => { calls.gog.push(shouldClaim); };
+    runner.checkIndieGalaWheel = async (shouldSpin: boolean) => { calls.wheel.push(shouldSpin); };
+    runner.getIndieGalaGamesList = async (shouldClaim: boolean) => { calls.indieGala.push(shouldClaim); };
+    runner.checkPrimeGaming = async (shouldCheck: boolean) => { calls.prime.push(shouldCheck); };
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+    return { runner, calls, opened };
+  }
+
+  it('runFreeGamesChecks skips GOG without gog access, even though its toggle defaults on', async () => {
+    const { runner, calls, opened } = checksRunner();
+    withAccess(runner, []);
+
+    await runner.runFreeGamesChecks();
+
+    expect(calls.gog).toEqual([]);
+    expect(opened).toEqual([]);
+  });
+
+  it('runFreeGamesChecks neither spins, lists nor claims IndieGala without indieGala access', async () => {
+    await setStorageItem('indieGalaCheck', true);
+    await setStorageItem('indieGalaWheelCheck', true);
+    const { runner, calls, opened } = checksRunner();
+    withAccess(runner, ['gog', 'primeGaming']);
+
+    await runner.runFreeGamesChecks();
+
+    expect(calls.wheel).toEqual([false]);
+    expect(calls.indieGala).toEqual([]);
+    expect(opened).toEqual([]);
+  });
+
+  it('runFreeGamesChecks does not check Prime Gaming without primeGaming access', async () => {
+    await setStorageItem('primeGamingCheck', true);
+    const { runner, calls } = checksRunner();
+    withAccess(runner, ['gog', 'indieGala']);
+
+    await runner.runFreeGamesChecks();
+
+    expect(calls.prime).toEqual([false]);
+  });
+
+  it('runFreeGamesChecks runs every enabled platform once its access is granted', async () => {
+    await setStorageItem('gogCheck', true);
+    await setStorageItem('indieGalaCheck', true);
+    await setStorageItem('indieGalaWheelCheck', true);
+    await setStorageItem('primeGamingCheck', true);
+    const { runner, calls } = checksRunner();
+    withAccess(runner, ['gog', 'indieGala', 'primeGaming']);
+
+    await runner.runFreeGamesChecks();
+
+    expect(calls).toEqual({ gog: [true], wheel: [true], indieGala: [true], prime: [true] });
+  });
+
+  // Claiming reveals the Amazon code; without gog access there is no script on
+  // gog.com to redeem it, so the code would be spent and lost.
+  it('claimPrimeOffers skips store-linked offers whose redeem store lacks access', async () => {
+    await setStorageItem('primeGamingClaimGog', true);
+    await setStorageItem('primeGamingClaimWindows', true);
+    await setStorageItem('primeGamingClaimLegacy', true);
+    await setStorageItem('primeGamingClaimEpic', true);
+    const runner = Object.create(background);
+    withAccess(runner, ['primeGaming', 'legacyGames']);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+
+    await runner.claimPrimeOffers([
+      primeOffer('Zoria', false, 'GOG'),
+      primeOffer('Halo', false, 'Windows'),
+      primeOffer('Cryptex', false, 'Legacy'),
+      primeOffer('Hue', false, 'Epic'),
+      primeOffer('Wall World 2', false, 'AmazonGames'),
+    ]);
+
+    expect(claimed).toEqual([['Cryptex', 'Hue', 'Wall World 2']]);
+  });
+
+  it('claimFreeGames drops claims-page Prime offers whose redeem store lacks access', async () => {
+    const runner = Object.create(background);
+    withAccess(runner, ['primeGaming']);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+    const game = (title: string, platform: Platforms, link: string) => ({ title, platform, link, img: '' });
+
+    await runner.handleMessage({
+      target: 'background',
+      action: 'claimFreeGames',
+      data: {
+        loggedIn: true,
+        freeGames: [
+          game('Internal', Platforms.PrimeGaming, PRIME_GAMING_HOME_URL),
+          game('Zoria', Platforms.PrimeGaming, 'https://luna.amazon.com/claims/zoria-gog/dp/abc?ingress=amzn'),
+          game('Hue', Platforms.PrimeGaming, 'https://luna.amazon.com/claims/hue-epic/dp/def'),
+          game('Doom', Platforms.Epic, 'https://store.epicgames.com/en-US/p/doom'),
+        ],
+      },
+    });
+
+    expect(claimed).toEqual([['Internal', 'Hue', 'Doom']]);
+  });
+
+  it('claimFreeGames claims nothing from Prime Gaming once its own access is gone', async () => {
+    const runner = Object.create(background);
+    withAccess(runner, []);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+
+    await runner.handleMessage({
+      target: 'background',
+      action: 'claimFreeGames',
+      data: { loggedIn: true, freeGames: [{ title: 'Internal', platform: Platforms.PrimeGaming, link: PRIME_GAMING_HOME_URL, img: '' }] },
+    });
+
+    expect(claimed.flat()).toEqual([]);
+  });
+
+  it('checkPlatformLogin does nothing for a platform without access', async () => {
+    const runner = Object.create(background);
+    withAccess(runner, []);
+    runner.getGogGamesList = async () => { throw new Error('must not check'); };
+    runner.checkPrimeGaming = async () => { throw new Error('must not check'); };
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await runner.checkPlatformLogin(Platforms.GOG);
+    await runner.checkPlatformLogin(Platforms.PrimeGaming);
+
+    expect(opened).toEqual([]);
+  });
+
+  it('checkPlatformLogin still checks Steam and Epic, which need no optional access', async () => {
+    const runner = Object.create(background);
+    withAccess(runner, []);
+    let calls = 0;
+    runner.getSteamGamesList = async () => { calls++; };
+
+    await runner.checkPlatformLogin(Platforms.Steam);
+
+    expect(calls).toBe(1);
+  });
+});
+
+describe('syncContentScripts', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  function stubScripting(registered: { id: string }[] = []) {
+    const registeredIds: string[][] = [];
+    vi.spyOn(fakeBrowser.scripting, 'getRegisteredContentScripts').mockResolvedValue(registered as never);
+    vi.spyOn(fakeBrowser.scripting, 'registerContentScripts').mockImplementation((async (scripts: { id: string }[]) => {
+      registeredIds.push(scripts.map((script) => script.id));
+    }) as never);
+    vi.spyOn(fakeBrowser.scripting, 'unregisterContentScripts').mockResolvedValue(undefined as never);
+    return registeredIds;
+  }
+
+  it('registers the runtime content scripts of the granted groups', async () => {
+    const registeredIds = stubScripting();
+    const runner = Object.create(background);
+    withAccess(runner, ['gog', 'microsoft']);
+
+    await runner.syncContentScripts();
+
+    expect(registeredIds).toEqual([['gog', 'microsoft']]);
+  });
+
+  // Called from main() and from permissions.onAdded at once when a grant wakes
+  // the worker: overlapping syncs would both register the same id and fail.
+  it('serializes overlapping syncs so a script is never registered twice', async () => {
+    const registeredIds = stubScripting();
+    const runner = Object.create(background);
+    withAccess(runner, ['gog']);
+    let registered: { id: string }[] = [];
+    vi.mocked(fakeBrowser.scripting.getRegisteredContentScripts).mockImplementation((async () => registered) as never);
+    vi.mocked(fakeBrowser.scripting.registerContentScripts).mockImplementation((async (scripts: { id: string }[]) => {
+      registeredIds.push(scripts.map((script) => script.id));
+      registered = [...registered, ...scripts];
+    }) as never);
+
+    await Promise.all([runner.syncContentScripts(), runner.syncContentScripts()]);
+
+    expect(registeredIds).toEqual([['gog']]);
+  });
+
+  it('logs a failing sync instead of rejecting, so background start-up carries on', async () => {
+    vi.spyOn(fakeBrowser.scripting, 'getRegisteredContentScripts').mockRejectedValue(new Error('scripting unavailable') as never);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const runner = Object.create(background);
+    withAccess(runner, ['gog']);
+
+    await expect(runner.syncContentScripts()).resolves.toBeUndefined();
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
+  });
+});
+
+describe('completePendingAccessRequest', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  // The popup may close while its prompt is open (Firefox does), so nothing
+  // there is left to turn the flag on when the grant lands.
+  it('turns on the toggle whose request the grant answered, and forgets the request', async () => {
+    await setStorageItem('pendingAccessRequest', { toggle: 'primeGamingClaimGog', requestedAt: new Date().toISOString() });
+    const runner = Object.create(background);
+    withAccess(runner, ['primeGaming', 'gog']);
+
+    await runner.completePendingAccessRequest();
+
+    expect(await getStorageItem<boolean>('primeGamingClaimGog')).toBe(true);
+    expect(await getStorageItem('pendingAccessRequest')).toBeNull();
+  });
+
+  it('leaves the toggle alone while its hosts are still not all granted', async () => {
+    await setStorageItem('pendingAccessRequest', { toggle: 'primeGamingClaimGog', requestedAt: new Date().toISOString() });
+    const runner = Object.create(background);
+    withAccess(runner, ['gog']);
+
+    await runner.completePendingAccessRequest();
+
+    expect(await getStorageItem<boolean>('primeGamingClaimGog')).toBeNull();
+  });
+
+  // The popup turns the wheel on with IndieGala; a request finished by the
+  // background must do the same.
+  it('also turns on the toggles enabled together with the requested one', async () => {
+    await setStorageItem('pendingAccessRequest', { toggle: 'indieGalaCheck', requestedAt: new Date().toISOString() });
+    const runner = Object.create(background);
+    withAccess(runner, ['indieGala']);
+
+    await runner.completePendingAccessRequest();
+
+    expect(await getStorageItem<boolean>('indieGalaCheck')).toBe(true);
+    expect(await getStorageItem<boolean>('indieGalaWheelCheck')).toBe(true);
+  });
+
+  it('does nothing without a pending request', async () => {
+    const runner = Object.create(background);
+    withAccess(runner, ['primeGaming', 'gog']);
+
+    await runner.completePendingAccessRequest();
+
+    expect(await getStorageItem<boolean>('primeGamingClaimGog')).toBeNull();
   });
 });
