@@ -6,8 +6,8 @@ import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts"
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 
 function GogSettings() {
-    // Defaults on, but shows (and runs) only once gog.com access is granted.
-    const [gogCheck, setGogCheck] = useStorage<boolean>("gogCheck", true);
+    // Off by default, and shows (and runs) only once gog.com access is granted.
+    const [gogCheck, setGogCheck] = useStorage<boolean>("gogCheck", false);
     const [gogLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.GOG], null);
     const access = useOptionalAccess();
     const isGogOn = access.isOn("gogCheck", gogCheck);

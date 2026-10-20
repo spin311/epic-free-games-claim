@@ -2,7 +2,7 @@ import Checkbox from "@/entrypoints/components/Checkbox.tsx";
 import LoginStatus from "@/entrypoints/components/LoginStatus.tsx";
 import { useStorage } from "@/entrypoints/hooks/useStorage.ts";
 import { useOptionalAccess } from "@/entrypoints/hooks/useOptionalAccess.ts";
-import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts";
+import { LOGIN_STATE_KEYS, LoginState, PRIME_MEMBERSHIP_KEY } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { EXTERNAL_PLATFORM_DEFAULTS, EXTERNAL_PLATFORM_STORAGE_KEYS } from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import { LEGACY_EMAIL_STORAGE_KEY, normalizeEmail } from "@/entrypoints/utils/legacyGamesRedeem.ts";
@@ -34,11 +34,16 @@ function PrimeGamingSettings() {
     const [legacyEmail, setLegacyEmail] = useStorage<string>(LEGACY_EMAIL_STORAGE_KEY, "");
     const isLegacyEmailInvalid = legacyEmail.trim() !== "" && normalizeEmail(legacyEmail) === null;
     const [primeGamingLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.PrimeGaming], null);
+    const [hasPrime] = useStorage<boolean | null>(PRIME_MEMBERSHIP_KEY, null);
+    const primeWarning = hasPrime === false
+        ? { label: "No Prime", title: "Signed in, but this Amazon account has no Prime membership, so Prime Gaming offers can't be claimed." }
+        : null;
 
     return (
         <div className="platform-group">
             <Checkbox name="Prime Gaming" checked={isPrimeOn} onChange={e => access.setWithAccess("primeGamingCheck", e.target.checked, setPrimeGamingCheck)}
-                      trailing={isPrimeOn && <LoginStatus state={primeGamingLoggedIn} loginUrl="https://gaming.amazon.com/home" platform={Platforms.PrimeGaming}/>}/>
+                      trailing={isPrimeOn && <LoginStatus state={primeGamingLoggedIn} loginUrl="https://gaming.amazon.com/home" platform={Platforms.PrimeGaming}
+                                                   accountWarning={primeWarning}/>}/>
             {isPrimeOn && (
                 <div className="sub-options">
                     <p className="hint">Claim offers that go to:</p>

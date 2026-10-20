@@ -7,6 +7,7 @@ import {
   excludeCollectedOffers,
   findGetGameButton,
   hasPrimeMembership,
+  markPrimeGameClaimed,
   isCollectedOfferCard,
   isInternalOfferCard,
   isOfferDetailsPage,
@@ -649,5 +650,31 @@ describe('claimOfferCard', () => {
     expect(outcome).toBe('failed');
     expect(clickFn).not.toHaveBeenCalled();
     expect(waitFn).not.toHaveBeenCalled();
+  });
+});
+
+// The popup's list is written before the claim tabs run, so without this a
+// just-claimed offer kept showing as unclaimed until the next check.
+describe('markPrimeGameClaimed', () => {
+  const LINK = 'https://luna.amazon.com/claims/warbreeds-gog/dp/amzn1.pg.item.886d';
+  const games: FreeGame[] = [
+    { title: 'WarBreeds', platform: Platforms.PrimeGaming, link: LINK, img: '', claimed: false },
+    { title: 'Conarium', platform: Platforms.PrimeGaming, link: 'https://luna.amazon.com/claims/conarium-gog/dp/amzn1.pg.item.82e2', img: '', claimed: false },
+  ];
+
+  it('marks the offer whose claim page this is, from its /details success page too', () => {
+    const updated = markPrimeGameClaimed(games, `${LINK}/details?ingress=amzn`);
+    expect(updated.map((game) => game.claimed)).toEqual([true, false]);
+  });
+
+  it('returns a new list and leaves the original untouched', () => {
+    const updated = markPrimeGameClaimed(games, LINK);
+    expect(updated).not.toBe(games);
+    expect(games[0].claimed).toBe(false);
+  });
+
+  it('leaves the list as it was when no offer matches', () => {
+    expect(markPrimeGameClaimed(games, 'https://luna.amazon.com/claims/hue-epic/dp/x').map((game) => game.claimed))
+        .toEqual([false, false]);
   });
 });

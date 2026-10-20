@@ -23,7 +23,7 @@ import {
   selectClaimableOffers,
   updateClaimAttempts,
 } from "@/entrypoints/utils/primeGamingApi.ts";
-import {LoginState, recordLoginState} from "@/entrypoints/utils/loginState.ts";
+import {LoginState, PRIME_MEMBERSHIP_KEY, recordLoginState, recordPrimeMembership} from "@/entrypoints/utils/loginState.ts";
 import {
   setBadgeBackgroundColor as setActionBadgeBackgroundColor,
   setBadgeText as setActionBadgeText,
@@ -248,8 +248,8 @@ export const background = {
       "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck", "indieGalaWheelCheck",
     ]);
     const toggles = resolvePlatformToggles({ steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck });
-    // Flag AND granted hosts (see hasAccessFor): GOG's flag defaults on, but
-    // with no gog access it is effectively off.
+    // Flag AND granted hosts (see hasAccessFor): a flag left on while its
+    // hosts aren't granted (e.g. revoked, or set before an update) is off.
     const granted = await this.readGrantedAccess();
     const { claimSteam, claimEpic } = toggles;
     const claimGog = toggles.claimGog && hasAccessFor("gogCheck", granted);
@@ -613,6 +613,8 @@ export const background = {
     }
     if (lookup?.status === "signed-out") {
       await recordLoginState(Platforms.PrimeGaming, false);
+      // Whoever signs in next may be a different account.
+      await setStorageItem(PRIME_MEMBERSHIP_KEY, null);
       // An explicit user action still gets the page's own verdict below: the
       // worker's cookie jar can differ from the tabs' (e.g. first-party
       // isolation), and this way that never locks Prime Gaming out for good.
@@ -621,6 +623,7 @@ export const background = {
     if (lookup?.status === "no-prime") {
       console.warn("Prime Gaming: signed in without a Prime membership; nothing to claim");
       await recordLoginState(Platforms.PrimeGaming, true);
+      await recordPrimeMembership(false);
       return;
     }
     // Outside the try on purpose: a failure here may come after claim tabs
@@ -657,8 +660,9 @@ export const background = {
     // Same as Epic/Steam: persisted regardless, so the popup lists what's live.
     await setStorageItem("primeGamingGames", listed);
     // loadPrimeOffers only succeeds with per-user claim state, which only a
-    // signed-in session gets.
+    // signed-in session gets; and an "ok" lookup is never a no-Prime one.
     await recordLoginState(Platforms.PrimeGaming, true);
+    await recordPrimeMembership(true);
 
     const stored = await getStorageItems(Object.values(EXTERNAL_PLATFORM_STORAGE_KEYS));
     // Flag AND access: claiming a GOG-linked offer without gog access would

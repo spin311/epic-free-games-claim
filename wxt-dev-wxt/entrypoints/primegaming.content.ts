@@ -3,9 +3,9 @@ import { browser } from "wxt/browser";
 import { FreeGamesResponse } from "@/entrypoints/types/freeGamesResponse.ts";
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
-import { getStorageItems, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
+import { getStorageItem, getStorageItems, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
 import { closeCurrentTab, onClaimMessage } from "@/entrypoints/utils/contentMessaging.ts";
-import { detectAndRecordLoginState } from "@/entrypoints/utils/loginState.ts";
+import { detectAndRecordLoginState, recordPrimeMembership } from "@/entrypoints/utils/loginState.ts";
 import {
     claimExternalOfferPage,
     claimOfferCard,
@@ -17,6 +17,7 @@ import {
     findGetGameButton,
     hasPrimeMembership,
     isInternalOfferCard,
+    markPrimeGameClaimed,
     isOfferDetailsPage,
     parseExternalOffers,
     parseInternalOffers,
@@ -76,9 +77,11 @@ export default defineContentScript({
             }
             if (!hasPrimeMembership(document)) {
                 console.warn("[primegaming] no Prime membership detected; skipping");
+                await recordPrimeMembership(false);
                 await closeCurrentTab();
                 return;
             }
+            await recordPrimeMembership(true);
 
             const offerList = await openGamesTabAndGetOfferList();
             if (!offerList) {
@@ -198,6 +201,7 @@ export default defineContentScript({
             // would otherwise be left open as if it were account linking.
             if (!hasPrimeMembership(document)) {
                 console.warn("[primegaming] no Prime membership detected; not claiming");
+                await recordPrimeMembership(false);
                 await closeCurrentTab();
                 return;
             }
@@ -225,6 +229,8 @@ export default defineContentScript({
                 wait,
                 () => location.href,
             );
+
+            if (outcome === "claimed" || outcome === "already-claimed") await markClaimedInPopupList();
 
             // Both are silent no-ops by design — never thrown, so one unlinked
             // platform can't block the rest of the claim run.
@@ -271,6 +277,17 @@ export default defineContentScript({
                     return;
                 }
                 location.href = redeemUrl;
+            }
+        }
+
+        // Cosmetic only (the popup's "Claimed" badge), so it never gets in
+        // the way of the claim itself.
+        async function markClaimedInPopupList() {
+            try {
+                const games = (await getStorageItem<FreeGame[]>("primeGamingGames")) ?? [];
+                await setStorageItem("primeGamingGames", markPrimeGameClaimed(games, location.href));
+            } catch (error: unknown) {
+                console.warn("[primegaming] couldn't mark the claimed offer in the popup list:", error);
             }
         }
 

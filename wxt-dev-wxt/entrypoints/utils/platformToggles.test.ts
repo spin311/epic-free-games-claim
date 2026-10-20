@@ -9,25 +9,28 @@ describe('resolvePlatformToggles', () => {
   // (a real bug this caught) must still resolve to "enabled" for Steam/Epic
   // despite getEpicGamesList/getSteamGamesList's own `= true` default params
   // never actually firing for a raw `null` argument.
-  it('treats Steam, Epic, and GOG as enabled by default (unset) but IndieGala and Prime Gaming as disabled', () => {
+  // GOG is opt-in like the other optional-access platforms: defaulting it on
+  // meant that granting gog.com for GOG-linked Prime offers also switched on
+  // GOG giveaway claiming as a side effect.
+  it('treats Steam and Epic as enabled by default (unset) but GOG, IndieGala and Prime Gaming as disabled', () => {
     expect(resolvePlatformToggles({})).toEqual({
       claimSteam: true,
       claimEpic: true,
-      claimGog: true,
+      claimGog: false,
       claimIndieGala: false,
       claimPrimeGaming: false,
     });
   });
 
-  it('respects an explicit false for Steam, Epic, and GOG', () => {
-    const result = resolvePlatformToggles({ steamCheck: false, epicCheck: false, gogCheck: false });
+  it('respects an explicit false for Steam and Epic', () => {
+    const result = resolvePlatformToggles({ steamCheck: false, epicCheck: false });
     expect(result.claimSteam).toBe(false);
     expect(result.claimEpic).toBe(false);
-    expect(result.claimGog).toBe(false);
   });
 
-  it('respects an explicit true for IndieGala and Prime Gaming', () => {
-    const result = resolvePlatformToggles({ indieGalaCheck: true, primeGamingCheck: true });
+  it('respects an explicit true for GOG, IndieGala and Prime Gaming', () => {
+    const result = resolvePlatformToggles({ gogCheck: true, indieGalaCheck: true, primeGamingCheck: true });
+    expect(result.claimGog).toBe(true);
     expect(result.claimIndieGala).toBe(true);
     expect(result.claimPrimeGaming).toBe(true);
   });

@@ -76,6 +76,15 @@ export const EXTERNAL_PLATFORM_STORAGE_KEYS: Record<ExternalPlatform, AccessTogg
   Legacy: "primeGamingClaimLegacy",
 };
 
+// For the popup: where a claimed offer ends up.
+export const EXTERNAL_PLATFORM_STORE_NAMES: Record<ExternalPlatform, string> = {
+  Epic: "Epic Games Store",
+  GOG: "GOG",
+  Windows: "Microsoft Store",
+  AmazonGames: "Amazon Games App",
+  Legacy: "Legacy Games",
+};
+
 // Confirmed live (Oct 2026): every listed offer goes to one of these stores,
 // so Prime Gaming with none of them on claims nothing at all. Amazon Games App
 // starts on — it claims into Amazon's own library, needing no other account —
@@ -285,6 +294,19 @@ export function extractRedeemCode(root: Document | HTMLElement): string | null {
 export function findGetGameButton(doc: Document): HTMLButtonElement | null {
   return doc.querySelector<HTMLButtonElement>('button[data-a-target="buy-box_call-to-action"]')
       ?? findButtonByText(doc, 'Get game');
+}
+
+function claimPagePath(url: string): string {
+  return new URL(url).pathname.replace(/\/$/, '').replace(/\/details$/, '');
+}
+
+// The popup's list is written before the claim tabs run, so a claim (or an
+// offer found already collected) marks its own entry rather than leaving it
+// unclaimed until the next check. `claimPageUrl` may be the offer page or its
+// /details success page.
+export function markPrimeGameClaimed(games: readonly FreeGame[], claimPageUrl: string): FreeGame[] {
+  const path = claimPagePath(claimPageUrl);
+  return games.map((game) => (claimPagePath(game.link) === path ? { ...game, claimed: true } : game));
 }
 
 // Read before claiming: the success page a claim routes to replaces the h1

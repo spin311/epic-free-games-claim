@@ -17,7 +17,7 @@ import {
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
 
 // Shapes below mirror a live OffersContext response (Oct 2026), trimmed.
-function item(overrides: { title?: string; slug?: string; id?: string; eligibility?: unknown[] } = {}) {
+function item(overrides: { title?: string; slug?: string; id?: string; eligibility?: unknown[]; endTime?: string } = {}) {
   const id = overrides.id ?? 'amzn1.pg.item.b095156c-1207-49f0-801a-75ac03b74def';
   const slug = overrides.slug ?? 'doom-gog';
   return {
@@ -28,6 +28,7 @@ function item(overrides: { title?: string; slug?: string; id?: string; eligibili
       cardMedia: { defaultMedia: { src1x: 'https://m.media-amazon.com/images/I/719F0.jpg' } },
     },
     offers: (overrides.eligibility ?? [{ offerState: 'LIVE', isClaimed: false }]).map((eligibility) => ({
+      endTime: overrides.endTime,
       offerSelfConnection: { eligibility },
     })),
   };
@@ -79,6 +80,8 @@ describe('parsePrimeOffers', () => {
         // The content script's details-page flow lives on luna.amazon.com.
         link: 'https://luna.amazon.com/claims/doom-gog/dp/amzn1.pg.item.b095156c-1207-49f0-801a-75ac03b74def',
         img: 'https://m.media-amazon.com/images/I/719F0.jpg',
+        claimed: true,
+        store: 'GOG',
       },
       isClaimed: true,
       isLive: true,
@@ -142,6 +145,39 @@ describe('parsePrimeOffers', () => {
 
   it('throws on an unexpected payload shape so the caller can fall back', () => {
     expect(() => parsePrimeOffers({ errors: [{ message: 'nope' }] })).toThrow();
+  });
+});
+
+// The popup lists every live offer, collected or not — without these, an
+// already-claimed offer looked exactly like one still waiting to be claimed.
+describe('parsePrimeOffers popup details', () => {
+  it('carries Amazon\'s claim state and the live offer\'s end date', () => {
+    const [claimed, open] = parsePrimeOffers(payload([
+      item({ title: 'DOOM', eligibility: [{ offerState: 'LIVE', isClaimed: true }], endTime: '2026-11-04T18:00:00Z' }),
+      item({ title: 'WarBreeds', slug: 'warbreeds-gog', eligibility: [{ offerState: 'LIVE', isClaimed: false }] }),
+    ]));
+
+    expect(claimed.game).toMatchObject({ claimed: true, endDate: '2026-11-04T18:00:00.000Z' });
+    expect(open.game.claimed).toBe(false);
+    expect(open.game.endDate).toBeUndefined();
+  });
+
+  it('leaves the claim state unset when Amazon reported none', () => {
+    const [offer] = parsePrimeOffers(payload([item({ eligibility: [null] })]));
+    expect(offer.game.claimed).toBeUndefined();
+  });
+
+  it('names the store each offer goes to', () => {
+    const stores = parsePrimeOffers(payload([
+      item({ slug: 'caravan-sandwitch-aga' }),
+      item({ slug: 'hue-epic' }),
+      item({ slug: 'doom-gog' }),
+      item({ slug: 'doom-eternal-microsoft' }),
+      item({ slug: 'the-da-vinci-cryptex-legacy' }),
+      item({ slug: 'some-new-thing' }),
+    ])).map((offer) => offer.game.store);
+
+    expect(stores).toEqual(['Amazon Games App', 'Epic Games Store', 'GOG', 'Microsoft Store', 'Legacy Games', undefined]);
   });
 });
 

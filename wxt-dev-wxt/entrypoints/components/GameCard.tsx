@@ -2,11 +2,12 @@ import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 
 function GameCard({game, showDesc}: {game: FreeGame, showDesc: boolean}) {
     return (
-        <div className={`card${game.future ? " future" : ""}`}>
+        <div className={`card${game.future ? " future" : ""}${game.claimed ? " claimed" : ""}`}>
             <a href={game.link} target="_blank" rel="noopener noreferrer">
                 <img src={game.img} alt="game"/>
                 <p className="game-title">{game.title}</p>
-                <p className="game-platform">Platform: {game.platform}</p>
+                <p className="game-platform">Platform: {game.platform}{game.store && ` · ${game.store}`}</p>
+                {game.claimed && <p className="game-claimed">✓ Claimed</p>}
                 {(game.description && showDesc) && (
                     <p className="game-description">{game.description}</p>
                 )}

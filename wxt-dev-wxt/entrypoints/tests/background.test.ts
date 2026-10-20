@@ -182,6 +182,30 @@ describe('checkPrimeGaming', () => {
 
     expect(opened).toEqual([]);
     expect(await getStorageItem<boolean>('primeGamingLoggedIn')).toBe(true);
+    // Signed in alone would read "Logged in" in the popup, as if all were fine.
+    expect(await getStorageItem<boolean>('primeGamingHasPrime')).toBe(false);
+  });
+
+  // A different account may sign in next; its membership isn't known yet.
+  it('forgets the Prime membership once signed out', async () => {
+    await setStorageItem('primeGamingHasPrime', false);
+    const runner = Object.create(background);
+    runner.loadPrimeLookup = async () => ({ status: 'signed-out' });
+
+    await runner.checkPrimeGaming(true, false);
+
+    expect(await getStorageItem<boolean>('primeGamingHasPrime')).toBeNull();
+  });
+
+  it('records Prime membership once the lookup returns per-user offers', async () => {
+    await setStorageItem('primeGamingHasPrime', false);
+    const runner = Object.create(background);
+    runner.loadPrimeLookup = async () => ({ status: 'ok', offers: [primeOffer('Hue', true, 'Epic')] });
+    runner.claimGames = async () => {};
+
+    await runner.checkPrimeGaming(true, true);
+
+    expect(await getStorageItem<boolean>('primeGamingHasPrime')).toBe(true);
   });
 });
 

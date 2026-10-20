@@ -1,6 +1,10 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
-import { detectExternalPlatform, ExternalPlatform } from "@/entrypoints/utils/primeGamingGiveaway.ts";
+import {
+  detectExternalPlatform,
+  EXTERNAL_PLATFORM_STORE_NAMES,
+  ExternalPlatform,
+} from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import type { Browser } from "wxt/browser";
 
 // Background-only Prime Gaming lookup, so a check opens no tab unless there's
@@ -58,7 +62,7 @@ export function extractCsrfToken(html: string): string | null {
 
 // Only an eligibility with a real boolean isClaimed counts as known: a
 // partial schema change must read as "unknown", never as "unclaimed".
-type KnownEligibility = { isLive: boolean; isClaimed: boolean; canClaim: boolean | null };
+type KnownEligibility = { isLive: boolean; isClaimed: boolean; canClaim: boolean | null; endTime: string | null };
 
 function asObject(value: unknown): Record<string, unknown> | null {
   return typeof value === "object" && value !== null ? value as Record<string, unknown> : null;
@@ -68,12 +72,14 @@ function readKnownEligibilities(item: Record<string, unknown>): KnownEligibility
   const offers = Array.isArray(item.offers) ? item.offers : [];
   const known: KnownEligibility[] = [];
   for (const offer of offers) {
+    const endTime = asObject(offer)?.endTime;
     const eligibility = asObject(asObject(asObject(offer)?.offerSelfConnection)?.eligibility);
     if (typeof eligibility?.isClaimed !== "boolean") continue;
     known.push({
       isLive: eligibility.offerState === "LIVE",
       isClaimed: eligibility.isClaimed,
       canClaim: typeof eligibility.canClaim === "boolean" ? eligibility.canClaim : null,
+      endTime: typeof endTime === "string" ? endTime : null,
     });
   }
   return known;
@@ -88,6 +94,15 @@ function toLunaClaimLink(externalClaimLink: string): string | null {
   } catch {
     return null;
   }
+}
+
+// For the popup only — an unparseable or missing endTime just shows no date.
+function readEndDate(eligibilities: KnownEligibility[]): string | null {
+  for (const { endTime } of eligibilities) {
+    const end = endTime ? new Date(endTime) : null;
+    if (end && !Number.isNaN(end.getTime())) return end.toISOString();
+  }
+  return null;
 }
 
 function readCanClaim(eligibilities: KnownEligibility[]): boolean | null {
@@ -110,6 +125,9 @@ function parseItem(raw: unknown): PrimeOffer | null {
   // one is what a claim would act on.
   const live = known.filter((e) => e.isLive);
   const relevant = live.length > 0 ? live : known;
+  const isClaimed = relevant.length === 0 ? null : relevant.some((e) => e.isClaimed);
+  const externalPlatform = claimLink ? detectExternalPlatform(claimLink) : null;
+  const endDate = readEndDate(live);
 
   return {
     game: {
@@ -117,11 +135,14 @@ function parseItem(raw: unknown): PrimeOffer | null {
       platform: Platforms.PrimeGaming,
       link: claimLink ?? LUNA_CLAIMS_URL,
       img: typeof img === "string" && img ? img : "/icon/128.png",
+      ...(isClaimed === null ? {} : { claimed: isClaimed }),
+      ...(endDate ? { endDate } : {}),
+      ...(externalPlatform ? { store: EXTERNAL_PLATFORM_STORE_NAMES[externalPlatform] } : {}),
     },
-    isClaimed: relevant.length === 0 ? null : relevant.some((e) => e.isClaimed),
+    isClaimed,
     isLive: live.length > 0,
     canClaim: readCanClaim(relevant),
-    externalPlatform: claimLink ? detectExternalPlatform(claimLink) : null,
+    externalPlatform,
   };
 }
 
