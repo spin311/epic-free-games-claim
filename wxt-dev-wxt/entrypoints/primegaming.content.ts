@@ -14,6 +14,7 @@ import {
     excludeCollectedOffers,
     ExternalPlatform,
     extractRedeemCode,
+    findGetGameButton,
     hasPrimeMembership,
     isInternalOfferCard,
     isOfferDetailsPage,
@@ -21,11 +22,13 @@ import {
     parseInternalOffers,
     pollFor,
     readAllowedExternalPlatforms,
+    readOfferTitle,
 } from "@/entrypoints/utils/primeGamingGiveaway.ts";
+import { recordMissingCode, recordRedeemFallback } from "@/entrypoints/utils/pendingRedemptions.ts";
 import { buildRedeemUrl } from "@/entrypoints/utils/gogGiveaway.ts";
 import { buildMicrosoftRedeemUrl } from "@/entrypoints/utils/microsoftRedeem.ts";
 import { buildLegacyRedeemUrl, findLegacyRedeemUrl } from "@/entrypoints/utils/legacyGamesRedeem.ts";
-import { findButtonByText, getRndInteger, incrementCounter, realClick, wait, waitForElement, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
+import { getRndInteger, incrementCounter, realClick, wait, waitForElement, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
 
 export default defineContentScript({
     // gaming.amazon.com/home now redirects to luna.amazon.com/claims/home — the
@@ -211,9 +214,14 @@ export default defineContentScript({
             // own incrementCounter on success). The click still happens here (it surfaces the code
             // without the user having to find the offer manually).
             const platform = detectExternalPlatform(location.pathname);
+            let title: string | undefined;
             const outcome = await claimExternalOfferPage(
-                () => findButtonByText(document, 'Get game'),
-                realClick,
+                () => findGetGameButton(document),
+                (button) => {
+                    // The last moment this is still the offer's own page — see readOfferTitle.
+                    title = readOfferTitle(document);
+                    realClick(button);
+                },
                 wait,
                 () => location.href,
             );
@@ -239,24 +247,30 @@ export default defineContentScript({
                 return;
             }
 
-            // GOG, Windows Store and Legacy Games redeem via a one-time code shown on
-            // this same page rather than an in-library claim — hand it,
-            // together with the game's title (best-effort, purely for the
-            // pending-redemption fallback UI — a missing h1 just means a
-            // slightly less friendly popup entry, never a broken claim),
-            // straight to the platform's own redeem page, which attempts to
-            // finish the redemption itself (see gog.content.ts /
-            // microsoft.content.ts / legacygames.content.ts) and only falls back to leaving the tab
-            // open if that doesn't go through.
+            // GOG, Windows Store and Legacy Games redeem via a one-time code
+            // shown on this same page rather than an in-library claim — hand it,
+            // with the game's title, straight to the platform's own redeem page,
+            // which attempts to finish the redemption itself (see gog.content.ts /
+            // microsoft.content.ts / legacygames.content.ts) and only falls back
+            // to the pending list if that doesn't go through.
             if (platform === "GOG" || platform === "Windows" || platform === "Legacy") {
                 // The /details success page renders after its route change,
                 // so the code may not be in the DOM the instant we get here.
                 const code = await pollFor(() => extractRedeemCode(document), wait, 5000, 250);
-                if (!code) return;
-                const title = document.querySelector('h1')?.textContent?.trim();
+                const pendingTitle = title ?? "Prime Gaming offer";
+                // Either way the tab stays open on the code's page, and the
+                // pending list keeps it findable: Amazon now counts the offer
+                // as claimed, so no later run will ever reopen it.
+                if (!code) {
+                    await recordMissingCode(platform, pendingTitle, location.href);
+                    return;
+                }
                 const redeemUrl = buildCodeRedeemUrl(platform, code, title);
-                // No known redeem page: left open on the code, like a missing code.
-                if (redeemUrl) location.href = redeemUrl;
+                if (!redeemUrl) {
+                    await recordRedeemFallback(code, platform, pendingTitle, location.href);
+                    return;
+                }
+                location.href = redeemUrl;
             }
         }
 

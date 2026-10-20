@@ -182,6 +182,7 @@ describe('claimPrimeOffers', () => {
   it('claims only offers Amazon reports as not yet claimed, on enabled platforms', async () => {
     await setStorageItem('primeGamingClaimGog', true);
     await setStorageItem('primeGamingClaimEpic', false);
+    await setStorageItem('primeGamingClaimAmazonGames', false);
     const runner = Object.create(background);
     const claimed: string[][] = [];
     runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
@@ -195,6 +196,19 @@ describe('claimPrimeOffers', () => {
     ]);
 
     expect(claimed).toEqual([['Zoria']]);
+  });
+
+  it('claims Amazon Games App offers on a fresh install, with no toggle stored', async () => {
+    const runner = Object.create(background);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+
+    await runner.claimPrimeOffers([
+      primeOffer('Caravan SandWitch', false, 'AmazonGames'),
+      primeOffer('WarBreeds', false, 'GOG'),
+    ]);
+
+    expect(claimed).toEqual([['Caravan SandWitch']]);
   });
 
   it('claims Amazon Games App and Legacy Games offers once their toggles are on', async () => {

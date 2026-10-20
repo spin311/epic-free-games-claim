@@ -1,5 +1,6 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
+import { findButtonByText } from "@/entrypoints/utils/helpers.ts";
 
 export const PRIME_GAMING_HOME_URL = "https://gaming.amazon.com/home";
 
@@ -72,11 +73,23 @@ export const EXTERNAL_PLATFORM_STORAGE_KEYS: Record<ExternalPlatform, string> = 
   Legacy: "primeGamingClaimLegacy",
 };
 
-// Off unless explicitly enabled: an unset key (fresh install) reads as off.
+// Confirmed live (Oct 2026): every listed offer goes to one of these stores,
+// so Prime Gaming with none of them on claims nothing at all. Amazon Games App
+// starts on — it claims into Amazon's own library, needing no other account —
+// while the rest navigate to another store's account and stay opt-in.
+export const EXTERNAL_PLATFORM_DEFAULTS: Record<ExternalPlatform, boolean> = {
+  Epic: false,
+  GOG: false,
+  Windows: false,
+  AmazonGames: true,
+  Legacy: false,
+};
+
+// An unset key (fresh install) reads as that platform's default.
 export function readAllowedExternalPlatforms(stored: Record<string, unknown>): Set<ExternalPlatform> {
   const allowed = new Set<ExternalPlatform>();
-  for (const [platform, key] of Object.entries(EXTERNAL_PLATFORM_STORAGE_KEYS)) {
-    if (stored[key] === true) allowed.add(platform as ExternalPlatform);
+  for (const [platform, key] of Object.entries(EXTERNAL_PLATFORM_STORAGE_KEYS) as [ExternalPlatform, string][]) {
+    if ((stored[key] ?? EXTERNAL_PLATFORM_DEFAULTS[platform]) === true) allowed.add(platform);
   }
   return allowed;
 }
@@ -254,6 +267,20 @@ export function extractRedeemCode(root: Document | HTMLElement): string | null {
     if (match) return match[0];
   }
   return null;
+}
+
+// Confirmed live (Oct 2026): the label is localized ("Get game", "Spiel
+// holen", ...) but this attribute is the same in every Luna language; the
+// English label is only a fallback should the attribute ever go away.
+export function findGetGameButton(doc: Document): HTMLButtonElement | null {
+  return doc.querySelector<HTMLButtonElement>('button[data-a-target="buy-box_call-to-action"]')
+      ?? findButtonByText(doc, 'Get game');
+}
+
+// Read before claiming: the success page a claim routes to replaces the h1
+// with "Success, you received a code to redeem {title}."
+export function readOfferTitle(doc: Document): string | undefined {
+  return doc.querySelector('h1')?.textContent?.trim() || undefined;
 }
 
 export type ExternalClaimOutcome = "claimed" | "already-claimed" | "link-required" | "failed";

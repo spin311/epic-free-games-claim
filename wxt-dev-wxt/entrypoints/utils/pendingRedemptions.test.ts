@@ -6,6 +6,7 @@ import {
     copyToClipboardBestEffort,
     PENDING_REDEMPTIONS_STORAGE_KEY,
     PendingRedemption,
+    recordMissingCode,
     recordRedeemFallback,
     removePendingRedemption,
 } from './pendingRedemptions.ts';
@@ -131,5 +132,36 @@ describe('recordRedeemFallback', () => {
         expect(writeText).toHaveBeenCalledWith('XYZ789');
 
         vi.unstubAllGlobals();
+    });
+});
+
+describe('recordMissingCode', () => {
+    const WARBREEDS_DETAILS = 'https://luna.amazon.com/claims/warbreeds-gog/dp/amzn1.pg.item.886d/details';
+    const CONARIUM_DETAILS = 'https://luna.amazon.com/claims/conarium-gog/dp/amzn1.pg.item.82e2/details';
+
+    it('persists a code-less entry pointing at the Amazon page that shows the code', async () => {
+        await recordMissingCode('GOG', 'WarBreeds', WARBREEDS_DETAILS);
+
+        const stored = await getStorageItem<PendingRedemption[]>(PENDING_REDEMPTIONS_STORAGE_KEY);
+        expect(stored).toEqual([
+            expect.objectContaining({ code: '', platform: 'GOG', title: 'WarBreeds', redeemUrl: WARBREEDS_DETAILS }),
+        ]);
+    });
+
+    it('keeps code-less entries for different offers apart, and dedupes the same offer', async () => {
+        await recordMissingCode('GOG', 'WarBreeds', WARBREEDS_DETAILS);
+        await recordMissingCode('GOG', 'Conarium', CONARIUM_DETAILS);
+        await recordMissingCode('GOG', 'WarBreeds', WARBREEDS_DETAILS);
+
+        const stored = await getStorageItem<PendingRedemption[]>(PENDING_REDEMPTIONS_STORAGE_KEY);
+        expect(stored?.map((entry) => entry.title)).toEqual(['Conarium', 'WarBreeds']);
+    });
+
+    it('is not cleared by a redeem script removing an (empty) code', async () => {
+        await recordMissingCode('GOG', 'WarBreeds', WARBREEDS_DETAILS);
+        await removePendingRedemption('');
+
+        const stored = await getStorageItem<PendingRedemption[]>(PENDING_REDEMPTIONS_STORAGE_KEY);
+        expect(stored).toHaveLength(1);
     });
 });

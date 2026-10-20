@@ -5,6 +5,7 @@ import {
   detectExternalPlatform,
   extractRedeemCode,
   excludeCollectedOffers,
+  findGetGameButton,
   hasPrimeMembership,
   isCollectedOfferCard,
   isInternalOfferCard,
@@ -15,6 +16,7 @@ import {
   parseOfferCard,
   PRIME_GAMING_HOME_URL,
   readAllowedExternalPlatforms,
+  readOfferTitle,
 } from './primeGamingGiveaway';
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
 import { FreeGame } from '@/entrypoints/types/freeGame.ts';
@@ -143,8 +145,44 @@ describe('readAllowedExternalPlatforms', () => {
     expect([...allowed].sort()).toEqual(['AmazonGames', 'Epic', 'Legacy']);
   });
 
-  it('enables nothing on a fresh install (no keys stored)', () => {
-    expect(readAllowedExternalPlatforms({}).size).toBe(0);
+  // Every live offer goes to some store (Oct 2026: 15 of 15), so Prime
+  // Gaming with nothing picked would claim nothing at all. Amazon Games App
+  // claims into Amazon's own library with no other account, so it starts on.
+  it('enables only Amazon Games App on a fresh install (no keys stored)', () => {
+    expect([...readAllowedExternalPlatforms({})]).toEqual(['AmazonGames']);
+  });
+
+  it('keeps Amazon Games App off once the user turned it off', () => {
+    expect(readAllowedExternalPlatforms({ primeGamingClaimAmazonGames: false }).size).toBe(0);
+  });
+});
+
+describe('findGetGameButton', () => {
+  // Confirmed live (Oct 2026): the label is localized ("Spiel holen" in
+  // German) but the attribute is not.
+  it('finds the claim button by its data-a-target in any language', () => {
+    const doc = docFrom('<button>Play</button><button data-a-target="buy-box_call-to-action">Spiel holen</button>');
+    expect(findGetGameButton(doc)?.textContent).toBe('Spiel holen');
+  });
+
+  it('falls back to the English "Get game" label without the attribute', () => {
+    const doc = docFrom('<button>Play</button><button>Get game</button>');
+    expect(findGetGameButton(doc)?.textContent).toBe('Get game');
+  });
+
+  it('returns null when there is no claim button', () => {
+    expect(findGetGameButton(docFrom('<button>Play</button>'))).toBeNull();
+  });
+});
+
+describe('readOfferTitle', () => {
+  it('reads the trimmed h1', () => {
+    expect(readOfferTitle(docFrom('<h1>  WarBreeds </h1>'))).toBe('WarBreeds');
+  });
+
+  it('returns undefined without a usable h1', () => {
+    expect(readOfferTitle(docFrom('<h1>  </h1>'))).toBeUndefined();
+    expect(readOfferTitle(docFrom('<p>WarBreeds</p>'))).toBeUndefined();
   });
 });
 
