@@ -3,9 +3,9 @@ import { browser } from "wxt/browser";
 import { FreeGamesResponse } from "@/entrypoints/types/freeGamesResponse.ts";
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
-import { getStorageItems, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
+import { getStorageItem, getStorageItems, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
 import { closeCurrentTab, onClaimMessage } from "@/entrypoints/utils/contentMessaging.ts";
-import { detectAndRecordLoginState } from "@/entrypoints/utils/loginState.ts";
+import { detectAndRecordLoginState, recordPrimeMembership } from "@/entrypoints/utils/loginState.ts";
 import {
     claimExternalOfferPage,
     claimOfferCard,
@@ -14,25 +14,30 @@ import {
     excludeCollectedOffers,
     ExternalPlatform,
     extractRedeemCode,
+    findGetGameButton,
     hasPrimeMembership,
     isInternalOfferCard,
+    markPrimeGameClaimed,
     isOfferDetailsPage,
     parseExternalOffers,
     parseInternalOffers,
     pollFor,
     readAllowedExternalPlatforms,
+    readOfferTitle,
 } from "@/entrypoints/utils/primeGamingGiveaway.ts";
+import { recordMissingCode, recordRedeemFallback } from "@/entrypoints/utils/pendingRedemptions.ts";
 import { buildRedeemUrl } from "@/entrypoints/utils/gogGiveaway.ts";
 import { buildMicrosoftRedeemUrl } from "@/entrypoints/utils/microsoftRedeem.ts";
-import { findButtonByText, getRndInteger, incrementCounter, realClick, wait, waitForElement, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
+import { buildLegacyRedeemUrl, findLegacyRedeemUrl } from "@/entrypoints/utils/legacyGamesRedeem.ts";
+import { getRndInteger, incrementCounter, realClick, wait, waitForElement, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
+import { runtimeContentScriptOptions } from "@/entrypoints/utils/runtimeContentScripts.ts";
+
+const { matches, runAt, allFrames, registration } = runtimeContentScriptOptions('primegaming');
 
 export default defineContentScript({
-    // gaming.amazon.com/home now redirects to luna.amazon.com/claims/home — the
-    // page that actually renders the offer list and per-game claim links lives
-    // on luna.amazon.com, so both hosts must be matched for the script to ever
-    // get injected (same reasoning as epic.content.ts matching both of Epic's
-    // product-page hosts).
-    matches: ['https://gaming.amazon.com/*', 'https://luna.amazon.com/*'],
+    // Matches both gaming.amazon.com and luna.amazon.com — see its entry in
+    // RUNTIME_CONTENT_SCRIPTS.
+    matches, runAt, allFrames, registration,
     main(_: any) {
         if (!oncePerPageRun('_myPrimeGamingContentScriptInjected' as keyof Window)) {
             return;
@@ -72,9 +77,11 @@ export default defineContentScript({
             }
             if (!hasPrimeMembership(document)) {
                 console.warn("[primegaming] no Prime membership detected; skipping");
+                await recordPrimeMembership(false);
                 await closeCurrentTab();
                 return;
             }
+            await recordPrimeMembership(true);
 
             const offerList = await openGamesTabAndGetOfferList();
             if (!offerList) {
@@ -189,24 +196,41 @@ export default defineContentScript({
                 await closeCurrentTab();
                 return;
             }
+            // Backstop for the background's own no-Prime check: on a non-Prime
+            // account "Get game" only leads to Prime sign-up, and that tab
+            // would otherwise be left open as if it were account linking.
+            if (!hasPrimeMembership(document)) {
+                console.warn("[primegaming] no Prime membership detected; not claiming");
+                await recordPrimeMembership(false);
+                await closeCurrentTab();
+                return;
+            }
 
             // Confirmed live: this "claimed" signal (the Get game button
             // disappearing on the same page) only means a real library claim for
-            // Epic's account-linking flow. GOG and Windows Store instead show a
-            // one-time redeem code on this same page once clicked — counting
-            // that click here would be a false positive, since nothing is
-            // actually redeemed until the code is submitted on gog.com/redeem
-            // or account.microsoft.com/billing/redeem (handled by those sites'
-            // own content scripts, which do their own incrementCounter on
-            // success). The click still happens here (it surfaces the code
+            // Epic's account-linking flow and the Amazon Games App. GOG,
+            // Windows Store and Legacy Games instead show a one-time redeem
+            // code on this same page once clicked — counting that click here
+            // would be a false positive, since nothing is actually redeemed
+            // until the code is submitted on gog.com/redeem,
+            // account.microsoft.com/billing/redeem or promo.legacygames.com
+            // (handled by those sites' own content scripts, which do their
+            // own incrementCounter on success). The click still happens here (it surfaces the code
             // without the user having to find the offer manually).
             const platform = detectExternalPlatform(location.pathname);
+            let title: string | undefined;
             const outcome = await claimExternalOfferPage(
-                () => findButtonByText(document, 'Get game'),
-                realClick,
+                () => findGetGameButton(document),
+                (button) => {
+                    // The last moment this is still the offer's own page — see readOfferTitle.
+                    title = readOfferTitle(document);
+                    realClick(button);
+                },
                 wait,
                 () => location.href,
             );
+
+            if (outcome === "claimed" || outcome === "already-claimed") await markClaimedInPopupList();
 
             // Both are silent no-ops by design — never thrown, so one unlinked
             // platform can't block the rest of the claim run.
@@ -221,31 +245,57 @@ export default defineContentScript({
                 return;
             }
 
-            if (platform === "Epic") {
+            // Both claim straight into a library (Epic's, or Amazon's own
+            // Amazon Games App one) — nothing left to redeem.
+            if (platform === "Epic" || platform === "AmazonGames") {
                 await incrementCounter();
                 await closeCurrentTab();
                 return;
             }
 
-            // GOG and Windows Store both redeem via a one-time code shown on
-            // this same page rather than an in-library claim — hand it,
-            // together with the game's title (best-effort, purely for the
-            // pending-redemption fallback UI — a missing h1 just means a
-            // slightly less friendly popup entry, never a broken claim),
-            // straight to the platform's own redeem page, which attempts to
-            // finish the redemption itself (see gog.content.ts /
-            // microsoft.content.ts) and only falls back to leaving the tab
-            // open if that doesn't go through.
-            if (platform === "GOG" || platform === "Windows") {
+            // GOG, Windows Store and Legacy Games redeem via a one-time code
+            // shown on this same page rather than an in-library claim — hand it,
+            // with the game's title, straight to the platform's own redeem page,
+            // which attempts to finish the redemption itself (see gog.content.ts /
+            // microsoft.content.ts / legacygames.content.ts) and only falls back
+            // to the pending list if that doesn't go through.
+            if (platform === "GOG" || platform === "Windows" || platform === "Legacy") {
                 // The /details success page renders after its route change,
                 // so the code may not be in the DOM the instant we get here.
                 const code = await pollFor(() => extractRedeemCode(document), wait, 5000, 250);
-                if (!code) return;
-                const title = document.querySelector('h1')?.textContent?.trim();
-                location.href = platform === "GOG"
-                    ? buildRedeemUrl(code, title)
-                    : buildMicrosoftRedeemUrl(code, title);
+                const pendingTitle = title ?? "Prime Gaming offer";
+                // Either way the tab stays open on the code's page, and the
+                // pending list keeps it findable: Amazon now counts the offer
+                // as claimed, so no later run will ever reopen it.
+                if (!code) {
+                    await recordMissingCode(platform, pendingTitle, location.href);
+                    return;
+                }
+                const redeemUrl = buildCodeRedeemUrl(platform, code, title);
+                if (!redeemUrl) {
+                    await recordRedeemFallback(code, platform, pendingTitle, location.href);
+                    return;
+                }
+                location.href = redeemUrl;
             }
+        }
+
+        // Cosmetic only (the popup's "Claimed" badge), so it never gets in
+        // the way of the claim itself.
+        async function markClaimedInPopupList() {
+            try {
+                const games = (await getStorageItem<FreeGame[]>("primeGamingGames")) ?? [];
+                await setStorageItem("primeGamingGames", markPrimeGameClaimed(games, location.href));
+            } catch (error: unknown) {
+                console.warn("[primegaming] couldn't mark the claimed offer in the popup list:", error);
+            }
+        }
+
+        function buildCodeRedeemUrl(platform: "GOG" | "Windows" | "Legacy", code: string, title?: string): string | null {
+            if (platform === "GOG") return buildRedeemUrl(code, title);
+            if (platform === "Windows") return buildMicrosoftRedeemUrl(code, title);
+            const promoUrl = findLegacyRedeemUrl(document, location.href);
+            return promoUrl ? buildLegacyRedeemUrl(promoUrl, code, title) : null;
         }
     },
 });

@@ -4,10 +4,11 @@ import {
   ensureLunaOriginRule,
   excludeRecentlyAttempted,
   extractCsrfToken,
-  fetchPrimeOffers,
+  fetchPrimeLookup,
   LUNA_CLAIMS_URL,
   LUNA_GRAPHQL_URL,
   LUNA_ORIGIN_RULE_ID,
+  parsePrimeLookup,
   parsePrimeOffers,
   PrimeOffer,
   selectClaimableOffers,
@@ -16,7 +17,7 @@ import {
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
 
 // Shapes below mirror a live OffersContext response (Oct 2026), trimmed.
-function item(overrides: { title?: string; slug?: string; id?: string; eligibility?: unknown[] } = {}) {
+function item(overrides: { title?: string; slug?: string; id?: string; eligibility?: unknown[]; endTime?: string } = {}) {
   const id = overrides.id ?? 'amzn1.pg.item.b095156c-1207-49f0-801a-75ac03b74def';
   const slug = overrides.slug ?? 'doom-gog';
   return {
@@ -27,13 +28,21 @@ function item(overrides: { title?: string; slug?: string; id?: string; eligibili
       cardMedia: { defaultMedia: { src1x: 'https://m.media-amazon.com/images/I/719F0.jpg' } },
     },
     offers: (overrides.eligibility ?? [{ offerState: 'LIVE', isClaimed: false }]).map((eligibility) => ({
+      endTime: overrides.endTime,
       offerSelfConnection: { eligibility },
     })),
   };
 }
 
-function payload(items: unknown[]) {
-  return { data: { games: { items } } };
+// Confirmed live (Oct 2026): a signed-in Prime account answers
+// { isSignedIn: true, isAmazonPrime: true, isTwitchPrime: true }; a
+// signed-out session answers all three false.
+const PRIME_MEMBER = { isSignedIn: true, isAmazonPrime: true, isTwitchPrime: true };
+const SIGNED_OUT = { isSignedIn: false, isAmazonPrime: false, isTwitchPrime: false };
+const NO_PRIME = { isSignedIn: true, isAmazonPrime: false, isTwitchPrime: false };
+
+function payload(items: unknown[], currentUser: unknown = PRIME_MEMBER) {
+  return { data: { currentUser, games: { items } } };
 }
 
 function response(status: number, body: unknown) {
@@ -71,11 +80,19 @@ describe('parsePrimeOffers', () => {
         // The content script's details-page flow lives on luna.amazon.com.
         link: 'https://luna.amazon.com/claims/doom-gog/dp/amzn1.pg.item.b095156c-1207-49f0-801a-75ac03b74def',
         img: 'https://m.media-amazon.com/images/I/719F0.jpg',
+        claimed: true,
+        store: 'GOG',
       },
       isClaimed: true,
       isLive: true,
+      canClaim: null,
       externalPlatform: 'GOG',
     });
+  });
+
+  it("reads Amazon's own per-user canClaim from the live offer", () => {
+    const [offer] = parsePrimeOffers(payload([item({ eligibility: [{ offerState: 'LIVE', isClaimed: false, canClaim: true }] })]));
+    expect(offer.canClaim).toBe(true);
   });
 
   it('reports isClaimed null when Amazon returned no per-user eligibility', () => {
@@ -83,8 +100,18 @@ describe('parsePrimeOffers', () => {
     expect(offer.isClaimed).toBeNull();
   });
 
-  it('leaves the platform null for slugs this extension does not redeem (e.g. -aga, -legacy)', () => {
-    const [offer] = parsePrimeOffers(payload([item({ slug: 'wall-world-2-aga' })]));
+  // Confirmed live: Amazon Games App offers end in -aga, Legacy Games ones in -legacy.
+  it('maps -aga to the Amazon Games App and -legacy to Legacy Games', () => {
+    const [aga, legacy] = parsePrimeOffers(payload([
+      item({ slug: 'wall-world-2-aga' }),
+      item({ slug: 'the-da-vinci-cryptex-legacy' }),
+    ]));
+    expect(aga.externalPlatform).toBe('AmazonGames');
+    expect(legacy.externalPlatform).toBe('Legacy');
+  });
+
+  it('leaves the platform null for slugs this extension does not redeem', () => {
+    const [offer] = parsePrimeOffers(payload([item({ slug: 'some-game-ubisoft' })]));
     expect(offer.externalPlatform).toBeNull();
   });
 
@@ -121,11 +148,45 @@ describe('parsePrimeOffers', () => {
   });
 });
 
+// The popup lists every live offer, collected or not — without these, an
+// already-claimed offer looked exactly like one still waiting to be claimed.
+describe('parsePrimeOffers popup details', () => {
+  it('carries Amazon\'s claim state and the live offer\'s end date', () => {
+    const [claimed, open] = parsePrimeOffers(payload([
+      item({ title: 'DOOM', eligibility: [{ offerState: 'LIVE', isClaimed: true }], endTime: '2026-11-04T18:00:00Z' }),
+      item({ title: 'WarBreeds', slug: 'warbreeds-gog', eligibility: [{ offerState: 'LIVE', isClaimed: false }] }),
+    ]));
+
+    expect(claimed.game).toMatchObject({ claimed: true, endDate: '2026-11-04T18:00:00.000Z' });
+    expect(open.game.claimed).toBe(false);
+    expect(open.game.endDate).toBeUndefined();
+  });
+
+  it('leaves the claim state unset when Amazon reported none', () => {
+    const [offer] = parsePrimeOffers(payload([item({ eligibility: [null] })]));
+    expect(offer.game.claimed).toBeUndefined();
+  });
+
+  it('names the store each offer goes to', () => {
+    const stores = parsePrimeOffers(payload([
+      item({ slug: 'caravan-sandwitch-aga' }),
+      item({ slug: 'hue-epic' }),
+      item({ slug: 'doom-gog' }),
+      item({ slug: 'doom-eternal-microsoft' }),
+      item({ slug: 'the-da-vinci-cryptex-legacy' }),
+      item({ slug: 'some-new-thing' }),
+    ])).map((offer) => offer.game.store);
+
+    expect(stores).toEqual(['Amazon Games App', 'Epic Games Store', 'GOG', 'Microsoft Store', 'Legacy Games', undefined]);
+  });
+});
+
 describe('selectClaimableOffers', () => {
   const offer = (title: string, isClaimed: boolean | null, externalPlatform: PrimeOffer['externalPlatform'], isLive = true): PrimeOffer => ({
     game: { title, platform: Platforms.PrimeGaming, link: `https://luna.amazon.com/claims/${title}/dp/x`, img: '' },
     isClaimed,
     isLive,
+    canClaim: null,
     externalPlatform,
   });
 
@@ -135,15 +196,68 @@ describe('selectClaimableOffers', () => {
       offer('claimed-gog', true, 'GOG'),
       offer('unclaimed-epic-disabled', false, 'Epic'),
       offer('unknown-state', null, 'GOG'),
-      offer('unsupported-aga', false, null),
+      offer('unsupported-store', false, null),
       offer('expired-gog', false, 'GOG', false),
     ];
 
     expect(selectClaimableOffers(offers, new Set(['GOG'])).map((g) => g.title)).toEqual(['unclaimed-gog']);
   });
+
+  it('claims Amazon Games App and Legacy Games offers once enabled', () => {
+    const offers = [offer('wall-world-2', false, 'AmazonGames'), offer('cryptex', false, 'Legacy')];
+
+    expect(selectClaimableOffers(offers, new Set(['AmazonGames', 'Legacy'])).map((g) => g.title))
+        .toEqual(['wall-world-2', 'cryptex']);
+  });
 });
 
-describe('fetchPrimeOffers', () => {
+describe('parsePrimeLookup', () => {
+  it('returns the offers for a signed-in Prime member', () => {
+    const lookup = parsePrimeLookup(payload([item()]));
+    expect(lookup.status).toBe('ok');
+    expect(lookup.status === 'ok' && lookup.offers).toHaveLength(1);
+  });
+
+  // Confirmed live: a signed-out session gets every eligibility null and
+  // currentUser.isSignedIn false — a definitive answer, so no claims-page tab
+  // is needed to find that out.
+  it('reports signed-out instead of throwing when Amazon says nobody is signed in', () => {
+    expect(parsePrimeLookup(payload([item({ eligibility: [null] })], SIGNED_OUT))).toEqual({ status: 'signed-out' });
+  });
+
+  // A non-Prime account must never get claim tabs opened: "Get game" would
+  // only lead to Amazon's Prime sign-up page.
+  it('reports no-prime for a signed-in account without Prime', () => {
+    const unclaimed = item({ eligibility: [{ offerState: 'LIVE', isClaimed: false, canClaim: false }] });
+    expect(parsePrimeLookup(payload([unclaimed], NO_PRIME))).toEqual({ status: 'no-prime' });
+  });
+
+  // Luna Premium subscribers can claim without Prime; if Amazon says an offer
+  // is claimable, that wins over the account-level flags.
+  it('trusts an offer Amazon marks claimable even when both Prime flags are false', () => {
+    const claimable = item({ eligibility: [{ offerState: 'LIVE', isClaimed: false, canClaim: true }] });
+    expect(parsePrimeLookup(payload([claimable], NO_PRIME)).status).toBe('ok');
+  });
+
+  it('accepts either Prime flag as membership', () => {
+    const twitchOnly = { ...NO_PRIME, isTwitchPrime: true };
+    expect(parsePrimeLookup(payload([item()], twitchOnly)).status).toBe('ok');
+  });
+
+  // A missing or malformed currentUser is a schema change, not an answer:
+  // fall back to the old "needs per-user claim state" rule.
+  it('falls back to requiring claim state when currentUser is missing', () => {
+    expect(parsePrimeLookup(payload([item()], undefined)).status).toBe('ok');
+    expect(() => parsePrimeLookup(payload([item({ eligibility: [null] })], undefined))).toThrow(/claim state/i);
+  });
+
+  it('never treats a non-boolean isSignedIn as signed out', () => {
+    const odd = { isSignedIn: 'false', isAmazonPrime: false, isTwitchPrime: false };
+    expect(() => parsePrimeLookup(payload([item({ eligibility: [null] })], odd))).toThrow(/claim state/i);
+  });
+});
+
+describe('fetchPrimeLookup', () => {
   const html = "<input type='hidden' name='csrf-key' value='TOKEN123' />";
 
   it('reads the csrf token from the claims page, then queries GraphQL with it', async () => {
@@ -151,9 +265,9 @@ describe('fetchPrimeOffers', () => {
       .mockResolvedValueOnce(response(200, html))
       .mockResolvedValueOnce(response(200, payload([item()])));
 
-    const offers = await fetchPrimeOffers(fetchImpl);
+    const lookup = await fetchPrimeLookup(fetchImpl);
 
-    expect(offers).toHaveLength(1);
+    expect(lookup.status === 'ok' && lookup.offers).toHaveLength(1);
     expect(fetchImpl).toHaveBeenNthCalledWith(1, LUNA_CLAIMS_URL, expect.objectContaining({ credentials: 'include' }));
     expect(fetchImpl).toHaveBeenNthCalledWith(2, LUNA_GRAPHQL_URL, expect.objectContaining({
       method: 'POST',
@@ -167,7 +281,7 @@ describe('fetchPrimeOffers', () => {
       .mockResolvedValueOnce(response(200, html))
       .mockResolvedValueOnce(response(200, payload([item()])));
 
-    await fetchPrimeOffers(fetchImpl);
+    await fetchPrimeLookup(fetchImpl);
 
     for (const [, init] of fetchImpl.mock.calls) expect(init.signal).toBeInstanceOf(AbortSignal);
   });
@@ -178,12 +292,12 @@ describe('fetchPrimeOffers', () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(response(200, html))
       .mockResolvedValueOnce(response(200, payload([])));
-    await expect(fetchPrimeOffers(fetchImpl)).rejects.toThrow(/claim state/i);
+    await expect(fetchPrimeLookup(fetchImpl)).rejects.toThrow(/claim state/i);
   });
 
   it('throws when the claims page has no csrf token', async () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce(response(200, '<html></html>'));
-    await expect(fetchPrimeOffers(fetchImpl)).rejects.toThrow(/csrf/i);
+    await expect(fetchPrimeLookup(fetchImpl)).rejects.toThrow(/csrf/i);
   });
 
   // Confirmed live: without the Origin rule Amazon answers 403 "Invalid CORS request".
@@ -191,7 +305,7 @@ describe('fetchPrimeOffers', () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(response(200, html))
       .mockResolvedValueOnce(response(403, 'Invalid CORS request'));
-    await expect(fetchPrimeOffers(fetchImpl)).rejects.toThrow(/403/);
+    await expect(fetchPrimeLookup(fetchImpl)).rejects.toThrow(/403/);
   });
 
   // No per-user claim state at all means we can't tell claimed from unclaimed
@@ -200,7 +314,17 @@ describe('fetchPrimeOffers', () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(response(200, html))
       .mockResolvedValueOnce(response(200, payload([item({ eligibility: [null] })])));
-    await expect(fetchPrimeOffers(fetchImpl)).rejects.toThrow(/claim state/i);
+    await expect(fetchPrimeLookup(fetchImpl)).rejects.toThrow(/claim state/i);
+  });
+
+  it("asks for the account's sign-in and Prime state in the same request", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response(200, html))
+      .mockResolvedValueOnce(response(200, payload([item({ eligibility: [null] })], SIGNED_OUT)));
+
+    expect(await fetchPrimeLookup(fetchImpl)).toEqual({ status: 'signed-out' });
+    const body = JSON.parse(fetchImpl.mock.calls[1][1].body);
+    expect(body.query).toMatch(/currentUser\s*{\s*isSignedIn isAmazonPrime isTwitchPrime\s*}/);
   });
 });
 

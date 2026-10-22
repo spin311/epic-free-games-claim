@@ -1,5 +1,7 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
+import { findButtonByText } from "@/entrypoints/utils/helpers.ts";
+import type { AccessToggle } from "@/entrypoints/utils/optionalAccess.ts";
 
 export const PRIME_GAMING_HOME_URL = "https://gaming.amazon.com/home";
 
@@ -57,22 +59,49 @@ export function parseInternalOffers(offerList: Element, baseUrl: string): FreeGa
   return games;
 }
 
-// External offers are opt-in per platform (see EXTERNAL_PLATFORM_STORAGE_KEYS)
-// since claiming them means navigating to that store's own account and, if
+// Offers are opt-in per platform (see EXTERNAL_PLATFORM_STORAGE_KEYS) since
+// claiming most of them means navigating to that store's own account and, if
 // unlinked, its linking flow — a bigger step than an internal in-place claim.
-export type ExternalPlatform = "Epic" | "GOG" | "Windows";
+// AmazonGames is Amazon's own library (claimed in place, no other store), and
+// Legacy redeems a code on Legacy Games with an email the user sets.
+export type ExternalPlatform = "Epic" | "GOG" | "Windows" | "AmazonGames" | "Legacy";
 
-export const EXTERNAL_PLATFORM_STORAGE_KEYS: Record<ExternalPlatform, string> = {
+// Typed as access toggles so each key must have an entry in
+// TOGGLE_ACCESS_GROUPS (the optional hosts it needs).
+export const EXTERNAL_PLATFORM_STORAGE_KEYS: Record<ExternalPlatform, AccessToggle> = {
   Epic: "primeGamingClaimEpic",
   GOG: "primeGamingClaimGog",
   Windows: "primeGamingClaimWindows",
+  AmazonGames: "primeGamingClaimAmazonGames",
+  Legacy: "primeGamingClaimLegacy",
 };
 
-// Off unless explicitly enabled: an unset key (fresh install) reads as off.
+// For the popup: where a claimed offer ends up.
+export const EXTERNAL_PLATFORM_STORE_NAMES: Record<ExternalPlatform, string> = {
+  Epic: "Epic Games Store",
+  GOG: "GOG",
+  Windows: "Microsoft Store",
+  AmazonGames: "Amazon Games App",
+  Legacy: "Legacy Games",
+};
+
+// Confirmed live (Oct 2026): every listed offer goes to one of these stores,
+// so Prime Gaming with none of them on claims nothing at all. Amazon Games App
+// starts on — it claims into Amazon's own library, needing no other account —
+// while the rest navigate to another store's account and stay opt-in.
+export const EXTERNAL_PLATFORM_DEFAULTS: Record<ExternalPlatform, boolean> = {
+  Epic: false,
+  GOG: false,
+  Windows: false,
+  AmazonGames: true,
+  Legacy: false,
+};
+
+// An unset key (fresh install) reads as that platform's default.
 export function readAllowedExternalPlatforms(stored: Record<string, unknown>): Set<ExternalPlatform> {
   const allowed = new Set<ExternalPlatform>();
-  for (const [platform, key] of Object.entries(EXTERNAL_PLATFORM_STORAGE_KEYS)) {
-    if (stored[key] === true) allowed.add(platform as ExternalPlatform);
+  for (const [platform, key] of Object.entries(EXTERNAL_PLATFORM_STORAGE_KEYS) as [ExternalPlatform, string][]) {
+    if ((stored[key] ?? EXTERNAL_PLATFORM_DEFAULTS[platform]) === true) allowed.add(platform);
   }
   return allowed;
 }
@@ -81,13 +110,15 @@ export function readAllowedExternalPlatforms(stored: Record<string, unknown>): S
 // the redeem platform anywhere on them — the only signal is the claim slug
 // itself, which Amazon suffixes with the platform: .../claims/drop-duchy-epic/
 // dp/..., .../claims/weakless-gog/dp/..., .../claims/doom-eternal-microsoft/
-// dp/.... Also seen: "-aga" (Amazon's own native launcher app), which isn't
-// one of the three platforms this extension supports and is deliberately
-// left unmatched.
+// dp/.... Also confirmed live (Oct 2026): .../claims/wall-world-2-aga/dp/...
+// (Amazon Games App; Luna's API flags these isDirectEntitlement) and
+// .../claims/the-da-vinci-cryptex-legacy/dp/... (published by Legacy Games).
 const EXTERNAL_PLATFORM_SLUG_SUFFIXES: [ExternalPlatform, string][] = [
   ["Epic", "-epic"],
   ["GOG", "-gog"],
   ["Windows", "-microsoft"],
+  ["AmazonGames", "-aga"],
+  ["Legacy", "-legacy"],
 ];
 
 export function detectExternalPlatform(href: string): ExternalPlatform | null {
@@ -96,6 +127,13 @@ export function detectExternalPlatform(href: string): ExternalPlatform | null {
     if (slug.endsWith(suffix)) return platform;
   }
   return null;
+}
+
+// The toggle whose optional hosts a Prime Gaming claim needs: a store-linked
+// offer's own toggle (its redeem store's group too), else Prime Gaming's.
+export function primeGameAccessToggle(link: string): AccessToggle {
+  const platform = detectExternalPlatform(link);
+  return platform ? EXTERNAL_PLATFORM_STORAGE_KEYS[platform] : "primeGamingCheck";
 }
 
 // Unlike internal offers, every external offer has its own distinct claims-page
@@ -222,13 +260,16 @@ export async function claimOfferCard(
 // hyphens (e.g. "DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ") — Microsoft's own redeem
 // page confirms this shape ("Enter 25-character code" /
 // "xxxxx-xxxxx-xxxxx-xxxxx-xxxxx") — and isn't required to mix letters and
-// digits per group, since a real group can be all-letters. No trailing \b:
+// digits per group, since a real group can be all-letters. A Legacy Games
+// code is the same shape cut to three groups (confirmed live, Oct 2026:
+// "318NG-31VCU-SK083"); the group count is greedy, so a Windows code always
+// matches whole. No trailing \b:
 // confirmed live, Amazon's details page runs the code's text node directly
 // into the adjacent "Copy code" button's text with no whitespace between
 // them ("...H2RMZCopy code"), and \b can't detect a boundary between two
 // word characters ("Z" and "C") — the fixed-width groups already bound the
 // match correctly without it.
-const REDEEM_CODE_PATTERN = /\b[A-Z0-9]{5}(?:-[A-Z0-9]{5}){4}|\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{12,24}\b/;
+const REDEEM_CODE_PATTERN = /\b[A-Z0-9]{5}(?:-[A-Z0-9]{5}){2,4}|\b(?=[A-Z0-9]*[A-Z])(?=[A-Z0-9]*[0-9])[A-Z0-9]{12,24}\b/;
 
 export function extractRedeemCode(root: Document | HTMLElement): string | null {
   // Document.textContent is spec'd to return null (only Elements have it) —
@@ -245,6 +286,33 @@ export function extractRedeemCode(root: Document | HTMLElement): string | null {
     if (match) return match[0];
   }
   return null;
+}
+
+// Confirmed live (Oct 2026): the label is localized ("Get game", "Spiel
+// holen", ...) but this attribute is the same in every Luna language; the
+// English label is only a fallback should the attribute ever go away.
+export function findGetGameButton(doc: Document): HTMLButtonElement | null {
+  return doc.querySelector<HTMLButtonElement>('button[data-a-target="buy-box_call-to-action"]')
+      ?? findButtonByText(doc, 'Get game');
+}
+
+function claimPagePath(url: string): string {
+  return new URL(url).pathname.replace(/\/$/, '').replace(/\/details$/, '');
+}
+
+// The popup's list is written before the claim tabs run, so a claim (or an
+// offer found already collected) marks its own entry rather than leaving it
+// unclaimed until the next check. `claimPageUrl` may be the offer page or its
+// /details success page.
+export function markPrimeGameClaimed(games: readonly FreeGame[], claimPageUrl: string): FreeGame[] {
+  const path = claimPagePath(claimPageUrl);
+  return games.map((game) => (claimPagePath(game.link) === path ? { ...game, claimed: true } : game));
+}
+
+// Read before claiming: the success page a claim routes to replaces the h1
+// with "Success, you received a code to redeem {title}."
+export function readOfferTitle(doc: Document): string | undefined {
+  return doc.querySelector('h1')?.textContent?.trim() || undefined;
 }
 
 export type ExternalClaimOutcome = "claimed" | "already-claimed" | "link-required" | "failed";

@@ -1,6 +1,6 @@
 import { getStorageItem, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
 
-export type RedeemPlatform = "GOG" | "Windows";
+export type RedeemPlatform = "GOG" | "Windows" | "Legacy";
 
 export interface PendingRedemption {
     code: string;
@@ -11,6 +11,12 @@ export interface PendingRedemption {
 }
 
 export const PENDING_REDEMPTIONS_STORAGE_KEY = "pendingRedemptions";
+
+// A code-less entry (see recordMissingCode) is identified by the page that
+// shows its code instead.
+export function pendingRedemptionKey(entry: PendingRedemption): string {
+    return entry.code || entry.redeemUrl;
+}
 
 // Best-effort: clipboard access from a backgrounded/unfocused claim tab can
 // be denied by the browser regardless of permissions, so a failure here must
@@ -45,7 +51,7 @@ export async function addPendingRedemption(entry: PendingRedemption): Promise<vo
         const existing = (await getStorageItem<PendingRedemption[]>(PENDING_REDEMPTIONS_STORAGE_KEY)) ?? [];
         // Replace rather than duplicate if this exact code is already pending
         // (e.g. a retried claim run hitting the same still-unredeemed code).
-        const deduped = existing.filter((item) => item.code !== entry.code);
+        const deduped = existing.filter((item) => pendingRedemptionKey(item) !== pendingRedemptionKey(entry));
         await setStorageItem(PENDING_REDEMPTIONS_STORAGE_KEY, [...deduped, entry]);
     } catch (error: unknown) {
         console.error("[pendingRedemptions] failed to persist a pending redemption:", error);
@@ -53,6 +59,8 @@ export async function addPendingRedemption(entry: PendingRedemption): Promise<vo
 }
 
 export async function removePendingRedemption(code: string): Promise<void> {
+    // An empty code would match every code-less entry (see recordMissingCode).
+    if (!code) return;
     try {
         const existing = (await getStorageItem<PendingRedemption[]>(PENDING_REDEMPTIONS_STORAGE_KEY)) ?? [];
         await setStorageItem(
@@ -78,4 +86,16 @@ export async function recordRedeemFallback(
     // clipboard copy is a convenience that must never be able to block it.
     await addPendingRedemption({ code, platform, title, redeemUrl, addedAt: new Date().toISOString() });
     await copyToClipboardBestEffort(code);
+}
+
+// Amazon showed no code after "Get game" (slow render, changed markup, ...).
+// Amazon already counts the offer as claimed, so it's never reopened; its
+// /details page is the one place the code stays visible, so that's what gets
+// kept — with an empty code, which the popup renders as "open on Amazon".
+export async function recordMissingCode(
+    platform: RedeemPlatform,
+    title: string,
+    detailsUrl: string,
+): Promise<void> {
+    await addPendingRedemption({ code: "", platform, title, redeemUrl: detailsUrl, addedAt: new Date().toISOString() });
 }

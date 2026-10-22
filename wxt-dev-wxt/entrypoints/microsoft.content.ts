@@ -11,6 +11,7 @@ import {
 } from "@/entrypoints/utils/redeemCode.ts";
 import {recordRedeemFallback, removePendingRedemption} from "@/entrypoints/utils/pendingRedemptions.ts";
 import {incrementCounter, realClick, wait, waitForMatch, waitForPageLoad} from "@/entrypoints/utils/helpers.ts";
+import {runtimeContentScriptOptions} from "@/entrypoints/utils/runtimeContentScripts.ts";
 
 const PENDING_CODE_STORAGE_KEY = "pendingMicrosoftRedeemCode";
 
@@ -24,6 +25,8 @@ interface StashedRedeemCode {
     redeemUrl: string;
 }
 
+const { matches, runAt, allFrames, registration } = runtimeContentScriptOptions('microsoft');
+
 // A Windows/Xbox-linked Prime Gaming claim (see primegaming.content.ts) lands
 // on account.microsoft.com/billing/redeem with the code appended as our own
 // extCode param. Confirmed live: the actual redeem form isn't on that page at
@@ -34,14 +37,10 @@ interface StashedRedeemCode {
 // matched origins it's actually running in: the account.microsoft.com
 // instance (top frame) just stashes the code in extension storage — shared
 // across frames, unlike page state — and the www.microsoft.com instance
-// (inside the iframe, hence allFrames below) polls for it and does the
-// actual fill-and-submit.
+// (inside the iframe, hence allFrames in its RUNTIME_CONTENT_SCRIPTS entry)
+// polls for it and does the actual fill-and-submit.
 export default defineContentScript({
-    matches: [
-        'https://account.microsoft.com/billing/redeem*',
-        'https://www.microsoft.com/store/purchase/buynowui/*',
-    ],
-    allFrames: true,
+    matches, runAt, allFrames, registration,
     main(_: any) {
         if (!oncePerPageRun('_myMicrosoftContentScriptInjected' as keyof Window)) {
             return;

@@ -1,8 +1,8 @@
 {
   "name": "free-game-claimer-for-steam-epic",
-  "description": "script to claim free games on Epic Games Store",
+  "description": "Automatically claim free games from Epic Games Store, Steam, GOG, IndieGala and Prime Gaming. Just stay signed in.",
   "private": false,
-  "version": "2.7.0",
+  "version": "3.0.0",
   "type": "module",
   "scripts": {
     "dev": "wxt",

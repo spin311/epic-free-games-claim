@@ -229,6 +229,29 @@ button:focus-visible {
   font-size: inherit;
 }
 
+/* Prime Gaming's Legacy Games redeem email, under its toggle. */
+.legacy-email {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3em;
+  padding-left: 1.35em;
+  font-size: 0.85em;
+}
+
+.legacy-email input[type="email"] {
+  padding: 0.3em 0.4em;
+  border-radius: 4px;
+  border: 1px solid transparent;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.legacy-email input[aria-invalid="true"] {
+  border-color: #c0392b;
+}
+
 /* Sits after the row label (which is flex: 1), so it hugs the right edge. */
 .login-status {
   display: flex;
@@ -269,6 +292,18 @@ button:focus-visible {
   background-color: #f0ad4e;
 }
 
+/* Signed in, but the account can't claim (e.g. no Prime): amber like
+   logged-out, since it needs the user's attention, but not a link. */
+.login-status.account-warning {
+  color: #f0ad4e;
+  font-weight: 600;
+  cursor: help;
+}
+
+.login-status.account-warning .login-dot {
+  background-color: #f0ad4e;
+}
+
 .tabs {
   display: flex;
   justify-content: space-around;
@@ -299,6 +334,24 @@ button:focus-visible {
   color: #60ea67;
   border-bottom: 3px solid #60ea67;
   font-weight: 600;
+}
+
+/* The tab colors above assume the dark theme: in light mode the inactive
+   label (70% white) vanished into the white background, hiding the Free
+   Games tab and the pending-redemptions list on it. */
+@media (prefers-color-scheme: light) {
+  .tabs {
+    border-bottom-color: rgba(0, 0, 0, 0.1);
+  }
+
+  .tabs button {
+    color: rgba(33, 53, 71, 0.7);
+  }
+
+  .tabs button:not(.active):hover {
+    color: #213547;
+    background-color: rgba(0, 0, 0, 0.04);
+  }
 }
 
 .tab-content {
@@ -367,6 +420,24 @@ button:focus-visible {
   color: #555;
   margin-top: 6px;
   text-align: left;
+}
+
+/* A Prime Gaming offer this account already collected: still listed while
+   it's live, but dimmed so the ones left to claim stand out. */
+.card.claimed {
+  opacity: 0.6;
+}
+
+.card .game-claimed {
+  color: #60ea67;
+  font-weight: 600;
+}
+
+/* The theme green is unreadable as text on white. */
+@media (prefers-color-scheme: light) {
+  .card .game-claimed {
+    color: #1b7a30;
+  }
 }
 
 .card .game-date {

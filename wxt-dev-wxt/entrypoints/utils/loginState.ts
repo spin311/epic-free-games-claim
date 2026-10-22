@@ -16,6 +16,15 @@ export const LOGIN_STATE_KEYS: Record<Platforms, string> = {
     [Platforms.PrimeGaming]: "primeGamingLoggedIn",
 };
 
+// Prime Gaming only: signed in isn't enough to claim anything — a signed-in
+// account without Prime can't, and must not read as a plain "Logged in" in
+// the popup as if all were fine. Unset means not known yet.
+export const PRIME_MEMBERSHIP_KEY = "primeGamingHasPrime";
+
+export async function recordPrimeMembership(hasPrime: boolean): Promise<void> {
+    await setStorageItem(PRIME_MEMBERSHIP_KEY, hasPrime);
+}
+
 const POLL_INTERVAL_MS = 250;
 const DETECT_TIMEOUT_MS = 5_000;
 

@@ -1,6 +1,10 @@
 import {useState} from "react";
 import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
-import {PENDING_REDEMPTIONS_STORAGE_KEY, PendingRedemption} from "@/entrypoints/utils/pendingRedemptions.ts";
+import {
+    PENDING_REDEMPTIONS_STORAGE_KEY,
+    PendingRedemption,
+    pendingRedemptionKey,
+} from "@/entrypoints/utils/pendingRedemptions.ts";
 
 // Fallback for GOG/Microsoft codes the redeem content scripts couldn't
 // auto-submit (not signed in, a captcha, already used, ...) — see
@@ -22,33 +26,42 @@ function PendingRedemptions() {
         }
     }
 
-    function handleDismiss(code: string) {
-        setPending(pending.filter((entry) => entry.code !== code));
+    function handleDismiss(key: string) {
+        setPending(pending.filter((entry) => pendingRedemptionKey(entry) !== key));
     }
 
     return (
         <div className="pending-redemptions">
             <p className="pending-redemptions-title">Needs manual redeem</p>
-            {pending.map((entry) => (
-                <div className="pending-redemption" key={entry.code}>
-                    <div className="pending-redemption-info">
-                        <p className="pending-redemption-title">
-                            {entry.title}
-                            <span className="pending-redemption-platform"> ({entry.platform})</span>
-                        </p>
-                        <code className="pending-redemption-code">{entry.code}</code>
+            {pending.map((entry) => {
+                const key = pendingRedemptionKey(entry);
+                return (
+                    <div className="pending-redemption" key={key}>
+                        <div className="pending-redemption-info">
+                            <p className="pending-redemption-title">
+                                {entry.title}
+                                <span className="pending-redemption-platform"> ({entry.platform})</span>
+                            </p>
+                            {entry.code
+                                ? <code className="pending-redemption-code">{entry.code}</code>
+                                : <p className="hint">Code wasn't read; it's on Amazon's page.</p>}
+                        </div>
+                        <div className="pending-redemption-actions">
+                            {entry.code && (
+                                <button type="button" onClick={() => handleCopy(entry.code)}>
+                                    {copiedCode === entry.code ? "Copied" : "Copy"}
+                                </button>
+                            )}
+                            <a href={entry.redeemUrl} target="_blank" rel="noopener noreferrer">
+                                {entry.code ? "Try again" : "Open on Amazon"}
+                            </a>
+                            <button type="button" onClick={() => handleDismiss(key)} aria-label="Dismiss">
+                                &times;
+                            </button>
+                        </div>
                     </div>
-                    <div className="pending-redemption-actions">
-                        <button type="button" onClick={() => handleCopy(entry.code)}>
-                            {copiedCode === entry.code ? "Copied" : "Copy"}
-                        </button>
-                        <a href={entry.redeemUrl} target="_blank" rel="noopener noreferrer">Try again</a>
-                        <button type="button" onClick={() => handleDismiss(entry.code)} aria-label="Dismiss">
-                            &times;
-                        </button>
-                    </div>
-                </div>
-            ))}
+                );
+            })}
         </div>
     );
 }

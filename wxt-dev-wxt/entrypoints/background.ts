@@ -3,233 +3,62 @@ import {getStorageItem, getStorageItems, setStorageItem} from "@/entrypoints/hoo
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFrequency.ts";
-import {parse} from 'node-html-parser';
+import {addToCartInMainWorld, parseSteamFreeGames, STEAM_GAMES_URL} from "@/entrypoints/utils/steamGames.ts";
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
 import {
   EXTERNAL_PLATFORM_STORAGE_KEYS,
   PRIME_GAMING_HOME_URL,
+  primeGameAccessToggle,
   readAllowedExternalPlatforms,
 } from "@/entrypoints/utils/primeGamingGiveaway.ts";
 import {
   ClaimAttempts,
   ensureLunaOriginRule,
   excludeRecentlyAttempted,
-  fetchPrimeOffers,
+  fetchPrimeLookup,
+  PrimeLookup,
   PrimeOffer,
   selectClaimableOffers,
   updateClaimAttempts,
 } from "@/entrypoints/utils/primeGamingApi.ts";
-import {LoginState, recordLoginState} from "@/entrypoints/utils/loginState.ts";
+import {LoginState, PRIME_MEMBERSHIP_KEY, recordLoginState, recordPrimeMembership} from "@/entrypoints/utils/loginState.ts";
 import {
   setBadgeBackgroundColor as setActionBadgeBackgroundColor,
   setBadgeText as setActionBadgeText,
 } from "@/entrypoints/utils/badge.ts";
 import {shouldClaimSteamGame} from "@/entrypoints/utils/steamReviews.ts";
 import {browser, type Browser} from "wxt/browser";
-import {EpicElement, EpicKeyImage, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
-
-const EPIC_API_URL = "https://store-site-backend-static-ipv4.ak.epicgames.com/freeGamesPromotions?locale=en-US";
-const EPIC_GAMES_URL =
-    "https://store.epicgames.com/";
-// Product pages are built on store.epicgames.com rather than
-// www.epicgames.com/store/...: the www form is a redirect, and Epic bounces
-// some slugs onto /site/... paths that 404 *and* fall outside the Epic content
-// script's match patterns, so the claim tab ends up with no script injected.
-const EPIC_PRODUCT_BASE = "https://store.epicgames.com/en-US";
-export const EPIC_FREE_GAMES_URL = "https://store.epicgames.com/en-US/free-games";
-const STEAM_GAMES_URL =
-    "https://store.steampowered.com/search/?sort_by=Price_ASC&maxprice=free&category1=998&specials=1&ndl=1";
+import {EpicElement, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
+import {
+  EPIC_API_URL,
+  EPIC_GAMES_URL,
+  formatEpicFreeGame,
+  partitionEpicPromotions,
+  withEpicEnglishLocale,
+} from "@/entrypoints/utils/epicGames.ts";
+import {areDatesDifferent, didEnoughTimePass, isActive, shouldCheckPrimeGamingToday} from "@/entrypoints/utils/scheduling.ts";
+import {PLATFORM_ACCESS_TOGGLES, resolvePlatformToggles} from "@/entrypoints/utils/platformToggles.ts";
+import {
+  AccessGroup,
+  hasAccessFor,
+  PENDING_ACCESS_REQUEST_KEY,
+  readGrantedAccessGroups,
+  toggleToCompleteAfterGrant,
+  TOGGLES_ENABLED_WITH,
+} from "@/entrypoints/utils/optionalAccess.ts";
+import {syncRuntimeContentScripts} from "@/entrypoints/utils/runtimeContentScripts.ts";
 
 const ALARM_NAME = "checkFreeGames";
 let isChecking = false;
 // Distinct from the green claimed-count badge (see handleInstall) so "still
 // working" never reads as "N games claimed".
 const CLAIMING_BADGE_COLOR = "#f0ad4e";
-
-// --- Pure helpers (module-level and exported so they're unit-testable) ---
-
-export function areDatesDifferent(date1: string, date2: string): boolean {
-  return !!date1 && new Date(date1).toDateString() !== new Date(date2).toDateString();
-}
-
-export function didEnoughTimePass(lastOpened: string, requiredMinutes: number): boolean {
-  const lastDate = new Date(lastOpened);
-  const now = new Date();
-  const minutesElapsed = (now.getTime() - lastDate.getTime()) / (1000 * 60);
-  return minutesElapsed >= requiredMinutes;
-}
-
-// `active` defaults to enabled (see OnButton's useStorage default) — unset
-// storage (nothing persisted yet, e.g. before the popup has ever rendered)
-// must read as active, not inactive. The same asymmetric-default class of bug
-// already fixed for the platform toggles in resolvePlatformToggles: without
-// this, a fresh install's alarm never gets created and its first scheduled
-// check never runs, since nothing writes `active` to storage until OnButton
-// itself mounts.
-export function isActive(active: unknown): boolean {
-  return active !== false;
-}
-
-// Confirmed (against Prime Gaming's own reference scraper and third-party
-// lineup trackers): new titles land almost exclusively on Thursdays — a larger
-// batch on the month's first Thursday, then a weekly trickle — with only rare
-// off-cycle bonus adds. These gates apply only to the claims-page fallback
-// (see checkPrimeGaming): opening a real tab on every claimFrequency tick
-// (which can be as often as hourly) finds nothing new on 5 of 7 days, while
-// the normal background lookup opens no tab and isn't gated. Restricting the
-// fallback to Thu/Fri (a
-// one-day buffer for late/timezone drops) cuts that overhead without missing
-// drops; the interval catch-up guarantees an off-cycle title or a missed
-// Thu/Fri window is never more than PRIME_GAMING_MAX_CHECK_INTERVAL_DAYS stale.
-export const PRIME_GAMING_CHECK_DAYS_OF_WEEK = [4, 5]; // Date#getDay(): Thu, Fri
-export const PRIME_GAMING_MAX_CHECK_INTERVAL_DAYS = 6;
-
-// GOG defaults ON for existing behavior; IndieGala and Prime Gaming default
-// OFF on a fresh install — so an unset ("never stored") value must resolve
-// opposite ways for the two groups. This is a pure, testable extraction of
-// that asymmetry: getStorageItems returns raw storage, not the useStorage
-// hook's own defaultValue, and the popup's default only lands in storage once
-// the popup has actually been opened — this alarm-driven (and install-time)
-// path can run first.
-//
-// Steam/Epic are included too even though they default ON like GOG: passing
-// a raw `null` straight into getEpicGamesList(shouldClaim: boolean = true)
-// does NOT fall back to the default — JS default parameters only trigger for
-// `undefined`, and getStorageItems resolves an unset key to `null`. Without
-// resolving it here first, the very first (install-time) run silently never
-// claims or detects login state for Steam/Epic on a fresh install.
-export function resolvePlatformToggles(flags: {
-  steamCheck?: boolean | null;
-  epicCheck?: boolean | null;
-  gogCheck?: boolean | null;
-  indieGalaCheck?: boolean | null;
-  primeGamingCheck?: boolean | null;
-}): {
-  claimSteam: boolean;
-  claimEpic: boolean;
-  claimGog: boolean;
-  claimIndieGala: boolean;
-  claimPrimeGaming: boolean;
-} {
-  return {
-    claimSteam: flags.steamCheck !== false,
-    claimEpic: flags.epicCheck !== false,
-    claimGog: flags.gogCheck !== false,
-    claimIndieGala: flags.indieGalaCheck === true,
-    claimPrimeGaming: flags.primeGamingCheck === true,
-  };
-}
-
-export function shouldCheckPrimeGamingToday(lastCheck: string | null, now: Date): boolean {
-  if (!lastCheck) return true;
-  if (!areDatesDifferent(lastCheck, now.toISOString())) return false;
-
-  const daysSinceLastCheck = (now.getTime() - new Date(lastCheck).getTime()) / (24 * 60 * 60 * 1000);
-  if (daysSinceLastCheck >= PRIME_GAMING_MAX_CHECK_INTERVAL_DAYS) return true;
-
-  return PRIME_GAMING_CHECK_DAYS_OF_WEEK.includes(now.getDay());
-}
-
-// Force Epic claim pages into English (?lang=en-US) so the content script can match
-// confirmation buttons ("Add to library", etc.) by text regardless of the user's
-// account language. Non-Epic URLs (e.g. Steam) are returned unchanged.
-export function withEpicEnglishLocale(url: string): string {
-  try {
-    const parsed = new URL(url);
-    if (parsed.hostname.endsWith("epicgames.com")) {
-      parsed.searchParams.set("lang", "en-US");
-      return parsed.toString();
-    }
-  } catch {
-    // Not an absolute URL — leave it as-is.
-  }
-  return url;
-}
-
-// Epic exposes the same product under several slug fields and they are not
-// interchangeable. `productSlug` is a legacy *path* that often carries a
-// "/home" suffix (e.g. "cardpocalypse/home"), which produces a 404 product URL;
-// the page-mapping tables carry the bare slug ("cardpocalypse"). Prefer those,
-// and normalise whatever we get so a stray path segment can never leak into the
-// URL again.
-export function resolveEpicSlug(game: EpicElement): string {
-  const candidates = [
-    ...(game.catalogNs?.mappings ?? []).map((m) => m?.pageSlug),
-    ...(game.offerMappings ?? []).map((m) => m?.pageSlug),
-    game.productSlug,
-  ];
-
-  for (const candidate of candidates) {
-    const slug = normalizeEpicSlug(candidate);
-    if (slug) return slug;
-  }
-  return "";
-}
-
-function normalizeEpicSlug(raw: string | undefined | null): string {
-  const trimmed = (raw ?? "").trim().replace(/^\/+|\/+$/g, "");
-  if (!trimmed) return "";
-  // "cardpocalypse/home" -> "cardpocalypse". Any other multi-segment slug is
-  // reduced to its first segment for the same reason: /p/ takes one segment.
-  return trimmed.split("/")[0] ?? "";
-}
-
-// Splits an Epic search payload into the games that are free right now and the
-// ones announced as free next. A game must appear in exactly one bucket — Epic
-// can report both a current and an upcoming free offer for the same title
-// during the weekly changeover, and listing it twice made the popup show
-// duplicates.
-export function partitionEpicPromotions(games: EpicElement[]): {
-  current: EpicElement[];
-  future: EpicElement[];
-} {
-  const current = games.filter((game) =>
-      game.price?.totalPrice?.discountPrice === 0 &&
-      (game.promotions?.promotionalOffers?.length ?? 0) > 0
-  );
-  const currentTitles = new Set(current.map((game) => game.title));
-
-  const future = games.filter((game) =>
-      !currentTitles.has(game.title) &&
-      game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]
-          ?.discountSetting?.discountPercentage === 0
-  );
-
-  return { current, future };
-}
-
-export function formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame {
-  const slug = resolveEpicSlug(game);
-
-  const isEpicBundle =
-      Array.isArray(game.categories) &&
-      game.categories.some((c) => c?.path === "bundles");
-
-  const path = isEpicBundle ? "bundle" : "p";
-
-  const promo =
-      (future
-          ? game.promotions?.upcomingPromotionalOffers?.[0]?.promotionalOffers?.[0]
-          : game.promotions?.promotionalOffers?.[0]?.promotionalOffers?.[0]) ?? {};
-
-  return {
-    title: game.title ?? "",
-    platform: Platforms.Epic,
-    // No resolvable slug would mean a bare "/p/" 404, so fall back to the
-    // free-games hub: still claimable, and the content script runs there.
-    link: slug ? `${EPIC_PRODUCT_BASE}/${path}/${slug}` : EPIC_FREE_GAMES_URL,
-    img:
-        game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ||
-        game.keyImages?.[0]?.url ||
-        "/icon/128.png",
-    description: game.description ?? "",
-    startDate: new Date(promo.startDate ?? 0).toISOString(),
-    endDate: new Date(promo.endDate ?? 0).toISOString(),
-    future,
-  };
-}
+// Chains every syncContentScripts call: main() and a permissions event can
+// start one at the same moment (a grant wakes the worker), and two overlapping
+// syncs would both try to register the same script id.
+let contentScriptSync: Promise<void> = Promise.resolve();
 
 export const background = {
   // Set by claimGames() during a run so getFreeGamesList's finally block
@@ -251,9 +80,53 @@ export const background = {
       }
     });
 
+    // A grant from the popup, or a revoke from the browser's own extension
+    // settings, changes which runtime content scripts may run.
+    browser.permissions.onAdded.addListener(() => {
+      void this.syncContentScripts();
+      void this.completePendingAccessRequest();
+    });
+    browser.permissions.onRemoved.addListener(() => void this.syncContentScripts());
+
+    // Runtime registrations don't outlive the browser session, so every start
+    // re-syncs. Started before the alarm setup so a claim run, which waits for
+    // it (see runFreeGamesChecks), can't get ahead of it.
+    const contentScriptsSynced = this.syncContentScripts();
+
     // Initialize alarms on startup
     await this.initializeAlarms();
+    await contentScriptsSynced;
+  },
 
+  // Separate so tests can stand in for the permissions API.
+  readGrantedAccess(): Promise<ReadonlySet<AccessGroup>> {
+    return readGrantedAccessGroups(browser.permissions);
+  },
+
+  // Never rejects: a failed sync is logged and the next start or permission
+  // change retries it, rather than breaking background start-up.
+  syncContentScripts(): Promise<void> {
+    contentScriptSync = contentScriptSync
+        .then(async () => syncRuntimeContentScripts(browser.scripting, await this.readGrantedAccess()))
+        .catch((e) => console.error("syncContentScripts failed:", e));
+    return contentScriptSync;
+  },
+
+  // The popup turns a toggle on itself once its request is granted, but it
+  // may have closed while the prompt was open (Firefox closes it), leaving
+  // nobody to — see toggleWithAccess.
+  async completePendingAccessRequest() {
+    try {
+      const pending = await getStorageItem(PENDING_ACCESS_REQUEST_KEY);
+      const toggle = toggleToCompleteAfterGrant(pending, await this.readGrantedAccess(), new Date());
+      if (!toggle) return;
+      for (const enabled of [toggle, ...(TOGGLES_ENABLED_WITH[toggle] ?? [])]) {
+        await setStorageItem(enabled, true);
+      }
+      await setStorageItem(PENDING_ACCESS_REQUEST_KEY, null);
+    } catch (e) {
+      console.error("completePendingAccessRequest failed:", e);
+    }
   },
 
   async handleStartup() {
@@ -374,8 +247,19 @@ export const background = {
     const { steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck, indieGalaWheelCheck } = await getStorageItems([
       "steamCheck", "epicCheck", "gogCheck", "indieGalaCheck", "primeGamingCheck", "indieGalaWheelCheck",
     ]);
-    const { claimSteam, claimEpic, claimGog, claimIndieGala, claimPrimeGaming } =
-        resolvePlatformToggles({ steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck });
+    const toggles = resolvePlatformToggles({ steamCheck, epicCheck, gogCheck, indieGalaCheck, primeGamingCheck });
+    // Flag AND granted hosts (see hasAccessFor): a flag left on while its
+    // hosts aren't granted (e.g. revoked, or set before an update) is off.
+    const granted = await this.readGrantedAccess();
+    const { claimSteam, claimEpic } = toggles;
+    const claimGog = toggles.claimGog && hasAccessFor("gogCheck", granted);
+    const canReachIndieGala = hasAccessFor("indieGalaCheck", granted);
+    const claimIndieGala = toggles.claimIndieGala && canReachIndieGala;
+    const spinWheel = claimIndieGala && indieGalaWheelCheck === true && hasAccessFor("indieGalaWheelCheck", granted);
+    const claimPrimeGaming = toggles.claimPrimeGaming && hasAccessFor("primeGamingCheck", granted);
+    // A claim tab opened before its content script is registered would just
+    // sit there unclaimed.
+    await contentScriptSync;
     try {
       await this.getEpicGamesList(claimEpic);
     } catch (e) {
@@ -404,15 +288,19 @@ export const background = {
     // independent (different storage keys, different tab targets), so the
     // order is purely a preference, not a correctness requirement.
     try {
-      await this.checkIndieGalaWheel(claimIndieGala && indieGalaWheelCheck === true);
+      await this.checkIndieGalaWheel(spinWheel);
     } catch (e) {
       console.error("checkIndieGalaWheel failed:", e);
     }
-    try {
-      await this.getIndieGalaGamesList(claimIndieGala);
-    } catch (e) {
-      console.error("getIndieGalaGamesList failed:", e);
-      if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
+    // Listing only (no claim) still needs the host: without it the browser
+    // blocks the cross-origin fetch, which would just fail every run.
+    if (canReachIndieGala) {
+      try {
+        await this.getIndieGalaGamesList(claimIndieGala);
+      } catch (e) {
+        console.error("getIndieGalaGamesList failed:", e);
+        if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
+      }
     }
     try {
       await this.checkPrimeGaming(claimPrimeGaming, force);
@@ -476,37 +364,7 @@ export const background = {
       target: { tabId },
       world: "MAIN",
       args: [appId],
-      func: (appId: number) => {
-        const fn =
-            (window as any).addToCart ||
-            (window as any).AddToCart ||
-            (window as any).g_cartAddToCart ||
-            (window as any).g_AddToCart;
-
-        if (typeof fn === "function") {
-          try {
-            fn(appId);
-            return true;
-          } catch (e) {
-            console.error("addToCart call failed:", e);
-            return false;
-          }
-        }
-
-        // fallback: simulate click in MAIN world
-        const el = document.querySelector(
-            `div.btn_addtocart a[href^="javascript:addToCart(${appId})"]`
-        );
-        if (el) {
-          el.dispatchEvent(new MouseEvent("mousedown", { bubbles: true, cancelable: true }));
-          el.dispatchEvent(new MouseEvent("mouseup", { bubbles: true, cancelable: true }));
-          el.dispatchEvent(new MouseEvent("click", { bubbles: true, cancelable: true }));
-          return true;
-        }
-
-        console.warn("No addToCart function or button found for", appId);
-        return false;
-      },
+      func: addToCartInMainWorld,
     });
   },
 
@@ -551,7 +409,7 @@ export const background = {
     } else if (request.action === "claimFreeGames") {
       if (request.data?.loggedIn === false) return;
       const games: FreeGame[] = request.data.freeGames;
-      await this.claimGames(games);
+      await this.claimGames(await this.filterAccessibleGames(games));
     } else if (request.action === "steamAddToCart") {
       const appId = Number(request.data?.appId ?? request.data?.appid);
       const tabId = sender?.tab?.id;
@@ -575,6 +433,16 @@ export const background = {
         }
       }
     }
+  },
+
+  // Content scripts can't read permissions, so the claims-page fallback reports
+  // every offer the toggles allow; one whose redeem store lacks access is
+  // dropped here, for the same reason as in claimPrimeOffers.
+  async filterAccessibleGames(games: FreeGame[]): Promise<FreeGame[]> {
+    const granted = await this.readGrantedAccess();
+    return games.filter((game) =>
+        game.platform !== Platforms.PrimeGaming || hasAccessFor(primeGameAccessToggle(game.link), granted)
+    );
   },
 
   wait(ms: number) {
@@ -645,39 +513,8 @@ export const background = {
   async getSteamGamesList(shouldClaim: boolean = true) {
     const html = await fetch(STEAM_GAMES_URL).then(r => r.text());
 
-    const root = parse(html);
-
-    const resolveUrl = (u: string) =>
-        u ? new URL(u, 'https://store.steampowered.com').toString() : '';
-
-    const container = root.querySelector('div#search_result_container');
-    const freeGameNodes = container
-        ? container.querySelectorAll('a.search_result_row')
-        : [];
-    if (freeGameNodes.length === 0) return;
-
-    const gamesArr: FreeGame[] = [];
-
-    for (const node of freeGameNodes) {
-      const href = node.getAttribute('href') ?? '';
-      const title = node.querySelector('span.title')?.text?.trim() ?? '';
-
-      const imgEl = node.querySelector('img');
-      const imgRaw =
-          imgEl?.getAttribute('src')?.trim() ||
-          imgEl?.getAttribute('data-src')?.trim() ||
-          imgEl?.getAttribute('data-lazy')?.trim() ||
-          '';
-
-      if (href && title) {
-        gamesArr.push({
-          link: resolveUrl(href),
-          img: imgRaw ? resolveUrl(imgRaw) : '',
-          title,
-          platform: Platforms.Steam,
-        });
-      }
-    }
+    const gamesArr = parseSteamFreeGames(html);
+    if (!gamesArr) return;
 
     const currFreeGames: FreeGame[] = await getStorageItem("steamGames") || [];
     const newGames: FreeGame[] = gamesArr.filter(game =>
@@ -755,11 +592,12 @@ export const background = {
     await setStorageItem("indieGalaWheelLastCheck", today);
   },
 
-  // Fetch-first, like Epic/Steam: the background lookup (loadPrimeOffers)
+  // Fetch-first, like Epic/Steam: the background lookup (loadPrimeLookup)
   // opens no tab unless something is actually claimable, so it isn't
-  // day-gated. Only if the lookup itself fails (no declarativeNetRequest,
-  // signed out, API change, ...) does this fall back to opening the claims
-  // page, which is gated by shouldCheckPrimeGamingToday.
+  // day-gated. A signed-out or non-Prime account is a definitive answer too
+  // (recorded, no tab). Only if the lookup itself fails (no
+  // declarativeNetRequest, API change, ...) does this fall back to opening
+  // the claims page, which is gated by shouldCheckPrimeGamingToday.
   // `force` skips the automatic throttles (that day gate and the per-offer
   // retry cooldown) — used only by an explicit user action (clicking "Log in"
   // for Prime Gaming, see checkPlatformLogin; or the popup's manual "Claim
@@ -767,16 +605,31 @@ export const background = {
   async checkPrimeGaming(shouldCheck: boolean, force: boolean = false) {
     if (!shouldCheck) return;
 
-    let offers: PrimeOffer[] | null = null;
+    let lookup: PrimeLookup | null = null;
     try {
-      offers = await this.loadPrimeOffers();
+      lookup = await this.loadPrimeLookup();
     } catch (e) {
       console.warn("Prime Gaming background lookup failed; falling back to the claims page:", e);
     }
+    if (lookup?.status === "signed-out") {
+      await recordLoginState(Platforms.PrimeGaming, false);
+      // Whoever signs in next may be a different account.
+      await setStorageItem(PRIME_MEMBERSHIP_KEY, null);
+      // An explicit user action still gets the page's own verdict below: the
+      // worker's cookie jar can differ from the tabs' (e.g. first-party
+      // isolation), and this way that never locks Prime Gaming out for good.
+      if (!force) return;
+    }
+    if (lookup?.status === "no-prime") {
+      console.warn("Prime Gaming: signed in without a Prime membership; nothing to claim");
+      await recordLoginState(Platforms.PrimeGaming, true);
+      await recordPrimeMembership(false);
+      return;
+    }
     // Outside the try on purpose: a failure here may come after claim tabs
     // already opened, and must not also open the claims page.
-    if (offers) {
-      await this.claimPrimeOffers(offers, force);
+    if (lookup?.status === "ok") {
+      await this.claimPrimeOffers(lookup.offers, force);
       return;
     }
 
@@ -793,13 +646,13 @@ export const background = {
 
   // Separate from claimPrimeOffers so tests can stand in for the network +
   // declarativeNetRequest side. Throws when the answer can't be trusted (see
-  // fetchPrimeOffers).
-  async loadPrimeOffers(): Promise<PrimeOffer[]> {
+  // fetchPrimeLookup).
+  async loadPrimeLookup(): Promise<PrimeLookup> {
     // The extension's own request origin as the browser reports it (the
     // extension id on Chrome, an internal UUID on Firefox).
     const extensionHost = new URL(browser.runtime.getURL("/")).host;
     await ensureLunaOriginRule(browser.declarativeNetRequest, extensionHost);
-    return fetchPrimeOffers();
+    return fetchPrimeLookup();
   },
 
   async claimPrimeOffers(offers: PrimeOffer[], force: boolean = false) {
@@ -807,11 +660,17 @@ export const background = {
     // Same as Epic/Steam: persisted regardless, so the popup lists what's live.
     await setStorageItem("primeGamingGames", listed);
     // loadPrimeOffers only succeeds with per-user claim state, which only a
-    // signed-in session gets.
+    // signed-in session gets; and an "ok" lookup is never a no-Prime one.
     await recordLoginState(Platforms.PrimeGaming, true);
+    await recordPrimeMembership(true);
 
     const stored = await getStorageItems(Object.values(EXTERNAL_PLATFORM_STORAGE_KEYS));
-    const unclaimed = selectClaimableOffers(offers, readAllowedExternalPlatforms(stored));
+    // Flag AND access: claiming a GOG-linked offer without gog access would
+    // reveal its Amazon code, then lose it on a gog.com page with no script.
+    const granted = await this.readGrantedAccess();
+    const accessible = [...readAllowedExternalPlatforms(stored)]
+        .filter((platform) => hasAccessFor(EXTERNAL_PLATFORM_STORAGE_KEYS[platform], granted));
+    const unclaimed = selectClaimableOffers(offers, new Set(accessible));
     const now = new Date();
     const attempts = (await getStorageItem<ClaimAttempts>("primeGamingClaimAttempts")) ?? {};
     const toClaim = force ? unclaimed : excludeRecentlyAttempted(unclaimed, attempts, now);
@@ -829,6 +688,14 @@ export const background = {
   // gets, since the popup that triggered this has already closed by the time
   // the click's target="_blank" tab opens.
   async checkPlatformLogin(platform: Platforms) {
+    // The popup only offers "Log in" for an effective platform, but access
+    // can be revoked while it's open.
+    const toggle = PLATFORM_ACCESS_TOGGLES[platform];
+    if (toggle && !hasAccessFor(toggle, await this.readGrantedAccess())) return;
+    // Same as runFreeGamesChecks: a "Log in" click right after a grant must
+    // not open its tab before the content script is registered.
+    await contentScriptSync;
+
     // Mirrors runFreeGamesChecks's per-platform fallback: Epic/Steam/GOG/
     // IndieGala's fast background-fetch path can fail for reasons (including
     // an ambiguous 401) that a real page visit resolves, so a failure here

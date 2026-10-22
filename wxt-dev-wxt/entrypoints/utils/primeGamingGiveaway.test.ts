@@ -5,7 +5,9 @@ import {
   detectExternalPlatform,
   extractRedeemCode,
   excludeCollectedOffers,
+  findGetGameButton,
   hasPrimeMembership,
+  markPrimeGameClaimed,
   isCollectedOfferCard,
   isInternalOfferCard,
   isOfferDetailsPage,
@@ -14,6 +16,9 @@ import {
   parseInternalOffers,
   parseOfferCard,
   PRIME_GAMING_HOME_URL,
+  primeGameAccessToggle,
+  readAllowedExternalPlatforms,
+  readOfferTitle,
 } from './primeGamingGiveaway';
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
 import { FreeGame } from '@/entrypoints/types/freeGame.ts';
@@ -122,6 +127,65 @@ describe('hasPrimeMembership', () => {
     const doc = docFrom('<button>Try Prime</button>');
     expect(hasPrimeMembership(doc)).toBe(false);
   });
+
+  // Confirmed live (Oct 2026): Luna's header wraps the label in a <p>, next
+  // to "Sign in" for a signed-out session; a Prime member's header has neither.
+  it("reads Luna's header markup, where the label sits inside a <p>", () => {
+    expect(hasPrimeMembership(docFrom('<button><p>Sign in</p></button><button><p>Try Prime</p></button>'))).toBe(false);
+    expect(hasPrimeMembership(docFrom('<button><p>Claim Games</p></button><button><p>Janez</p></button>'))).toBe(true);
+  });
+});
+
+describe('readAllowedExternalPlatforms', () => {
+  it('enables only the platforms explicitly set to true', () => {
+    const allowed = readAllowedExternalPlatforms({
+      primeGamingClaimEpic: true,
+      primeGamingClaimGog: false,
+      primeGamingClaimAmazonGames: true,
+      primeGamingClaimLegacy: true,
+    });
+    expect([...allowed].sort()).toEqual(['AmazonGames', 'Epic', 'Legacy']);
+  });
+
+  // Every live offer goes to some store (Oct 2026: 15 of 15), so Prime
+  // Gaming with nothing picked would claim nothing at all. Amazon Games App
+  // claims into Amazon's own library with no other account, so it starts on.
+  it('enables only Amazon Games App on a fresh install (no keys stored)', () => {
+    expect([...readAllowedExternalPlatforms({})]).toEqual(['AmazonGames']);
+  });
+
+  it('keeps Amazon Games App off once the user turned it off', () => {
+    expect(readAllowedExternalPlatforms({ primeGamingClaimAmazonGames: false }).size).toBe(0);
+  });
+});
+
+describe('findGetGameButton', () => {
+  // Confirmed live (Oct 2026): the label is localized ("Spiel holen" in
+  // German) but the attribute is not.
+  it('finds the claim button by its data-a-target in any language', () => {
+    const doc = docFrom('<button>Play</button><button data-a-target="buy-box_call-to-action">Spiel holen</button>');
+    expect(findGetGameButton(doc)?.textContent).toBe('Spiel holen');
+  });
+
+  it('falls back to the English "Get game" label without the attribute', () => {
+    const doc = docFrom('<button>Play</button><button>Get game</button>');
+    expect(findGetGameButton(doc)?.textContent).toBe('Get game');
+  });
+
+  it('returns null when there is no claim button', () => {
+    expect(findGetGameButton(docFrom('<button>Play</button>'))).toBeNull();
+  });
+});
+
+describe('readOfferTitle', () => {
+  it('reads the trimmed h1', () => {
+    expect(readOfferTitle(docFrom('<h1>  WarBreeds </h1>'))).toBe('WarBreeds');
+  });
+
+  it('returns undefined without a usable h1', () => {
+    expect(readOfferTitle(docFrom('<h1>  </h1>'))).toBeUndefined();
+    expect(readOfferTitle(docFrom('<p>WarBreeds</p>'))).toBeUndefined();
+  });
 });
 
 const CARD_WITH_CLAIM_BUTTON = `
@@ -151,6 +215,17 @@ const GOG_EXTERNAL_CARD = `
   <div class="item-card-details__body__primary">Weakless</div>
 </div>`;
 
+describe('primeGameAccessToggle', () => {
+  it("maps a store-linked offer to its redeem store's toggle", () => {
+    expect(primeGameAccessToggle('https://luna.amazon.com/claims/weakless-gog/dp/amzn1.pg.item.1?ingress=amzn')).toBe('primeGamingClaimGog');
+    expect(primeGameAccessToggle('https://luna.amazon.com/claims/doom-eternal-microsoft/dp/amzn1.pg.item.2')).toBe('primeGamingClaimWindows');
+  });
+
+  it('maps an internal offer (the shared claims page) to Prime Gaming itself', () => {
+    expect(primeGameAccessToggle(PRIME_GAMING_HOME_URL)).toBe('primeGamingCheck');
+  });
+});
+
 describe('detectExternalPlatform', () => {
   it('detects Epic from the claim href\'s slug suffix', () => {
     expect(detectExternalPlatform('/claims/space-grunts-epic/dp/amzn1.pg.item.dbfe54c6?ingress=amzn')).toBe('Epic');
@@ -168,10 +243,18 @@ describe('detectExternalPlatform', () => {
     expect(detectExternalPlatform('https://luna.amazon.com/claims/drop-duchy-epic/dp/amzn1.pg.item.ccc?ingress=amzn')).toBe('Epic');
   });
 
-  // "-aga" is Amazon's own native-launcher app — a real platform seen live,
-  // just not one of the three this extension supports.
-  it('returns null for an unsupported platform suffix (Amazon Games App)', () => {
-    expect(detectExternalPlatform('/claims/havendock-aga/dp/amzn1.pg.item.ddd?ingress=amzn')).toBeNull();
+  // Confirmed live: "-aga" is Amazon's own Amazon Games App library.
+  it('detects the Amazon Games App from the claim href\'s slug suffix', () => {
+    expect(detectExternalPlatform('/claims/havendock-aga/dp/amzn1.pg.item.ddd?ingress=amzn')).toBe('AmazonGames');
+  });
+
+  // Confirmed live: "-legacy" offers are redeemed with a code on Legacy Games.
+  it('detects Legacy Games from the claim href\'s slug suffix', () => {
+    expect(detectExternalPlatform('/claims/the-da-vinci-cryptex-legacy/dp/amzn1.pg.item.6cd3?ingress=amzn')).toBe('Legacy');
+  });
+
+  it('returns null for an unsupported platform suffix', () => {
+    expect(detectExternalPlatform('/claims/some-game-ubisoft/dp/amzn1.pg.item.eee?ingress=amzn')).toBeNull();
   });
 
   it('returns null when the href has no /claims/ segment at all', () => {
@@ -467,6 +550,29 @@ describe('extractRedeemCode', () => {
     expect(extractRedeemCode(doc)).toBe('DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ');
   });
 
+  // Confirmed live (Oct 2026, The Da Vinci Cryptex): Legacy Games codes are
+  // three hyphenated groups of five, shown in the same readonly inputs.
+  it('extracts a three-group Legacy Games code from the details page inputs', () => {
+    const doc = docFrom(`
+      <p>Success, you received a code to redeem The Da Vinci Cryptex.</p>
+      <input type="text" readonly value="318NG-31VCU-SK083"><input type="text" name="copy-button" readonly value="318NG-31VCU-SK083">
+      <button>Copy code</button>`);
+    expect(extractRedeemCode(doc)).toBe('318NG-31VCU-SK083');
+  });
+
+  it('extracts a Legacy Games code from text that runs straight into "Copy code"', () => {
+    expect(extractRedeemCode(docFrom('<p>318NG-31VCU-SK083Copy code</p>'))).toBe('318NG-31VCU-SK083');
+  });
+
+  // Longer codes are tried first, so a Windows code is never cut to three groups.
+  it('still reads all five groups of a Windows code', () => {
+    expect(extractRedeemCode(docFrom('<p>DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ</p>'))).toBe('DF3FX-WWG3M-WXJKR-94Q6K-H2RMZ');
+  });
+
+  it('does not match two hyphenated groups', () => {
+    expect(extractRedeemCode(docFrom('<p>ABCDE-12345</p>'))).toBeNull();
+  });
+
   it('does not match a lowercase-hex, differently-grouped item id as a Windows code', () => {
     const doc = docFrom('<div>amzn1.pg.item.1c490f2e-c698-4077-94a6-6a69c98945e2</div>');
     expect(extractRedeemCode(doc)).toBeNull();
@@ -544,5 +650,31 @@ describe('claimOfferCard', () => {
     expect(outcome).toBe('failed');
     expect(clickFn).not.toHaveBeenCalled();
     expect(waitFn).not.toHaveBeenCalled();
+  });
+});
+
+// The popup's list is written before the claim tabs run, so without this a
+// just-claimed offer kept showing as unclaimed until the next check.
+describe('markPrimeGameClaimed', () => {
+  const LINK = 'https://luna.amazon.com/claims/warbreeds-gog/dp/amzn1.pg.item.886d';
+  const games: FreeGame[] = [
+    { title: 'WarBreeds', platform: Platforms.PrimeGaming, link: LINK, img: '', claimed: false },
+    { title: 'Conarium', platform: Platforms.PrimeGaming, link: 'https://luna.amazon.com/claims/conarium-gog/dp/amzn1.pg.item.82e2', img: '', claimed: false },
+  ];
+
+  it('marks the offer whose claim page this is, from its /details success page too', () => {
+    const updated = markPrimeGameClaimed(games, `${LINK}/details?ingress=amzn`);
+    expect(updated.map((game) => game.claimed)).toEqual([true, false]);
+  });
+
+  it('returns a new list and leaves the original untouched', () => {
+    const updated = markPrimeGameClaimed(games, LINK);
+    expect(updated).not.toBe(games);
+    expect(games[0].claimed).toBe(false);
+  });
+
+  it('leaves the list as it was when no offer matches', () => {
+    expect(markPrimeGameClaimed(games, 'https://luna.amazon.com/claims/hue-epic/dp/x').map((game) => game.claimed))
+        .toEqual([false, false]);
   });
 });

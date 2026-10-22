@@ -4,68 +4,26 @@
 // from importing background.ts (which pulls in `#imports`).
 import { describe, it, expect, beforeEach, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing';
-import {
-  areDatesDifferent,
-  background,
-  didEnoughTimePass,
-  EPIC_FREE_GAMES_URL,
-  formatEpicFreeGame,
-  isActive,
-  partitionEpicPromotions,
-  resolveEpicSlug,
-  resolvePlatformToggles,
-  shouldCheckPrimeGamingToday,
-  withEpicEnglishLocale,
-} from '../background';
+import { background } from '../background';
+import { areDatesDifferent } from '../utils/scheduling';
 import { Platforms } from '../enums/platforms';
 import { getStorageItem, setStorageItem } from '../hooks/useStorage';
 import { INDIEGALA_WHEEL_URL } from '../utils/indieGalaWheel';
-import { PRIME_GAMING_HOME_URL } from '../utils/primeGamingGiveaway';
+import { ExternalPlatform, PRIME_GAMING_HOME_URL } from '../utils/primeGamingGiveaway';
 import { GOG_HOME_URL } from '../utils/gogGiveaway';
+import { AccessGroup } from '../utils/optionalAccess';
 
-describe('areDatesDifferent', () => {
-  it('is true for different calendar days', () => {
-    expect(areDatesDifferent('2026-01-01T12:00:00Z', '2026-06-15T12:00:00Z')).toBe(true);
-  });
-
-  it('is false for the same instant', () => {
-    expect(areDatesDifferent('2026-01-01T12:00:00Z', '2026-01-01T12:00:00Z')).toBe(false);
-  });
-
-  it('is false when the first date is empty (never claimed)', () => {
-    expect(areDatesDifferent('', '2026-06-15T12:00:00Z')).toBe(false);
-  });
+// fake-browser implements neither `permissions` nor `scripting`. Every optional
+// host reads as granted by default, so the suites below run with the full
+// access those hosts had while they were still required; the access-specific
+// tests narrow it per runner via readGrantedAccess.
+beforeEach(() => {
+  vi.spyOn(fakeBrowser.permissions, 'contains').mockResolvedValue(true as never);
 });
 
-describe('didEnoughTimePass', () => {
-  it('is true when more than the required minutes elapsed', () => {
-    const twoHoursAgo = new Date(Date.now() - 120 * 60 * 1000).toISOString();
-    expect(didEnoughTimePass(twoHoursAgo, 60)).toBe(true);
-  });
-
-  it('is false when not enough time has passed', () => {
-    const fiveMinAgo = new Date(Date.now() - 5 * 60 * 1000).toISOString();
-    expect(didEnoughTimePass(fiveMinAgo, 60)).toBe(false);
-  });
-});
-
-describe('isActive', () => {
-  // Regression: `active` isn't persisted to storage until OnButton's
-  // useStorage effect first mounts, so a fresh install (or any raw storage
-  // read before the popup has ever opened) must not treat "unset" as "off".
-  it('is true when unset (fresh install, never persisted)', () => {
-    expect(isActive(undefined)).toBe(true);
-    expect(isActive(null)).toBe(true);
-  });
-
-  it('is true when explicitly enabled', () => {
-    expect(isActive(true)).toBe(true);
-  });
-
-  it('is false only when explicitly disabled', () => {
-    expect(isActive(false)).toBe(false);
-  });
-});
+function withAccess(runner: { readGrantedAccess: () => Promise<ReadonlySet<AccessGroup>> }, groups: AccessGroup[]) {
+  runner.readGrantedAccess = async () => new Set(groups);
+}
 
 describe('handleInstall', () => {
   beforeEach(() => {
@@ -102,92 +60,20 @@ describe('handleInstall', () => {
   });
 });
 
-describe('resolvePlatformToggles', () => {
-  // Regression: a fresh install has never written any of these keys, so
-  // getStorageItems returns undefined/null for all five — this must not be
-  // read as "enabled" for the two platforms that default off on install, and
-  // (a real bug this caught) must still resolve to "enabled" for Steam/Epic
-  // despite getEpicGamesList/getSteamGamesList's own `= true` default params
-  // never actually firing for a raw `null` argument.
-  it('treats Steam, Epic, and GOG as enabled by default (unset) but IndieGala and Prime Gaming as disabled', () => {
-    expect(resolvePlatformToggles({})).toEqual({
-      claimSteam: true,
-      claimEpic: true,
-      claimGog: true,
-      claimIndieGala: false,
-      claimPrimeGaming: false,
-    });
-  });
-
-  it('respects an explicit false for Steam, Epic, and GOG', () => {
-    const result = resolvePlatformToggles({ steamCheck: false, epicCheck: false, gogCheck: false });
-    expect(result.claimSteam).toBe(false);
-    expect(result.claimEpic).toBe(false);
-    expect(result.claimGog).toBe(false);
-  });
-
-  it('respects an explicit true for IndieGala and Prime Gaming', () => {
-    const result = resolvePlatformToggles({ indieGalaCheck: true, primeGamingCheck: true });
-    expect(result.claimIndieGala).toBe(true);
-    expect(result.claimPrimeGaming).toBe(true);
-  });
-
-  it('respects an explicit false for IndieGala and Prime Gaming', () => {
-    const result = resolvePlatformToggles({ indieGalaCheck: false, primeGamingCheck: false });
-    expect(result.claimIndieGala).toBe(false);
-    expect(result.claimPrimeGaming).toBe(false);
-  });
-});
-
-describe('shouldCheckPrimeGamingToday', () => {
-  it('is true when Prime Gaming has never been checked before', () => {
-    // 2026-09-19 is a Saturday — not a check day — proving "never checked"
-    // overrides the day-of-week restriction entirely.
-    expect(shouldCheckPrimeGamingToday(null, new Date('2026-09-19T12:00:00Z'))).toBe(true);
-  });
-
-  it('is false when already checked earlier the same calendar day, even on a Thursday', () => {
-    const lastCheck = '2026-09-17T08:00:00Z';
-    const now = new Date('2026-09-17T18:00:00Z');
-    expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(false);
-  });
-
-  it('is true on a Thursday once the calendar day has changed', () => {
-    const lastCheck = '2026-09-16T12:00:00Z'; // Wednesday
-    const now = new Date('2026-09-17T12:00:00Z'); // Thursday
-    expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(true);
-  });
-
-  it('is true on a Friday once the calendar day has changed', () => {
-    const lastCheck = '2026-09-17T12:00:00Z'; // Thursday
-    const now = new Date('2026-09-18T12:00:00Z'); // Friday
-    expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(true);
-  });
-
-  it('is false on a non-Thu/Fri day within the catch-up window', () => {
-    const lastCheck = '2026-09-18T12:00:00Z'; // Friday
-    const now = new Date('2026-09-19T12:00:00Z'); // Saturday, 1 day later
-    expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(false);
-  });
-
-  it('is true on a non-Thu/Fri day once the catch-up interval is exceeded', () => {
-    const lastCheck = '2026-09-13T12:00:00Z'; // Sunday
-    const now = new Date('2026-09-19T12:00:00Z'); // Saturday, 6 days later
-    expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(true);
-  });
-});
-
 // The background lookup opens no tab; these stand in for it.
 const apiFails = async () => { throw new Error('Luna GraphQL responded 403'); };
 
-function primeOffer(title: string, isClaimed: boolean | null, externalPlatform: 'Epic' | 'GOG' | 'Windows' | null) {
+function primeOffer(title: string, isClaimed: boolean | null, externalPlatform: ExternalPlatform | null) {
   return {
     game: { title, platform: Platforms.PrimeGaming, link: `https://luna.amazon.com/claims/${title}/dp/x`, img: '' },
     isClaimed,
     isLive: true,
+    canClaim: null,
     externalPlatform,
   };
 }
+
+const okLookup = async () => ({ status: 'ok' as const, offers: [] });
 
 describe('checkPrimeGaming', () => {
   beforeEach(() => {
@@ -199,7 +85,7 @@ describe('checkPrimeGaming', () => {
   it('checks via the background lookup without opening the claims page', async () => {
     const runner = Object.create(background);
     let lookups = 0;
-    runner.loadPrimeOffers = async () => [];
+    runner.loadPrimeLookup = okLookup;
     runner.claimPrimeOffers = async () => { lookups++; };
     const opened: string[] = [];
     runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
@@ -216,7 +102,7 @@ describe('checkPrimeGaming', () => {
     await setStorageItem('primeGamingLastCheck', new Date('2026-09-18T12:00:00Z').toISOString()); // Friday
     const runner = Object.create(background);
     let lookups = 0;
-    runner.loadPrimeOffers = async () => [];
+    runner.loadPrimeLookup = okLookup;
     runner.claimPrimeOffers = async () => { lookups++; };
 
     vi.useFakeTimers();
@@ -234,7 +120,7 @@ describe('checkPrimeGaming', () => {
   // after claim tabs may already have opened must not open another one.
   it('does not fall back to the claims page when claiming fails after a successful lookup', async () => {
     const runner = Object.create(background);
-    runner.loadPrimeOffers = async () => [];
+    runner.loadPrimeLookup = okLookup;
     runner.claimPrimeOffers = async () => { throw new Error('storage quota'); };
     const opened: string[] = [];
     runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
@@ -245,7 +131,7 @@ describe('checkPrimeGaming', () => {
 
   it('passes force through so a manual claim skips the retry cooldown', async () => {
     const runner = Object.create(background);
-    runner.loadPrimeOffers = async () => [];
+    runner.loadPrimeLookup = okLookup;
     const forced: boolean[] = [];
     runner.claimPrimeOffers = async (_offers: unknown, force: boolean) => { forced.push(force); };
 
@@ -253,6 +139,73 @@ describe('checkPrimeGaming', () => {
     await runner.checkPrimeGaming(true);
 
     expect(forced).toEqual([true, false]);
+  });
+
+  // Confirmed live: signed out, Luna says so directly — no claims-page tab
+  // is needed to find out, on any day or even for a manual claim.
+  it('records a signed-out account without opening any tab', async () => {
+    const runner = Object.create(background);
+    runner.loadPrimeLookup = async () => ({ status: 'signed-out' });
+    runner.claimPrimeOffers = async () => { throw new Error('must not claim'); };
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await runner.checkPrimeGaming(true);
+
+    expect(opened).toEqual([]);
+    expect(await getStorageItem<boolean>('primeGamingLoggedIn')).toBe(false);
+  });
+
+  // The worker's cookie jar can differ from the tabs' (e.g. first-party
+  // isolation), so an explicit user action still gets the page's verdict.
+  it('still checks the claims page for a signed-out answer on a manual claim', async () => {
+    const runner = Object.create(background);
+    runner.loadPrimeLookup = async () => ({ status: 'signed-out' });
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await runner.checkPrimeGaming(true, true);
+
+    expect(opened).toEqual([PRIME_GAMING_HOME_URL]);
+  });
+
+  // "Get game" on a non-Prime account only leads to Prime sign-up, so no
+  // claim tab may open — and neither may the claims-page fallback.
+  it('claims nothing and opens no tab for a signed-in account without Prime', async () => {
+    const runner = Object.create(background);
+    runner.loadPrimeLookup = async () => ({ status: 'no-prime' });
+    runner.claimPrimeOffers = async () => { throw new Error('must not claim'); };
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await runner.checkPrimeGaming(true, true);
+
+    expect(opened).toEqual([]);
+    expect(await getStorageItem<boolean>('primeGamingLoggedIn')).toBe(true);
+    // Signed in alone would read "Logged in" in the popup, as if all were fine.
+    expect(await getStorageItem<boolean>('primeGamingHasPrime')).toBe(false);
+  });
+
+  // A different account may sign in next; its membership isn't known yet.
+  it('forgets the Prime membership once signed out', async () => {
+    await setStorageItem('primeGamingHasPrime', false);
+    const runner = Object.create(background);
+    runner.loadPrimeLookup = async () => ({ status: 'signed-out' });
+
+    await runner.checkPrimeGaming(true, false);
+
+    expect(await getStorageItem<boolean>('primeGamingHasPrime')).toBeNull();
+  });
+
+  it('records Prime membership once the lookup returns per-user offers', async () => {
+    await setStorageItem('primeGamingHasPrime', false);
+    const runner = Object.create(background);
+    runner.loadPrimeLookup = async () => ({ status: 'ok', offers: [primeOffer('Hue', true, 'Epic')] });
+    runner.claimGames = async () => {};
+
+    await runner.checkPrimeGaming(true, true);
+
+    expect(await getStorageItem<boolean>('primeGamingHasPrime')).toBe(true);
   });
 });
 
@@ -264,6 +217,7 @@ describe('claimPrimeOffers', () => {
   it('claims only offers Amazon reports as not yet claimed, on enabled platforms', async () => {
     await setStorageItem('primeGamingClaimGog', true);
     await setStorageItem('primeGamingClaimEpic', false);
+    await setStorageItem('primeGamingClaimAmazonGames', false);
     const runner = Object.create(background);
     const claimed: string[][] = [];
     runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
@@ -272,10 +226,40 @@ describe('claimPrimeOffers', () => {
       primeOffer('DOOM', true, 'GOG'),
       primeOffer('Zoria', false, 'GOG'),
       primeOffer('Hue', false, 'Epic'),
-      primeOffer('Wall World 2', false, null),
+      primeOffer('Wall World 2', false, 'AmazonGames'),
+      primeOffer('Mystery', false, null),
     ]);
 
     expect(claimed).toEqual([['Zoria']]);
+  });
+
+  it('claims Amazon Games App offers on a fresh install, with no toggle stored', async () => {
+    const runner = Object.create(background);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+
+    await runner.claimPrimeOffers([
+      primeOffer('Caravan SandWitch', false, 'AmazonGames'),
+      primeOffer('WarBreeds', false, 'GOG'),
+    ]);
+
+    expect(claimed).toEqual([['Caravan SandWitch']]);
+  });
+
+  it('claims Amazon Games App and Legacy Games offers once their toggles are on', async () => {
+    await setStorageItem('primeGamingClaimAmazonGames', true);
+    await setStorageItem('primeGamingClaimLegacy', true);
+    const runner = Object.create(background);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+
+    await runner.claimPrimeOffers([
+      primeOffer('Wall World 2', false, 'AmazonGames'),
+      primeOffer('Havendock', true, 'AmazonGames'),
+      primeOffer('The Da Vinci Cryptex', false, 'Legacy'),
+    ]);
+
+    expect(claimed).toEqual([['Wall World 2', 'The Da Vinci Cryptex']]);
   });
 
   it('opens nothing when every listed offer is already claimed', async () => {
@@ -338,7 +322,7 @@ describe('checkPrimeGaming fallback (API lookup failed)', () => {
   it('does nothing when disabled', async () => {
     const opened: string[] = [];
     const runner = Object.create(background);
-    runner.loadPrimeOffers = apiFails;
+    runner.loadPrimeLookup = apiFails;
     runner.openTabAndSendActionToContent = async (url: string) => {
       opened.push(url);
     };
@@ -351,7 +335,7 @@ describe('checkPrimeGaming fallback (API lookup failed)', () => {
   it('opens the tab when enabled and never checked before', async () => {
     const opened: { url: string; action: string }[] = [];
     const runner = Object.create(background);
-    runner.loadPrimeOffers = apiFails;
+    runner.loadPrimeLookup = apiFails;
     runner.openTabAndSendActionToContent = async (url: string, action: string) => {
       opened.push({ url, action });
     };
@@ -364,7 +348,7 @@ describe('checkPrimeGaming fallback (API lookup failed)', () => {
   it('does not re-open the tab twice on the same calendar day', async () => {
     const opened: string[] = [];
     const runner = Object.create(background);
-    runner.loadPrimeOffers = apiFails;
+    runner.loadPrimeLookup = apiFails;
     runner.openTabAndSendActionToContent = async (url: string) => {
       opened.push(url);
     };
@@ -382,7 +366,7 @@ describe('checkPrimeGaming fallback (API lookup failed)', () => {
 
     const opened: string[] = [];
     const runner = Object.create(background);
-    runner.loadPrimeOffers = apiFails;
+    runner.loadPrimeLookup = apiFails;
     runner.openTabAndSendActionToContent = async (url: string) => {
       opened.push(url);
     };
@@ -400,7 +384,7 @@ describe('checkPrimeGaming fallback (API lookup failed)', () => {
 
   it('does not record the last-check date when opening the tab fails, so the next due call retries', async () => {
     const runner = Object.create(background);
-    runner.loadPrimeOffers = apiFails;
+    runner.loadPrimeLookup = apiFails;
     runner.openTabAndSendActionToContent = async () => {
       throw new Error('Could not establish connection');
     };
@@ -421,7 +405,7 @@ describe('checkPrimeGaming fallback (API lookup failed)', () => {
 
     const opened: string[] = [];
     const runner = Object.create(background);
-    runner.loadPrimeOffers = apiFails;
+    runner.loadPrimeLookup = apiFails;
     runner.openTabAndSendActionToContent = async (url: string) => {
       opened.push(url);
     };
@@ -515,152 +499,6 @@ describe('checkPlatformLogin', () => {
     await runner.checkPlatformLogin(Platforms.GOG);
 
     expect(opened).toEqual([{ url: GOG_HOME_URL, action: 'getFreeGames' }]);
-  });
-});
-
-describe('formatEpicFreeGame', () => {
-  it('maps an Epic API element to a FreeGame', () => {
-    const el = {
-      title: 'Test Game',
-      productSlug: 'test-game',
-      description: 'desc',
-      keyImages: [{ type: 'Thumbnail', url: 'https://img/thumb.jpg' }],
-      promotions: {
-        promotionalOffers: [
-          { promotionalOffers: [{ startDate: '2026-01-01T00:00:00Z', endDate: '2026-01-08T00:00:00Z' }] },
-        ],
-      },
-    } as any;
-
-    const game = formatEpicFreeGame(el, false);
-    expect(game.title).toBe('Test Game');
-    expect(game.platform).toBe(Platforms.Epic);
-    expect(game.link).toBe('https://store.epicgames.com/en-US/p/test-game');
-    expect(game.img).toBe('https://img/thumb.jpg');
-    expect(game.future).toBe(false);
-    expect(game.endDate).toBe('2026-01-08T00:00:00.000Z');
-  });
-
-  it('uses the /bundle/ path for bundle products', () => {
-    const el = { title: 'B', productSlug: 'b', categories: [{ path: 'bundles' }] } as any;
-    expect(formatEpicFreeGame(el, false).link).toContain('/bundle/');
-  });
-
-  it('falls back to the default icon when no image is present', () => {
-    const el = { title: 'X', productSlug: 'x' } as any;
-    expect(formatEpicFreeGame(el, false).img).toBe('/icon/128.png');
-  });
-});
-
-describe('withEpicEnglishLocale', () => {
-  it('forces lang=en-US on an epicgames.com URL with no lang', () => {
-    expect(withEpicEnglishLocale('https://www.epicgames.com/store/de/p/x'))
-      .toBe('https://www.epicgames.com/store/de/p/x?lang=en-US');
-  });
-
-  it('overrides a non-English lang param', () => {
-    expect(withEpicEnglishLocale('https://store.epicgames.com/p/x?lang=de'))
-      .toBe('https://store.epicgames.com/p/x?lang=en-US');
-  });
-
-  it('leaves non-Epic URLs unchanged', () => {
-    const steam = 'https://store.steampowered.com/app/1/';
-    expect(withEpicEnglishLocale(steam)).toBe(steam);
-  });
-});
-
-describe('resolveEpicSlug', () => {
-  it('prefers the catalogNs pageSlug over a productSlug carrying a /home suffix', () => {
-    const el = {
-      productSlug: 'cardpocalypse/home',
-      catalogNs: { mappings: [{ pageSlug: 'cardpocalypse' }] },
-    } as any;
-    expect(resolveEpicSlug(el)).toBe('cardpocalypse');
-  });
-
-  it('strips a trailing /home segment when only productSlug is present', () => {
-    expect(resolveEpicSlug({ productSlug: 'cardpocalypse/home' } as any)).toBe('cardpocalypse');
-  });
-
-  it('strips surrounding slashes', () => {
-    expect(resolveEpicSlug({ productSlug: '/some-game/' } as any)).toBe('some-game');
-  });
-
-  it('falls back to offerMappings when catalogNs has no usable slug', () => {
-    const el = {
-      catalogNs: { mappings: [{}] },
-      offerMappings: [{ pageSlug: 'from-offer' }],
-    } as any;
-    expect(resolveEpicSlug(el)).toBe('from-offer');
-  });
-
-  it('returns an empty string when no slug is available', () => {
-    expect(resolveEpicSlug({ title: 'X' } as any)).toBe('');
-  });
-});
-
-describe('formatEpicFreeGame link building', () => {
-  it('builds a store.epicgames.com product URL for the real Cardpocalypse payload', () => {
-    const el = {
-      title: 'Cardpocalypse Standard Edition',
-      productSlug: 'cardpocalypse/home',
-      urlSlug: 'cardpocalypsegeneralaudience',
-      catalogNs: { mappings: [{ pageSlug: 'cardpocalypse' }] },
-      offerMappings: [{ pageSlug: 'cardpocalypse' }],
-      categories: [{ path: 'freegames' }, { path: 'games' }],
-    } as any;
-    expect(formatEpicFreeGame(el, false).link).toBe('https://store.epicgames.com/en-US/p/cardpocalypse');
-  });
-
-  it('never emits a link with an empty slug', () => {
-    const link = formatEpicFreeGame({ title: 'X' } as any, false).link;
-    expect(link).not.toMatch(/\/p\/?$/);
-    expect(link).toBe(EPIC_FREE_GAMES_URL);
-  });
-});
-
-describe('partitionEpicPromotions', () => {
-  const currentlyFree = {
-    title: 'Cardpocalypse Standard Edition',
-    price: { totalPrice: { discountPrice: 0 } },
-    promotions: {
-      promotionalOffers: [{ promotionalOffers: [{ discountSetting: { discountPercentage: 0 } }] }],
-    },
-  } as any;
-
-  const upcomingFree = {
-    title: 'Breathedge',
-    price: { totalPrice: { discountPrice: 2499 } },
-    promotions: {
-      upcomingPromotionalOffers: [{ promotionalOffers: [{ discountSetting: { discountPercentage: 0 } }] }],
-    },
-  } as any;
-
-  const upcomingDiscount = {
-    title: 'Ghostrunner 2',
-    price: { totalPrice: { discountPrice: 3999 } },
-    promotions: {
-      upcomingPromotionalOffers: [{ promotionalOffers: [{ discountSetting: { discountPercentage: 20 } }] }],
-    },
-  } as any;
-
-  it('splits current and upcoming free games', () => {
-    const { current, future } = partitionEpicPromotions([currentlyFree, upcomingFree, upcomingDiscount]);
-    expect(current.map((g) => g.title)).toEqual(['Cardpocalypse Standard Edition']);
-    expect(future.map((g) => g.title)).toEqual(['Breathedge']);
-  });
-
-  it('never lists a currently free game as upcoming', () => {
-    const alsoUpcoming = {
-      ...currentlyFree,
-      promotions: {
-        ...currentlyFree.promotions,
-        upcomingPromotionalOffers: [{ promotionalOffers: [{ discountSetting: { discountPercentage: 0 } }] }],
-      },
-    } as any;
-    const { current, future } = partitionEpicPromotions([alsoUpcoming]);
-    expect(current).toHaveLength(1);
-    expect(future).toEqual([]);
   });
 });
 
@@ -838,5 +676,267 @@ describe('checkIndieGalaWheel', () => {
     };
     await runner.checkIndieGalaWheel(true);
     expect(opened).toEqual([INDIEGALA_WHEEL_URL]);
+  });
+});
+
+// A feature is effective only when its flag is on AND its optional hosts are
+// granted. Updating from a release without these hosts leaves every flag as it
+// was but grants nothing, so the flag alone must never be enough.
+describe('optional host access', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  function checksRunner() {
+    const runner = Object.create(background);
+    runner.getEpicGamesList = async () => {};
+    runner.getSteamGamesList = async () => {};
+    const calls: Record<string, unknown[]> = { gog: [], wheel: [], indieGala: [], prime: [] };
+    runner.getGogGamesList = async (shouldClaim: boolean) => { calls.gog.push(shouldClaim); };
+    runner.checkIndieGalaWheel = async (shouldSpin: boolean) => { calls.wheel.push(shouldSpin); };
+    runner.getIndieGalaGamesList = async (shouldClaim: boolean) => { calls.indieGala.push(shouldClaim); };
+    runner.checkPrimeGaming = async (shouldCheck: boolean) => { calls.prime.push(shouldCheck); };
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+    return { runner, calls, opened };
+  }
+
+  it('runFreeGamesChecks skips GOG without gog access, even though its toggle defaults on', async () => {
+    const { runner, calls, opened } = checksRunner();
+    withAccess(runner, []);
+
+    await runner.runFreeGamesChecks();
+
+    expect(calls.gog).toEqual([]);
+    expect(opened).toEqual([]);
+  });
+
+  it('runFreeGamesChecks neither spins, lists nor claims IndieGala without indieGala access', async () => {
+    await setStorageItem('indieGalaCheck', true);
+    await setStorageItem('indieGalaWheelCheck', true);
+    const { runner, calls, opened } = checksRunner();
+    withAccess(runner, ['gog', 'primeGaming']);
+
+    await runner.runFreeGamesChecks();
+
+    expect(calls.wheel).toEqual([false]);
+    expect(calls.indieGala).toEqual([]);
+    expect(opened).toEqual([]);
+  });
+
+  it('runFreeGamesChecks does not check Prime Gaming without primeGaming access', async () => {
+    await setStorageItem('primeGamingCheck', true);
+    const { runner, calls } = checksRunner();
+    withAccess(runner, ['gog', 'indieGala']);
+
+    await runner.runFreeGamesChecks();
+
+    expect(calls.prime).toEqual([false]);
+  });
+
+  it('runFreeGamesChecks runs every enabled platform once its access is granted', async () => {
+    await setStorageItem('gogCheck', true);
+    await setStorageItem('indieGalaCheck', true);
+    await setStorageItem('indieGalaWheelCheck', true);
+    await setStorageItem('primeGamingCheck', true);
+    const { runner, calls } = checksRunner();
+    withAccess(runner, ['gog', 'indieGala', 'primeGaming']);
+
+    await runner.runFreeGamesChecks();
+
+    expect(calls).toEqual({ gog: [true], wheel: [true], indieGala: [true], prime: [true] });
+  });
+
+  // Claiming reveals the Amazon code; without gog access there is no script on
+  // gog.com to redeem it, so the code would be spent and lost.
+  it('claimPrimeOffers skips store-linked offers whose redeem store lacks access', async () => {
+    await setStorageItem('primeGamingClaimGog', true);
+    await setStorageItem('primeGamingClaimWindows', true);
+    await setStorageItem('primeGamingClaimLegacy', true);
+    await setStorageItem('primeGamingClaimEpic', true);
+    const runner = Object.create(background);
+    withAccess(runner, ['primeGaming', 'legacyGames']);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+
+    await runner.claimPrimeOffers([
+      primeOffer('Zoria', false, 'GOG'),
+      primeOffer('Halo', false, 'Windows'),
+      primeOffer('Cryptex', false, 'Legacy'),
+      primeOffer('Hue', false, 'Epic'),
+      primeOffer('Wall World 2', false, 'AmazonGames'),
+    ]);
+
+    expect(claimed).toEqual([['Cryptex', 'Hue', 'Wall World 2']]);
+  });
+
+  it('claimFreeGames drops claims-page Prime offers whose redeem store lacks access', async () => {
+    const runner = Object.create(background);
+    withAccess(runner, ['primeGaming']);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+    const game = (title: string, platform: Platforms, link: string) => ({ title, platform, link, img: '' });
+
+    await runner.handleMessage({
+      target: 'background',
+      action: 'claimFreeGames',
+      data: {
+        loggedIn: true,
+        freeGames: [
+          game('Internal', Platforms.PrimeGaming, PRIME_GAMING_HOME_URL),
+          game('Zoria', Platforms.PrimeGaming, 'https://luna.amazon.com/claims/zoria-gog/dp/abc?ingress=amzn'),
+          game('Hue', Platforms.PrimeGaming, 'https://luna.amazon.com/claims/hue-epic/dp/def'),
+          game('Doom', Platforms.Epic, 'https://store.epicgames.com/en-US/p/doom'),
+        ],
+      },
+    });
+
+    expect(claimed).toEqual([['Internal', 'Hue', 'Doom']]);
+  });
+
+  it('claimFreeGames claims nothing from Prime Gaming once its own access is gone', async () => {
+    const runner = Object.create(background);
+    withAccess(runner, []);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(games.map((g) => g.title)); };
+
+    await runner.handleMessage({
+      target: 'background',
+      action: 'claimFreeGames',
+      data: { loggedIn: true, freeGames: [{ title: 'Internal', platform: Platforms.PrimeGaming, link: PRIME_GAMING_HOME_URL, img: '' }] },
+    });
+
+    expect(claimed.flat()).toEqual([]);
+  });
+
+  it('checkPlatformLogin does nothing for a platform without access', async () => {
+    const runner = Object.create(background);
+    withAccess(runner, []);
+    runner.getGogGamesList = async () => { throw new Error('must not check'); };
+    runner.checkPrimeGaming = async () => { throw new Error('must not check'); };
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await runner.checkPlatformLogin(Platforms.GOG);
+    await runner.checkPlatformLogin(Platforms.PrimeGaming);
+
+    expect(opened).toEqual([]);
+  });
+
+  it('checkPlatformLogin still checks Steam and Epic, which need no optional access', async () => {
+    const runner = Object.create(background);
+    withAccess(runner, []);
+    let calls = 0;
+    runner.getSteamGamesList = async () => { calls++; };
+
+    await runner.checkPlatformLogin(Platforms.Steam);
+
+    expect(calls).toBe(1);
+  });
+});
+
+describe('syncContentScripts', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  function stubScripting(registered: { id: string }[] = []) {
+    const registeredIds: string[][] = [];
+    vi.spyOn(fakeBrowser.scripting, 'getRegisteredContentScripts').mockResolvedValue(registered as never);
+    vi.spyOn(fakeBrowser.scripting, 'registerContentScripts').mockImplementation((async (scripts: { id: string }[]) => {
+      registeredIds.push(scripts.map((script) => script.id));
+    }) as never);
+    vi.spyOn(fakeBrowser.scripting, 'unregisterContentScripts').mockResolvedValue(undefined as never);
+    return registeredIds;
+  }
+
+  it('registers the runtime content scripts of the granted groups', async () => {
+    const registeredIds = stubScripting();
+    const runner = Object.create(background);
+    withAccess(runner, ['gog', 'microsoft']);
+
+    await runner.syncContentScripts();
+
+    expect(registeredIds).toEqual([['gog', 'microsoft']]);
+  });
+
+  // Called from main() and from permissions.onAdded at once when a grant wakes
+  // the worker: overlapping syncs would both register the same id and fail.
+  it('serializes overlapping syncs so a script is never registered twice', async () => {
+    const registeredIds = stubScripting();
+    const runner = Object.create(background);
+    withAccess(runner, ['gog']);
+    let registered: { id: string }[] = [];
+    vi.mocked(fakeBrowser.scripting.getRegisteredContentScripts).mockImplementation((async () => registered) as never);
+    vi.mocked(fakeBrowser.scripting.registerContentScripts).mockImplementation((async (scripts: { id: string }[]) => {
+      registeredIds.push(scripts.map((script) => script.id));
+      registered = [...registered, ...scripts];
+    }) as never);
+
+    await Promise.all([runner.syncContentScripts(), runner.syncContentScripts()]);
+
+    expect(registeredIds).toEqual([['gog']]);
+  });
+
+  it('logs a failing sync instead of rejecting, so background start-up carries on', async () => {
+    vi.spyOn(fakeBrowser.scripting, 'getRegisteredContentScripts').mockRejectedValue(new Error('scripting unavailable') as never);
+    const errors = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const runner = Object.create(background);
+    withAccess(runner, ['gog']);
+
+    await expect(runner.syncContentScripts()).resolves.toBeUndefined();
+    expect(errors).toHaveBeenCalled();
+    errors.mockRestore();
+  });
+});
+
+describe('completePendingAccessRequest', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  // The popup may close while its prompt is open (Firefox does), so nothing
+  // there is left to turn the flag on when the grant lands.
+  it('turns on the toggle whose request the grant answered, and forgets the request', async () => {
+    await setStorageItem('pendingAccessRequest', { toggle: 'primeGamingClaimGog', requestedAt: new Date().toISOString() });
+    const runner = Object.create(background);
+    withAccess(runner, ['primeGaming', 'gog']);
+
+    await runner.completePendingAccessRequest();
+
+    expect(await getStorageItem<boolean>('primeGamingClaimGog')).toBe(true);
+    expect(await getStorageItem('pendingAccessRequest')).toBeNull();
+  });
+
+  it('leaves the toggle alone while its hosts are still not all granted', async () => {
+    await setStorageItem('pendingAccessRequest', { toggle: 'primeGamingClaimGog', requestedAt: new Date().toISOString() });
+    const runner = Object.create(background);
+    withAccess(runner, ['gog']);
+
+    await runner.completePendingAccessRequest();
+
+    expect(await getStorageItem<boolean>('primeGamingClaimGog')).toBeNull();
+  });
+
+  // The popup turns the wheel on with IndieGala; a request finished by the
+  // background must do the same.
+  it('also turns on the toggles enabled together with the requested one', async () => {
+    await setStorageItem('pendingAccessRequest', { toggle: 'indieGalaCheck', requestedAt: new Date().toISOString() });
+    const runner = Object.create(background);
+    withAccess(runner, ['indieGala']);
+
+    await runner.completePendingAccessRequest();
+
+    expect(await getStorageItem<boolean>('indieGalaCheck')).toBe(true);
+    expect(await getStorageItem<boolean>('indieGalaWheelCheck')).toBe(true);
+  });
+
+  it('does nothing without a pending request', async () => {
+    const runner = Object.create(background);
+    withAccess(runner, ['primeGaming', 'gog']);
+
+    await runner.completePendingAccessRequest();
+
+    expect(await getStorageItem<boolean>('primeGamingClaimGog')).toBeNull();
   });
 });

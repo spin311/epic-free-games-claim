@@ -5,13 +5,16 @@ import { setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
 import { closeCurrentTab } from "@/entrypoints/utils/contentMessaging.ts";
 import { findSpinButton, parseWheelPrize, StoredWheelPrize, WheelPrize } from "@/entrypoints/utils/indieGalaWheel.ts";
 import { getRndInteger, realClick, wait, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
+import { runtimeContentScriptOptions } from "@/entrypoints/utils/runtimeContentScripts.ts";
+
+const { matches, runAt, allFrames, registration } = runtimeContentScriptOptions('indiegalaWheel');
 
 // Separate from indiegala.content.ts (freebies.indiegala.com): the daily wheel
 // lives on the main site, is a distinct mechanic (galasilver/coupons, not
 // games), and is driven by its own "spinWheel" message rather than the
 // getFreeGames/claimGames pair every other store content script answers.
 export default defineContentScript({
-    matches: ['https://www.indiegala.com/*'],
+    matches, runAt, allFrames, registration,
     main(_: any) {
         if (!oncePerPageRun('_myIndieGalaWheelContentScriptInjected' as keyof Window)) {
             return;
