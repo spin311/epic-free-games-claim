@@ -123,7 +123,9 @@ button:focus-visible {
   flex-direction: row;
 }
 
-.checkboxes span {
+/* Direct children only: these are the platform rows. Without `>` this also hit
+   nested spans (the login badge and its dot), stretching them via flex-grow. */
+.checkboxes > span {
   display: flex;
   align-items: center;
   gap: 0.5em;
@@ -144,6 +146,81 @@ button:focus-visible {
   width: 1.2em;
   height: 1.2em;
   cursor: pointer;
+}
+
+/* Steam-only review gate, indented under the Steam checkbox row. */
+.review-threshold {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4em;
+  padding: 0 0.75em 0.2em 2.1em;
+  font-size: 0.85em;
+}
+
+.review-threshold .threshold-row {
+  display: flex;
+  align-items: center;
+  gap: 0.5em;
+}
+
+.review-threshold input[type="number"] {
+  width: 4em;
+  padding: 0.25em 0.4em;
+  border-radius: 4px;
+  border: none;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+.review-threshold .tier-select {
+  width: 100%;
+  padding: 0.3em 0.4em;
+  border-radius: 4px;
+  border: none;
+  background-color: #1a1a1a;
+  color: #ffffff;
+  font-family: inherit;
+  font-size: inherit;
+}
+
+/* Class rather than :has(:disabled) — :has() needs Firefox 121, and the
+   manifest supports back to 109. */
+.review-threshold.is-disabled {
+  opacity: 0.5;
+}
+
+/* Sits after the row label (which is flex: 1), so it hugs the right edge. */
+.login-status {
+  display: flex;
+  align-items: center;
+  gap: 0.4em;
+  font-size: 0.8em;
+  white-space: nowrap;
+}
+
+.login-dot {
+  width: 0.55em;
+  height: 0.55em;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+
+.login-status.logged-in {
+  color: #60ea67;
+}
+
+.login-status.logged-in .login-dot {
+  background-color: #60ea67;
+}
+
+.login-status.logged-out {
+  color: #e8734a;
+}
+
+.login-status.logged-out .login-dot {
+  background-color: #e8734a;
 }
 
 .tabs {

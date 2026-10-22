@@ -5,6 +5,7 @@ import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
 import {onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
+import {detectAndRecordLoginState} from "@/entrypoints/utils/loginState.ts";
 import {
     getRndInteger,
     wait,
@@ -34,7 +35,7 @@ export default defineContentScript({
             await waitForPageLoad();
             const games = document.querySelector('section.css-2u323');
             const freeGames = games?.querySelectorAll('a.css-g3jcms:has(div.css-82y1uz)') as NodeListOf<HTMLAnchorElement>;
-            const isLoggedIn: boolean = (document.querySelector('egs-navigation') as HTMLElement | null)?.getAttribute('isloggedin') === 'true';
+            const loginState = await detectAndRecordLoginState(Platforms.Epic);
             let gamesArr: FreeGame[] = [];
             freeGames?.forEach((freeGame) => {
                 const newFreeGame = {
@@ -46,9 +47,11 @@ export default defineContentScript({
                 gamesArr.push(newFreeGame);
             });
             if (gamesArr.length > 0) {
+                // An inconclusive read must not block claiming, so only a
+                // definite "signed out" reports loggedIn: false upstream.
                 const freeGamesResponse: FreeGamesResponse = {
                     freeGames: gamesArr,
-                    loggedIn: isLoggedIn
+                    loggedIn: loginState !== false
                 }
                 await setStorageItem("epicGames", gamesArr);
                 await browser.runtime.sendMessage({
@@ -61,6 +64,10 @@ export default defineContentScript({
 
         async function claimCurrentFreeGame() {
             await waitForPageLoad();
+            // Refresh the popup's login indicator off the page we already have
+            // open. Deliberately not awaited: it polls for the nav to hydrate
+            // and must never delay (or fail) the claim itself.
+            void detectAndRecordLoginState(Platforms.Epic);
             await wait(getRndInteger(100, 500));
             await dismissAgeGate();
             await clickWhenVisible('[data-testid="purchase-cta-button"]');

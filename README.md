@@ -1,15 +1,15 @@
-# Free Game Claimer for Steam & Epic
+# Free Game Claimer for Steam, Epic & GOG
 
 ![claimer-promo-img](/imgs/claimer-promo-img.png)
 
-Automatically claim free games from Steam and Epic Games Store with a browser extension.  
+Automatically claim free games from Steam, the Epic Games Store, and GOG giveaways with a browser extension.  
 This project helps users discover and claim free games with minimal effort.
 
 ## Features
 
 - **Automatic Claiming:** Configurable frequency options - claim games every hour, 6 hours, 12 hours, daily, or only on browser start.
 - **Manual Claim:** Instantly claim available free games with a button.
-- **Platform Selection:** Enable/disable Steam or Epic Games checks.
+- **Platform Selection:** Enable/disable Steam, Epic Games, or GOG checks.
 - **Games List:** View all currently available free games.
 - **Counter:** Track the number of games claimed.
 - **React UI:** Modern, responsive popup interface.

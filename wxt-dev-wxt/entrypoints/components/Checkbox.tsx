@@ -1,12 +1,23 @@
-function Checkbox(props: { checked: boolean, onChange: (e: any) => void, name: string }) {
+import { ChangeEvent, ReactNode } from "react";
+
+interface CheckboxProps {
+    checked: boolean;
+    onChange: (e: ChangeEvent<HTMLInputElement>) => void;
+    name: string;
+    // Optional content rendered after the label, flush to the row's right edge.
+    trailing?: ReactNode;
+}
+
+function Checkbox({ checked, onChange, name, trailing }: CheckboxProps) {
     return <span>
                     <input
                         type="checkbox"
-                        id={`${props.name}-checkbox`}
-                        checked={props.checked}
-                        onChange={props.onChange}
+                        id={`${name}-checkbox`}
+                        checked={checked}
+                        onChange={onChange}
                     />
-                    <label htmlFor={`${props.name}-checkbox`}>{props.name}</label>
+                    <label htmlFor={`${name}-checkbox`}>{name}</label>
+                    {trailing}
             </span>;
 }
 
