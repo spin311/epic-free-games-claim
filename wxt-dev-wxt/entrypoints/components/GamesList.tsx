@@ -8,7 +8,9 @@ function freeGamesList() {
     const [steamGames] = useStorage<FreeGame[]>("steamGames", []);
     const [EpicGames] = useStorage<FreeGame[]>("epicGames", []);
     const [gogGames] = useStorage<FreeGame[]>("gogGames", []);
-    const freeGames = [...steamGames, ...EpicGames, ...gogGames];
+    const [indieGalaGames] = useStorage<FreeGame[]>("indieGalaGames", []);
+    const [primeGamingGames] = useStorage<FreeGame[]>("primeGamingGames", []);
+    const freeGames = [...steamGames, ...EpicGames, ...gogGames, ...indieGalaGames, ...primeGamingGames];
     const [futureGames] = useStorage<FreeGame[]>("futureGames", []);
     const [showFutureGames, setShowFutureGames] = useStorage<boolean>("showFutureGames", true);
     const [showDesc, setShowDesc] = useStorage<boolean>("showDesc", true);

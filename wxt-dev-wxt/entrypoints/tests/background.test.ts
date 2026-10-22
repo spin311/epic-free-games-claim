@@ -206,4 +206,50 @@ describe('claimGames resilience', () => {
     expect(opened).toHaveLength(2);
     expect(opened[1]).toContain('/p/b');
   });
+
+  it('dedupes games sharing the same link into a single tab, but badges the pre-dedupe count', async () => {
+    const opened: string[] = [];
+    const badgeTexts: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+    runner.wait = async () => {};
+    runner.setBadgeText = async (text: string) => {
+      badgeTexts.push(text);
+    };
+
+    // Simulates Prime Gaming's shared-URL model: every internal offer points
+    // at the same claim page, so the tab-open loop must collapse to one visit
+    // while the badge still reports how many games were actually claimable.
+    const sharedLink = 'https://gaming.amazon.com/home';
+    await runner.claimGames([
+      { title: 'Offer A', platform: Platforms.PrimeGaming, link: sharedLink },
+      { title: 'Offer B', platform: Platforms.PrimeGaming, link: sharedLink },
+    ] as any);
+
+    expect(opened).toEqual([sharedLink]);
+    expect(badgeTexts).toEqual(['2']);
+  });
+
+  it('does not dedupe games with distinct links (existing one-link-per-game platforms are unaffected)', async () => {
+    const opened: string[] = [];
+    const badgeTexts: string[] = [];
+    const runner = Object.create(background);
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+    };
+    runner.wait = async () => {};
+    runner.setBadgeText = async (text: string) => {
+      badgeTexts.push(text);
+    };
+
+    await runner.claimGames([
+      { title: 'A', platform: Platforms.Epic, link: 'https://store.epicgames.com/en-US/p/a' },
+      { title: 'B', platform: Platforms.Epic, link: 'https://store.epicgames.com/en-US/p/b' },
+    ] as any);
+
+    expect(opened).toHaveLength(2);
+    expect(badgeTexts).toEqual(['2']);
+  });
 });

@@ -5,8 +5,8 @@ Guidance for Claude Code when working in this repository.
 ## What this is
 
 A cross-browser (Chrome + Firefox) **WebExtension** that automatically claims free
-games from the Epic Games Store and surfaces free Steam games. Built with
-**WXT** (Web Extension Toolkit), **React 19**, and **TypeScript**.
+games from Epic Games Store, GOG, IndieGala, and Prime Gaming, and surfaces free Steam
+games. Built with **WXT** (Web Extension Toolkit), **React 19**, and **TypeScript**.
 
 ## Where the code lives
 
@@ -44,15 +44,18 @@ avoid an esbuild/jsdom `TextEncoder` clash. Test files live next to sources as `
 
 ## Project structure (`wxt-dev-wxt/entrypoints/`)
 
-- `background.ts` — service worker: Epic/Steam/GOG fetching, alarms-based scheduling, claim logic
-- `epic.content.ts` / `steam.content.ts` / `gog.content.ts` — content scripts injected on store pages
+- `background.ts` — service worker: Epic/Steam/GOG/IndieGala/Prime Gaming fetching,
+  alarms-based scheduling, claim logic
+- `epic.content.ts` / `steam.content.ts` / `gog.content.ts` / `indiegala.content.ts` /
+  `primegaming.content.ts` — content scripts injected on store pages
 - `popup/` — React popup UI (`App.tsx`, `main.tsx`)
 - `components/` — React components (Settings, GamesList, GameCard, FrequencySelect, …)
 - `hooks/useStorage.ts` — typed wrapper over `browser.storage`
 - `types/` — shared TypeScript types
 - `enums/` — `claimFrequency`, `platforms`, `activeTabs`, `storageValues`
 - `utils/` — `helpers.ts`, `oncePerPageRun.ts`, `contentMessaging.ts`, `badge.ts`,
-  `loginState.ts`, `steamReviews.ts`, `gogGiveaway.ts`
+  `loginState.ts`, `steamReviews.ts`, `gogGiveaway.ts`, `indieGalaGiveaway.ts`,
+  `primeGamingGiveaway.ts`
 - `wxt.config.ts` — manifest, permissions, browser targets. `@/*` aliases the project root.
 
 ## Conventions
