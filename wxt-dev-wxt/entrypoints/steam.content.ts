@@ -4,7 +4,7 @@ import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
 import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
-import {onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
+import {closeCurrentTab, onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {detectAndRecordLoginState} from "@/entrypoints/utils/loginState.ts";
 import {
     clickWhenVisible,
@@ -37,7 +37,10 @@ export default defineContentScript({
                 };
                 gamesArr.push(newFreeGame);
             });
-            if (gamesArr.length === 0) return;
+            if (gamesArr.length === 0) {
+                await closeCurrentTab();
+                return;
+            }
             await setStorageItem("steamGames", gamesArr);
             // An inconclusive read must not block claiming, so only a definite
             // "signed out" reports loggedIn: false upstream.
@@ -50,6 +53,9 @@ export default defineContentScript({
                 action: 'claimFreeGames',
                 data: freeGamesResponse
             });
+            // Nothing further needed from this tab — background opens its own
+            // claim tab(s) for whatever this reported.
+            await closeCurrentTab();
         }
 
         async function claimCurrentFreeGame() {
@@ -58,7 +64,10 @@ export default defineContentScript({
             // open. Deliberately not awaited so it can't delay the claim.
             void detectAndRecordLoginState(Platforms.Steam);
             const buyOptions = await waitForAllElements(document, "div.game_area_purchase_game");
-            if (!buyOptions) return;
+            if (!buyOptions) {
+                await closeCurrentTab();
+                return;
+            }
 
             for (const buyOption of buyOptions) {
                 if (buyOption && isCurrentGameFree(buyOption)) {
@@ -85,6 +94,7 @@ export default defineContentScript({
                     break;
                 }
             }
+            await closeCurrentTab();
         }
 
         function isCurrentGameFree(el: { querySelector: (arg0: string) => any; }): boolean {

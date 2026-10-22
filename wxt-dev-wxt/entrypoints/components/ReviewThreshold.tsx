@@ -12,10 +12,9 @@ const CUSTOM_OPTION = "__custom";
 interface ReviewThresholdProps {
     value: number | null;
     onChange: (value: number | null) => void;
-    disabled?: boolean;
 }
 
-function ReviewThreshold({ value, onChange, disabled = false }: ReviewThresholdProps) {
+function ReviewThreshold({ value, onChange }: ReviewThresholdProps) {
     const tierLabel = findTierLabelForThreshold(value);
     const isCustom = value !== null && tierLabel === '';
 
@@ -26,7 +25,7 @@ function ReviewThreshold({ value, onChange, disabled = false }: ReviewThresholdP
     }
 
     return (
-        <div className={`review-threshold${disabled ? ' is-disabled' : ''}`}>
+        <div className="review-threshold">
             <div className="threshold-row">
                 <label htmlFor="steam-review-threshold">Positive review % needed</label>
                 <input
@@ -37,7 +36,6 @@ function ReviewThreshold({ value, onChange, disabled = false }: ReviewThresholdP
                     step={1}
                     placeholder="any"
                     value={value ?? ''}
-                    disabled={disabled}
                     onChange={e => onChange(parseThresholdInput(e.target.value))}
                 />
             </div>
@@ -45,10 +43,9 @@ function ReviewThreshold({ value, onChange, disabled = false }: ReviewThresholdP
                 className="tier-select"
                 aria-label="Steam rating preset"
                 value={isCustom ? CUSTOM_OPTION : (value === null ? '' : String(value))}
-                disabled={disabled}
                 onChange={handleTierChange}
             >
-                <option value="">Any — claim every free game</option>
+                <option value="">Any: claim every free game</option>
                 {STEAM_REVIEW_TIERS.map(tier => (
                     <option key={tier.threshold} value={tier.threshold}>
                         {tier.threshold}%+ · {tier.label}

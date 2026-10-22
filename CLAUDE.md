@@ -55,8 +55,11 @@ avoid an esbuild/jsdom `TextEncoder` clash. Test files live next to sources as `
 - `enums/` — `claimFrequency`, `platforms`, `activeTabs`, `storageValues`
 - `utils/` — `helpers.ts`, `oncePerPageRun.ts`, `contentMessaging.ts`, `badge.ts`,
   `loginState.ts`, `steamReviews.ts`, `gogGiveaway.ts`, `indieGalaGiveaway.ts`,
-  `primeGamingGiveaway.ts`
+  `primeGamingGiveaway.ts`, `primeGamingApi.ts` (background Luna GraphQL lookup: Prime Gaming is
+  checked without opening a tab; the claims-page tab is only a fallback)
 - `wxt.config.ts` — manifest, permissions, browser targets. `@/*` aliases the project root.
+  `declarativeNetRequestWithHostAccess` exists only so the background lookup can send Luna's
+  Origin on its own GraphQL request (Luna rejects the extension origin with 403).
 
 ## Conventions
 

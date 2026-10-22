@@ -1,5 +1,6 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
+import { appendRedeemParams } from "@/entrypoints/utils/redeemCode.ts";
 
 // GOG's own store client (productcard bundle_min.js) resolves exactly these two
 // endpoints for its giveaway button, so we talk to them directly instead of
@@ -8,6 +9,18 @@ import { Platforms } from "@/entrypoints/enums/platforms.ts";
 export const GOG_HOME_URL = "https://www.gog.com/";
 export const GOG_STATUS_URL = "https://www.gog.com/giveaway/status";
 export const GOG_CLAIM_URL = "https://www.gog.com/giveaway/claim";
+export const GOG_REDEEM_URL = "https://www.gog.com/redeem";
+// Confirmed live: same-origin, answers {"owned": number[]} for the signed-in
+// account — the one positive signal that a redeem actually landed.
+export const GOG_OWNED_GAMES_URL = "https://www.gog.com/user/data/games";
+
+// The extCode handoff (appended here, read back out by gog.content.ts) is
+// shared with microsoft.content.ts's redeem flow — see redeemCode.ts.
+export { extractRedeemCodeParam } from "@/entrypoints/utils/redeemCode.ts";
+
+export function buildRedeemUrl(code: string, title?: string): string {
+    return appendRedeemParams(GOG_REDEEM_URL, code, title);
+}
 
 const FALLBACK_IMAGE = "/icon/128.png";
 const FALLBACK_TITLE = "GOG Giveaway";
@@ -71,12 +84,18 @@ export function parseGiveawayStatus(payload: unknown): FreeGame | null {
         (product ? readString(product, ["storeLink", "url"]) : "");
     const image = readString(source, ["coverHorizontal", "image", "img", "logo"]) ||
         (product ? readString(product, ["coverHorizontal", "image"]) : "");
+    // Same "unverified shape" caveat as the rest of this function — description
+    // is optional on FreeGame and GameCard only renders it when present, so a
+    // wrong guess here just means no description shows, same as today.
+    const description = readString(source, ["description", "summary", "shortDescription"]) ||
+        (product ? readString(product, ["description", "summary", "shortDescription"]) : "");
 
     return {
         title: title || (slug ? titleFromSlug(slug) : FALLBACK_TITLE),
         platform: Platforms.GOG,
         link: storeLink || (slug ? `https://www.gog.com/en/game/${slug}` : GOG_HOME_URL),
         img: image || FALLBACK_IMAGE,
+        ...(description ? { description } : {}),
     };
 }
 
@@ -89,6 +108,9 @@ function parseJsonBody(body: string): unknown {
 // Reads the currently running giveaway. Throws on transport/server failures so
 // the background can fall back to driving a real gog.com tab; a 401/403 is
 // reported rather than thrown because it is an expected, actionable state.
+// Confirmed live: a 404 is GOG's normal "no giveaway running right now"
+// response (not an auth problem, not a broken endpoint) — reported the same
+// way as an empty 200 body rather than thrown.
 export async function fetchGiveaway(fetchImpl: typeof fetch = fetch): Promise<GiveawayLookup> {
     const response = await fetchImpl(GOG_STATUS_URL, {
         credentials: "include",
@@ -97,6 +119,9 @@ export async function fetchGiveaway(fetchImpl: typeof fetch = fetch): Promise<Gi
 
     if (response.status === 401 || response.status === 403) {
         return { unauthorized: true, game: null };
+    }
+    if (response.status === 404) {
+        return { unauthorized: false, game: null };
     }
     if (!response.ok) {
         throw new Error(`GOG giveaway status responded ${response.status}`);
@@ -137,4 +162,59 @@ export async function claimGiveaway(fetchImpl: typeof fetch = fetch): Promise<Cl
         console.error("[gog] claim request failed:", error);
         return "failed";
     }
+}
+
+// Never throws: null means "couldn't tell" (signed out, transport error, or an
+// unexpected payload), which callers must treat as unverified, not as owned.
+export async function fetchOwnedGameIds(fetchImpl: typeof fetch = fetch): Promise<Set<number> | null> {
+    try {
+        const response = await fetchImpl(GOG_OWNED_GAMES_URL, {
+            credentials: "include",
+            headers: { Accept: "application/json" },
+        });
+        if (!response.ok) {
+            console.warn(`[gog] owned-games lookup responded ${response.status}`);
+            return null;
+        }
+        const owned = asRecord(parseJsonBody(await response.text()))?.owned;
+        if (!Array.isArray(owned)) return null;
+        return new Set(owned.filter((id): id is number => typeof id === "number"));
+    } catch (error: unknown) {
+        console.warn("[gog] owned-games lookup failed:", error);
+        return null;
+    }
+}
+
+// Confirmed live (redeem bundle + rendered page): GOG's success step renders
+// a .success-message header ("Code redeemed successfully!"). Matched by
+// markup rather than text so it works whatever the account's UI language.
+export function hasRedeemSuccessScreen(root: Document | HTMLElement): boolean {
+    return root.querySelector(".success-message") !== null;
+}
+
+// Confirmed live: neither the "Continue" button vanishing nor the URL change
+// means anything was redeemed — both happen on the way to a second "Redeem"
+// step. So success needs a positive signal: GOG's own success screen, or the
+// library gaining a product it didn't have before (a fallback for a success
+// screen we fail to recognise). The library alone isn't enough: GOG redeems
+// asynchronously and warns it "might take a little longer to appear".
+export async function waitForRedeemConfirmation(
+    before: ReadonlySet<number> | null,
+    fetchOwned: () => Promise<Set<number> | null>,
+    isSuccessShown: () => boolean,
+    waitFn: (ms: number) => Promise<void>,
+    timeoutMs = 15000,
+    pollIntervalMs = 1500
+): Promise<boolean> {
+    const maxAttempts = Math.max(1, Math.ceil(timeoutMs / pollIntervalMs));
+    for (let attempt = 0; attempt < maxAttempts; attempt++) {
+        if (isSuccessShown()) return true;
+        // No baseline means a diff can't tell new from already-owned.
+        if (before) {
+            const owned = await fetchOwned();
+            if (owned && [...owned].some((id) => !before.has(id))) return true;
+        }
+        if (attempt < maxAttempts - 1) await waitFn(pollIntervalMs);
+    }
+    return false;
 }
