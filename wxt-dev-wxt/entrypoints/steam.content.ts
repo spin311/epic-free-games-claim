@@ -20,13 +20,18 @@ export default defineContentScript({
         if (!oncePerPageRun('_mySteamContentScriptInjected' as keyof Window)) {
             return;
         }
+        // On every Steam store page, not just the extension's own tabs: the
+        // popup's "Log in" link lands a signed-in user on the store, and that
+        // visit alone should settle the indicator. Never awaited here, so it
+        // can't delay (or fail) a claim.
+        const loginStateDetected = detectAndRecordLoginState(Platforms.Steam);
         onClaimMessage({ getFreeGames: getFreeGamesList, claimGames: claimCurrentFreeGame });
 
         async function getFreeGamesList() {
             await waitForPageLoad();
             const games = document.querySelector('div#search_result_container');
             const freeGames = games?.querySelectorAll('a.search_result_row:not(.ds_owned)') as NodeListOf<HTMLAnchorElement>;
-            const loginState = await detectAndRecordLoginState(Platforms.Steam);
+            const loginState = await loginStateDetected;
             let gamesArr: FreeGame[] = [];
             freeGames?.forEach((freeGame) => {
                 const newFreeGame = {
@@ -60,9 +65,6 @@ export default defineContentScript({
 
         async function claimCurrentFreeGame() {
             await waitForPageLoad();
-            // Refresh the popup's login indicator off the page we already have
-            // open. Deliberately not awaited so it can't delay the claim.
-            void detectAndRecordLoginState(Platforms.Steam);
             const buyOptions = await waitForAllElements(document, "div.game_area_purchase_game");
             if (!buyOptions) {
                 await closeCurrentTab();
