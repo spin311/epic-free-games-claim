@@ -92,13 +92,30 @@ export function isEpicGameOwned(root: Document | HTMLElement): boolean {
     return findEpicBuyButtonByLabel(root, 'in library') !== null;
 }
 
-// Confirmed live (Oct 2026): after "Get" → "Continue", Epic can put up an
-// interactive hCaptcha. Its page always carries a 0x0 hCaptcha frame, so only
-// a frame with an actual size means a challenge is waiting for a person.
+// Confirmed live (Oct 2026): Epic can put up an interactive hCaptcha after
+// "Get" → "Continue" (on the store page) and again after "I accept" (inside
+// the checkout frame). Its pages always carry a 0x0 hCaptcha frame, and a
+// solved challenge's frame keeps its size but is hidden, so only a sized,
+// visible frame means a challenge is waiting for a person.
 export function isCaptchaShown(root: Document | HTMLElement): boolean {
     return Array.from(root.querySelectorAll<HTMLIFrameElement>('iframe[src*="hcaptcha.com"]')).some((frame) => {
         const rect = frame.getBoundingClientRect();
-        return rect.width > 0 && rect.height > 0;
+        const view = frame.ownerDocument.defaultView;
+        const isHidden = view?.getComputedStyle(frame).visibility === 'hidden';
+        return rect.width > 0 && rect.height > 0 && !isHidden;
+    });
+}
+
+// Documents of the iframes this page can reach (same-origin ones); others,
+// like hCaptcha's, are skipped. Confirmed live: Epic's checkout is now a
+// same-origin iframe inside a dialog, with no stable container around it.
+export function sameOriginFrameDocuments(root: Document): Document[] {
+    return Array.from(root.querySelectorAll('iframe')).flatMap((frame) => {
+        try {
+            return frame.contentDocument ? [frame.contentDocument] : [];
+        } catch {
+            return []; // cross-origin
+        }
     });
 }
 

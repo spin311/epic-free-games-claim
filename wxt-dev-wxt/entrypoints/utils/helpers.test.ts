@@ -1,5 +1,5 @@
 import { describe, it, expect, afterEach } from 'vitest';
-import { getRndInteger, isVisible, waitForPageLoad, findButtonByText, findDeviceNotSupportedContinue, findAgeGateContinue, findAdultCheckConfirm, findEpicGetButton, isEpicGameOwned, isCaptchaShown } from './helpers';
+import { getRndInteger, isVisible, waitForPageLoad, findButtonByText, findDeviceNotSupportedContinue, findAgeGateContinue, findAdultCheckConfirm, findEpicGetButton, isEpicGameOwned, isCaptchaShown, sameOriginFrameDocuments } from './helpers';
 
 describe('getRndInteger', () => {
   it('returns a value within [min, max] inclusive', () => {
@@ -135,14 +135,26 @@ describe('findEpicGetButton', () => {
 describe('isCaptchaShown', () => {
   // Seen live after "Get" → "Continue": an always-present 0x0 hCaptcha frame,
   // plus a 520x570 one only while a challenge is up.
-  function withFrame(width: number, height: number): HTMLElement {
+  function withFrame(width: number, height: number, visibility = 'visible'): HTMLElement {
     const root = document.createElement('div');
     const frame = document.createElement('iframe');
     frame.src = 'https://newassets.hcaptcha.com/captcha/v1/abc/static/hcaptcha.html';
+    frame.style.visibility = visibility;
     frame.getBoundingClientRect = () => ({ width, height } as DOMRect);
     root.appendChild(frame);
+    document.body.appendChild(root);
     return root;
   }
+
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  // Confirmed live: once solved, the challenge frame keeps its size and is
+  // only hidden.
+  it('is false for a solved challenge, which keeps its size but is hidden', () => {
+    expect(isCaptchaShown(withFrame(520, 570, 'hidden'))).toBe(false);
+  });
 
   it('is true while an hCaptcha challenge is on screen', () => {
     expect(isCaptchaShown(withFrame(520, 570))).toBe(true);
@@ -154,6 +166,32 @@ describe('isCaptchaShown', () => {
 
   it('is false without any hCaptcha frame', () => {
     expect(isCaptchaShown(document.createElement('div'))).toBe(false);
+  });
+});
+
+describe('sameOriginFrameDocuments', () => {
+  afterEach(() => {
+    document.body.innerHTML = '';
+  });
+
+  // Epic's checkout now lives in an iframe inside a dialog, with no
+  // #webPurchaseContainer around it, so every reachable frame is searched.
+  it('returns the documents of iframes the page can reach, wherever they sit', () => {
+    document.body.innerHTML = '<section role="dialog"><div><iframe></iframe></div></section>';
+    const frame = document.querySelector('iframe')!;
+    frame.contentDocument!.body.innerHTML = '<button>Add to library</button>';
+
+    const docs = sameOriginFrameDocuments(document);
+
+    expect(docs).toHaveLength(1);
+    expect(findButtonByText(docs[0], 'Add to library')).not.toBeNull();
+  });
+
+  it('skips frames it cannot reach (cross-origin, e.g. hCaptcha)', () => {
+    document.body.innerHTML = '<iframe></iframe>';
+    Object.defineProperty(document.querySelector('iframe')!, 'contentDocument', { get: () => null });
+
+    expect(sameOriginFrameDocuments(document)).toEqual([]);
   });
 });
 

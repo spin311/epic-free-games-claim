@@ -18,7 +18,8 @@ import {
     findAgeGateContinue,
     findEpicGetButton,
     isCaptchaShown,
-    isEpicGameOwned
+    isEpicGameOwned,
+    sameOriginFrameDocuments
 } from "@/entrypoints/utils/helpers.ts";
 import {defineContentScript} from "wxt/utils/define-content-script";
 
@@ -102,7 +103,7 @@ export default defineContentScript({
             console.log('[claimer] Clicked "Get"; completing claim');
 
             let claimed = await completePurchase(40_000);
-            if (!claimed && isCaptchaShown(document)) {
+            if (!claimed && isCaptchaUp()) {
                 // Only the user can pass this, so the tab stays for them (as
                 // GOG's redeem page does), and the order is still completed and
                 // counted once they have.
@@ -113,7 +114,7 @@ export default defineContentScript({
                 await incrementCounter();
                 await markClaimed();
                 console.log('[claimer] Claim completed');
-            } else if (isCaptchaShown(document)) {
+            } else if (isCaptchaUp()) {
                 // Still unsolved: the tab stays open, and the background won't
                 // open another for this game while it is.
                 return;
@@ -171,21 +172,15 @@ export default defineContentScript({
             }
         }
 
-        // The purchase flow can render in the top document OR inside the (same-origin)
-        // #webPurchaseContainer iframe, so callers search both.
-        function getPurchaseIframeDoc(): Document | null {
-            const iframe = document.querySelector<HTMLIFrameElement>('#webPurchaseContainer iframe');
-            if (!iframe) return null;
-            try {
-                return iframe.contentDocument || iframe.contentWindow?.document || null;
-            } catch {
-                return null; // cross-origin — unreachable from here
-            }
+        // The purchase flow renders partly in the top document and partly in
+        // a same-origin checkout iframe (confirmed live, Oct 2026: inside a
+        // dialog, no longer under #webPurchaseContainer), so search them all.
+        function getSearchRoots(): Document[] {
+            return [...sameOriginFrameDocuments(document), document];
         }
 
-        function getSearchRoots(): Document[] {
-            const iframeDoc = getPurchaseIframeDoc();
-            return iframeDoc ? [iframeDoc, document] : [document];
+        function isCaptchaUp(): boolean {
+            return getSearchRoots().some((root) => isCaptchaShown(root));
         }
 
         // Drive the free-game claim to completion after "Get" is clicked by
@@ -212,6 +207,7 @@ export default defineContentScript({
             // it mid-transition cancels the purchase and wedges the flow. One
             // click + a generous wait is what actually advances it.
             const clickedLabels = new Set<string>();
+            let sawCaptcha = false;
 
             while (Date.now() < deadline) {
                 const roots = getSearchRoots();
@@ -219,6 +215,22 @@ export default defineContentScript({
                 // Done once the confirmation screen renders in any reachable frame.
                 if (roots.some((root) => SUCCESS_RE.test(getRenderedText(root)))) {
                     return true;
+                }
+
+                // A captcha blocks whatever is under it, so click nothing while
+                // it's up. Once it's gone, Epic may move on by itself or want
+                // the interrupted step again: give it a moment, then let the
+                // confirmation labels be clicked once more.
+                if (roots.some((root) => isCaptchaShown(root))) {
+                    sawCaptcha = true;
+                    await wait(1000);
+                    continue;
+                }
+                if (sawCaptcha) {
+                    sawCaptcha = false;
+                    clickedLabels.clear();
+                    await wait(3000);
+                    continue;
                 }
 
                 // Device-not-supported takes precedence; safe to re-dismiss since
