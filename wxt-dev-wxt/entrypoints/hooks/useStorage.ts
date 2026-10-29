@@ -28,6 +28,21 @@ export function useStorage<T>(key: string, defaultValue: T, storageType: Storage
     return [value, setValue] as const;
 }
 
+// Read-only and live, for values only the background writes: useStorage
+// writes what it read back to storage, which could clobber a newer value
+// written meanwhile, and never sees later changes while the popup is open.
+export function useStorageValue<T>(key: string, storageType: StorageValues = StorageValues.LOCAL): T | null {
+    const storageKey = `${storageType}:${key}` as StorageItemKey;
+    const [value, setValue] = useState<T | null>(null);
+
+    useEffect(() => {
+        void storage.getItem<T>(storageKey).then((stored) => setValue(stored ?? null));
+        return storage.watch<T>(storageKey, (next) => setValue(next ?? null));
+    }, [storageKey]);
+
+    return value;
+}
+
 export async function getStorageItem<T = any>(key: string, storageType: StorageValues = StorageValues.LOCAL): Promise<T | null> {
     const storageKey = `${storageType}:${key}` as StorageItemKey;
     return await storage.getItem<T>(storageKey);

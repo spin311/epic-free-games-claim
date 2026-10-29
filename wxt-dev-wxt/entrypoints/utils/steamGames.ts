@@ -1,9 +1,22 @@
 import {parse} from 'node-html-parser';
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
+import {LoginState, readSteamLoginState} from "@/entrypoints/utils/loginState.ts";
 
 export const STEAM_GAMES_URL =
     "https://store.steampowered.com/search/?sort_by=Price_ASC&maxprice=free&category1=998&specials=1&ndl=1";
+
+// The service worker has no DOM, so the fetched page is read with the same
+// header selectors steam.content.ts uses on a live one.
+export function parseSteamLoginState(html: string): LoginState {
+  return readSteamLoginState(parse(html));
+}
+
+// The search page's result list, present whether or not anything is free.
+// Missing means the page changed (or isn't the search page at all).
+export function hasSteamResultList(html: string): boolean {
+  return parse(html).querySelector('div#search_result_container') !== null;
+}
 
 // Parses the free-games search page; null when the result container has no rows
 // (the page layout changed or the search returned nothing).

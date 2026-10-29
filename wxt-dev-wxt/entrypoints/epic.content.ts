@@ -1,23 +1,33 @@
-import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import { browser } from 'wxt/browser';
-import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {mergeIntoStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
-import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
 import {closeCurrentTab, onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {detectAndRecordLoginState} from "@/entrypoints/utils/loginState.ts";
+import {EPIC_CLAIMED_KEY, epicProductKey} from "@/entrypoints/utils/epicGames.ts";
+import {HealthProblem} from "@/entrypoints/utils/health.ts";
 import {
     getRndInteger,
     wait,
-    clickWhenVisible,
     waitForPageLoad,
     incrementCounter,
     realClick,
     findButtonByText,
     findDeviceNotSupportedContinue,
-    findAgeGateContinue
+    findAgeGateContinue,
+    findEpicGetButton,
+    isCaptchaShown,
+    isEpicGameOwned,
+    sameOriginFrameDocuments
 } from "@/entrypoints/utils/helpers.ts";
 import {defineContentScript} from "wxt/utils/define-content-script";
+
+// The store page hydrates its buy button client-side, which can take a while
+// in a background tab.
+const BUY_BUTTON_TIMEOUT_MS = 15_000;
+// How long a captcha left for the user is watched before the script gives up
+// on finishing the order itself (the tab stays open either way).
+const CAPTCHA_WAIT_MS = 10 * 60_000;
 
 export default defineContentScript({
     // Must cover both hosts Epic uses for product pages: the store homepage/scrape
@@ -29,63 +39,103 @@ export default defineContentScript({
         if (!oncePerPageRun('_myEpicContentScriptInjected')) {
             return;
         }
-        onClaimMessage({ getFreeGames: getFreeGamesList, claimGames: claimCurrentFreeGame });
-
-        async function getFreeGamesList() {
-            await waitForPageLoad();
-            const games = document.querySelector('section.css-2u323');
-            const freeGames = games?.querySelectorAll('a.css-g3jcms:has(div.css-82y1uz)') as NodeListOf<HTMLAnchorElement>;
-            const loginState = await detectAndRecordLoginState(Platforms.Epic);
-            let gamesArr: FreeGame[] = [];
-            freeGames?.forEach((freeGame) => {
-                const newFreeGame = {
-                    link: freeGame.href ?? '',
-                    img: freeGame.getElementsByTagName('img')[0]?.dataset.image ?? '',
-                    title: freeGame.getElementsByTagName('h6')[0]?.innerHTML ?? '',
-                    platform: Platforms.Epic
-                };
-                gamesArr.push(newFreeGame);
-            });
-            if (gamesArr.length > 0) {
-                // An inconclusive read must not block claiming, so only a
-                // definite "signed out" reports loggedIn: false upstream.
-                const freeGamesResponse: FreeGamesResponse = {
-                    freeGames: gamesArr,
-                    loggedIn: loginState !== false
-                }
-                await setStorageItem("epicGames", gamesArr);
-                await browser.runtime.sendMessage({
-                    target: 'background',
-                    action: 'claimFreeGames',
-                    data: freeGamesResponse
-                });
-            }
-            // Nothing further needed from this tab — background opens its own
-            // claim tab(s) for whatever this reported.
-            await closeCurrentTab();
-        }
+        // On every Epic page, not just the extension's own tabs: signing in on
+        // the store is what lifts the background's "signed out" pause on
+        // claiming. Never awaited here, so it can't delay (or fail) a claim.
+        void detectAndRecordLoginState(Platforms.Epic);
+        // No getFreeGames here: the background lists Epic's games from its
+        // API, and the store-page scrape it once fell back to lost its
+        // selectors in Epic's 2026 redesign.
+        onClaimMessage({ claimGames: claimCurrentFreeGame });
 
         async function claimCurrentFreeGame() {
             await waitForPageLoad();
-            // Refresh the popup's login indicator off the page we already have
-            // open. Deliberately not awaited: it polls for the nav to hydrate
-            // and must never delay (or fail) the claim itself.
-            void detectAndRecordLoginState(Platforms.Epic);
             await wait(getRndInteger(100, 500));
             await dismissAgeGate();
-            await clickWhenVisible('[data-testid="purchase-cta-button"]');
+            const buyButton = await waitForBuyButton(BUY_BUTTON_TIMEOUT_MS);
+            if (buyButton === 'owned') {
+                console.log('[claimer] Already in library');
+                await markClaimed();
+                await reportHealth();
+                await closeCurrentTab();
+                return;
+            }
+            if (!buyButton) {
+                // Not marked claimed, so the background retries it tomorrow.
+                console.warn('[claimer] No "Get" button on this page; it may have changed');
+                logClaimDiagnostics();
+                await reportHealth('changed', 'Couldn\'t find the "Get" button on a free game\'s page');
+                await closeCurrentTab();
+                return;
+            }
+            await wait(getRndInteger(100, 500));
+            realClick(buyButton);
             console.log('[claimer] Clicked "Get"; completing claim');
 
-            const claimed = await completePurchase(40_000);
+            let claimed = await completePurchase(40_000);
+            if (!claimed && isCaptchaUp()) {
+                // Only the user can pass this (see announceCaptcha), so the tab
+                // stays for them, as GOG's redeem page does, and the order is
+                // still completed and counted once they have.
+                claimed = await completePurchase(CAPTCHA_WAIT_MS);
+            }
             if (claimed) {
                 await incrementCounter();
+                await markClaimed();
+                await reportHealth();
                 console.log('[claimer] Claim completed');
+            } else if (isCaptchaUp()) {
+                // Still unsolved: the tab stays open, and the background won't
+                // open another for this game while it is.
+                return;
             } else {
                 console.warn('[claimer] Could not complete claim within timeout');
                 logClaimDiagnostics();
+                await reportHealth('unfinished', 'Epic\'s checkout didn\'t finish; it\'s retried tomorrow');
             }
-            // Either way, nothing further needed from this tab.
             await closeCurrentTab();
+        }
+
+        // Waits for a buy button label we can act on: "Get", or "In Library"
+        // for a game the account already owns. Null if neither shows up.
+        async function waitForBuyButton(timeoutMs: number): Promise<HTMLButtonElement | 'owned' | null> {
+            const deadline = Date.now() + timeoutMs;
+            while (Date.now() < deadline) {
+                const getButton = findEpicGetButton(document);
+                if (getButton) return getButton;
+                if (isEpicGameOwned(document)) return 'owned';
+                await wait(500);
+            }
+            return null;
+        }
+
+        // For the popup's health status (see health.ts); no problem means the
+        // claim worked. Never throws: the tab must still close after it.
+        async function reportHealth(problem?: HealthProblem, detail?: string) {
+            try {
+                await browser.runtime.sendMessage({
+                    target: 'background',
+                    action: 'reportHealth',
+                    data: { platform: Platforms.Epic, problem, detail },
+                });
+            } catch (error: unknown) {
+                console.error('[claimer] Could not report the claim outcome:', error);
+            }
+        }
+
+        // Tells the background to stop retrying this game (see
+        // EPIC_CLAIMED_KEY). Claim tabs can finish at the same moment and this
+        // read-modify-write isn't atomic, so one record can get lost: that only
+        // costs a retry, whose tab then finds the game "In Library".
+        // Never throws: the tab must still close after it.
+        async function markClaimed() {
+            const key = epicProductKey(location.href);
+            if (!key) return;
+            try {
+                await mergeIntoStorageItem(EPIC_CLAIMED_KEY, key);
+            } catch (error: unknown) {
+                console.error('[claimer] Could not record the claim:', error);
+            }
         }
 
         // Mature-content games open behind an age-gate modal that blocks the
@@ -107,21 +157,32 @@ export default defineContentScript({
             }
         }
 
-        // The purchase flow can render in the top document OR inside the (same-origin)
-        // #webPurchaseContainer iframe, so callers search both.
-        function getPurchaseIframeDoc(): Document | null {
-            const iframe = document.querySelector<HTMLIFrameElement>('#webPurchaseContainer iframe');
-            if (!iframe) return null;
+        // The purchase flow renders partly in the top document and partly in
+        // a same-origin checkout iframe (confirmed live, Oct 2026: inside a
+        // dialog, no longer under #webPurchaseContainer), so search them all.
+        function getSearchRoots(): Document[] {
+            return [...sameOriginFrameDocuments(document), document];
+        }
+
+        // Set while a captcha waits for the user, across completePurchase
+        // calls, so each one is announced once.
+        let isCaptchaPending = false;
+
+        // Only the user can pass a captcha: select its tab and flag the
+        // browser window (see the background's bringTabToFront), and say so in
+        // the popup. Never throws: the claim carries on either way.
+        async function announceCaptcha() {
+            console.warn('[claimer] Epic wants a captcha solved; waiting for the user');
+            await reportHealth('captcha', 'Epic wants a captcha solved in its open tab to finish a claim');
             try {
-                return iframe.contentDocument || iframe.contentWindow?.document || null;
-            } catch {
-                return null; // cross-origin — unreachable from here
+                await browser.runtime.sendMessage({ target: 'background', action: 'bringTabToFront' });
+            } catch (error: unknown) {
+                console.error('[claimer] Could not bring the captcha tab forward:', error);
             }
         }
 
-        function getSearchRoots(): Document[] {
-            const iframeDoc = getPurchaseIframeDoc();
-            return iframeDoc ? [iframeDoc, document] : [document];
+        function isCaptchaUp(): boolean {
+            return getSearchRoots().some((root) => isCaptchaShown(root));
         }
 
         // Drive the free-game claim to completion after "Get" is clicked by
@@ -155,6 +216,26 @@ export default defineContentScript({
                 // Done once the confirmation screen renders in any reachable frame.
                 if (roots.some((root) => SUCCESS_RE.test(getRenderedText(root)))) {
                     return true;
+                }
+
+                // A captcha blocks whatever is under it, so click nothing while
+                // it's up, and bring it to the user as soon as it shows. Once
+                // it's gone, Epic may move on by itself or want the interrupted
+                // step again: give it a moment, then let the confirmation
+                // labels be clicked once more.
+                if (roots.some((root) => isCaptchaShown(root))) {
+                    if (!isCaptchaPending) {
+                        isCaptchaPending = true;
+                        await announceCaptcha();
+                    }
+                    await wait(1000);
+                    continue;
+                }
+                if (isCaptchaPending) {
+                    isCaptchaPending = false;
+                    clickedLabels.clear();
+                    await wait(3000);
+                    continue;
                 }
 
                 // Device-not-supported takes precedence; safe to re-dismiss since

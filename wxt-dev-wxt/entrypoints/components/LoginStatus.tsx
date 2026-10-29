@@ -19,13 +19,11 @@ function requestLoginRecheck(platform: Platforms) {
     browser.runtime.sendMessage({ action: "checkPlatformLogin", target: "background", data: { platform } });
 }
 
-// Only a confirmed `true` (an actual claim run detected a signed-in session)
-// shows "Logged in" — everything else, including the unknown/never-checked
-// state a fresh install starts in, shows the "Log in" prompt. Claiming never
-// happens as a side effect of installing or of enabling a platform (see
-// background.ts's handleInstall), so without this a freshly enabled platform
-// would show nothing at all until the next scheduled check — a "Log in"
-// nudge is more useful than no signal, and it's never wrong to suggest.
+// Only a confirmed `true` (a check or a visit to the store saw a signed-in
+// session) shows "Logged in" — everything else, including the unknown state
+// before anything has checked, shows the "Log in" prompt. Clicking it also
+// asks the background to recheck, so a user who is already signed in sees
+// "Logged in" from then on.
 function LoginStatus({ state, loginUrl, platform, accountWarning }: LoginStatusProps) {
     if (state === true && accountWarning) {
         return (

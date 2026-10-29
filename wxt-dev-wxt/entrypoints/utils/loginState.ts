@@ -37,11 +37,17 @@ export function readEpicLoginState(doc: Document): LoginState {
     return attribute === 'true';
 }
 
+// What readSteamLoginState needs from its input: a live Document, or the
+// node-html-parser root the service worker builds from fetched HTML.
+export interface QueryRoot {
+    querySelector(selector: string): QueryRoot | null;
+}
+
 // Steam's header is server-rendered: #global_actions is on every store page,
 // and #account_pulldown sits inside it only for a signed-in session. So a
 // missing container means we aren't looking at a rendered store header yet
 // (or the markup changed) rather than a signed-out user.
-export function readSteamLoginState(doc: Document): LoginState {
+export function readSteamLoginState(doc: QueryRoot): LoginState {
     const actions = doc.querySelector('#global_actions');
     if (!actions) return null;
     return !!actions.querySelector('#account_pulldown');

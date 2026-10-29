@@ -304,6 +304,26 @@ button:focus-visible {
   background-color: #f0ad4e;
 }
 
+/* A store's last check failed (see health.ts): red, since claiming may be
+   affected until it clears. Sits before the login status. */
+.health-status {
+  font-size: 0.8em;
+  font-weight: 600;
+  color: #d9534f;
+  white-space: nowrap;
+  text-decoration: none;
+  margin-right: 0.5em;
+  cursor: help;
+}
+
+a.health-status {
+  cursor: pointer;
+}
+
+a.health-status:hover {
+  text-decoration: underline;
+}
+
 .tabs {
   display: flex;
   justify-content: space-around;

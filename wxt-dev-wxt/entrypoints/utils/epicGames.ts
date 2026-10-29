@@ -12,6 +12,23 @@ export const EPIC_GAMES_URL =
 export const EPIC_PRODUCT_BASE = "https://store.epicgames.com/en-US";
 export const EPIC_FREE_GAMES_URL = "https://store.epicgames.com/en-US/free-games";
 
+// Product keys ("p/<slug>") of the free games a claim tab confirmed as claimed
+// or already owned. Written by epic.content.ts; read (and pruned to what's
+// still free) by the background, which retries every other listed game.
+export const EPIC_CLAIMED_KEY = "epicClaimed";
+
+// "p/<slug>" or "bundle/<slug>": what the link the background builds and the
+// page the claim tab lands on (locale dropped, ?lang added) have in common.
+// Null for anything else, e.g. the free-games hub fallback.
+export function epicProductKey(url: string): string | null {
+  try {
+    const match = new URL(url).pathname.match(/\/(p|bundle)\/([^/]+)/);
+    return match ? `${match[1]}/${match[2]}` : null;
+  } catch {
+    return null;
+  }
+}
+
 // Force Epic claim pages into English (?lang=en-US) so the content script can match
 // confirmation buttons ("Add to library", etc.) by text regardless of the user's
 // account language. Non-Epic URLs (e.g. Steam) are returned unchanged.

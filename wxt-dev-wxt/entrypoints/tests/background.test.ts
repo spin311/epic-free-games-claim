@@ -2,7 +2,7 @@
 // Lives under entrypoints/tests/ (not entrypoints/ root) so WXT doesn't treat it
 // as a duplicate "background" entrypoint. Node env avoids the esbuild/jsdom clash
 // from importing background.ts (which pulls in `#imports`).
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing';
 import { background } from '../background';
 import { areDatesDifferent } from '../utils/scheduling';
@@ -12,6 +12,9 @@ import { INDIEGALA_WHEEL_URL } from '../utils/indieGalaWheel';
 import { ExternalPlatform, PRIME_GAMING_HOME_URL } from '../utils/primeGamingGiveaway';
 import { GOG_HOME_URL } from '../utils/gogGiveaway';
 import { AccessGroup } from '../utils/optionalAccess';
+import { fetchWithRetry } from '../utils/network';
+import { activeProblem, HEALTH_KEYS, healthKey, PlatformHealth, recordHealthError } from '../utils/health';
+import { NetworkError, StoreChangedError } from '../utils/network';
 
 // fake-browser implements neither `permissions` nor `scripting`. Every optional
 // host reads as granted by default, so the suites below run with the full
@@ -30,17 +33,17 @@ describe('handleInstall', () => {
     fakeBrowser.reset();
   });
 
-  // Claiming must never be a side effect of installing — only a browser
-  // restart or a due claimFrequency interval may trigger it.
-  it('does nothing on a fresh install', async () => {
+  // Regression (3.0 report: "says 0 games claimed ... nothing happened"):
+  // a fresh install claimed nothing until the next browser restart, or a day
+  // later on the default frequency.
+  it('checks right away on a fresh install', async () => {
     const runner = Object.create(background);
     let calls = 0;
     runner.getFreeGamesAndSetOpenedFlag = async () => { calls++; };
 
-    runner.handleInstall({ reason: 'install' });
-    await new Promise(process.nextTick);
+    await runner.handleInstall({ reason: 'install' });
 
-    expect(calls).toBe(0);
+    expect(calls).toBe(1);
   });
 
   it('only sets the update badge on an update, never triggers a check', async () => {
@@ -57,6 +60,48 @@ describe('handleInstall', () => {
     await new Promise(process.nextTick);
 
     expect(calls).toBe(0);
+  });
+});
+
+describe('power button', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  function powerRunner() {
+    const runner = Object.create(background);
+    runner.initializeAlarms = async () => {};
+    let checks = 0;
+    runner.getFreeGamesAndSetOpenedFlag = async () => { checks++; };
+    return { runner, checks: () => checks };
+  }
+
+  it('checks right away when switched on', async () => {
+    await setStorageItem('active', true);
+    const { runner, checks } = powerRunner();
+
+    await runner.handleMessage({ target: 'background', action: 'updateActive' });
+
+    expect(checks()).toBe(1);
+  });
+
+  it('does not check when switched off', async () => {
+    await setStorageItem('active', false);
+    const { runner, checks } = powerRunner();
+
+    await runner.handleMessage({ target: 'background', action: 'updateActive' });
+
+    expect(checks()).toBe(0);
+  });
+
+  it('still respects the frequency when switched on again the same day', async () => {
+    await setStorageItem('active', true);
+    await setStorageItem('lastOpened', new Date().toISOString());
+    const { runner, checks } = powerRunner();
+
+    await runner.handleMessage({ target: 'background', action: 'updateActive' });
+
+    expect(checks()).toBe(0);
   });
 });
 
@@ -457,6 +502,172 @@ describe('manual claim', () => {
 
     expect(primeArgs).toEqual([[true, true], [true, false]]);
   });
+
+  it('runFreeGamesChecks forwards force to getEpicGamesList', async () => {
+    const runner = Object.create(background);
+    const epicArgs: [boolean, boolean][] = [];
+    runner.getEpicGamesList = async (shouldClaim: boolean, force: boolean) => { epicArgs.push([shouldClaim, force]); };
+    runner.getSteamGamesList = async () => {};
+    runner.checkGog = async () => {};
+    runner.checkIndieGalaWheel = async () => {};
+    runner.getIndieGalaGamesList = async () => {};
+    runner.checkPrimeGaming = async () => {};
+
+    await runner.runFreeGamesChecks(true);
+    await runner.runFreeGamesChecks();
+
+    expect(epicArgs).toEqual([[true, true], [true, false]]);
+  });
+
+  it('runFreeGamesChecks forwards force to checkGog', async () => {
+    await setStorageItem('gogCheck', true);
+    const runner = Object.create(background);
+    runner.getEpicGamesList = async () => {};
+    runner.getSteamGamesList = async () => {};
+    runner.checkIndieGalaWheel = async () => {};
+    runner.getIndieGalaGamesList = async () => {};
+    runner.checkPrimeGaming = async () => {};
+    const gogArgs: boolean[] = [];
+    runner.checkGog = async (force: boolean) => { gogArgs.push(force); };
+
+    await runner.runFreeGamesChecks(true);
+    await runner.runFreeGamesChecks();
+
+    expect(gogArgs).toEqual([true, false]);
+  });
+});
+
+// Only status and body are read from these.
+function respondWith(status: number, body: string) {
+  return vi.fn(async () => new Response(body, { status }));
+}
+
+describe('login state from the background checks', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Regression (3.0 reports: "won't log in even though I'm logged in"): the
+  // worker's own checks reached the signed-in account, but only a store tab
+  // ever recorded the session, and no tab opens while nothing is claimable.
+  it('records a signed-in GOG session once the worker\'s status check gets through', async () => {
+    vi.stubGlobal('fetch', respondWith(404, '{"message":"No active giveaway"}'));
+    const runner = Object.create(background);
+
+    await runner.getGogGamesList(true);
+
+    expect(await getStorageItem('gogLoggedIn')).toBe(true);
+  });
+
+  it('leaves the GOG login state alone on the worker\'s ambiguous 401', async () => {
+    vi.stubGlobal('fetch', respondWith(401, '{"message":"Unauthorized"}'));
+    const runner = Object.create(background);
+
+    await expect(runner.getGogGamesList(true)).rejects.toThrow();
+
+    expect(await getStorageItem('gogLoggedIn')).toBeNull();
+  });
+
+  it('records a signed-in Steam session from the fetched page, even with no free game', async () => {
+    const fetchMock = respondWith(200, '<div id="global_actions"><div id="account_pulldown"></div></div><div id="search_result_container"></div>');
+    vi.stubGlobal('fetch', fetchMock);
+    const runner = Object.create(background);
+
+    await runner.getSteamGamesList(true);
+
+    expect(await getStorageItem('steamLoggedIn')).toBe(true);
+    // An uncredentialed request is anonymous and could never show a session.
+    expect(fetchMock.mock.calls[0]).toEqual([expect.any(String), expect.objectContaining({ credentials: 'include' })]);
+  });
+
+  // Same reasoning as GOG's 401: the worker's request is the one that may
+  // lack the cookie, so only a real Steam tab may record "signed out".
+  it('does not record a signed-out Steam session from the worker\'s fetch', async () => {
+    vi.stubGlobal('fetch', respondWith(200, '<div id="global_actions"><a>sign in</a></div><div id="search_result_container"></div>'));
+    const runner = Object.create(background);
+
+    await runner.getSteamGamesList(true);
+
+    expect(await getStorageItem('steamLoggedIn')).toBeNull();
+  });
+});
+
+describe('checkGog', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  const unauthorized = async () => { throw new Error('GOG giveaway status requires a signed-in session'); };
+
+  function gogRunner(lookup: () => Promise<void>) {
+    const runner = Object.create(background);
+    runner.getGogGamesList = lookup;
+    const opened: { url: string; action: string }[] = [];
+    runner.openTabAndSendActionToContent = async (url: string, action: string) => {
+      opened.push({ url, action });
+    };
+    return { runner, opened };
+  }
+
+  it('opens no tab when the worker\'s own check succeeds', async () => {
+    const { runner, opened } = gogRunner(async () => {});
+
+    await runner.checkGog();
+
+    expect(opened).toEqual([]);
+  });
+
+  it('falls back to a real gog.com tab when the worker\'s check is unauthorized', async () => {
+    const { runner, opened } = gogRunner(unauthorized);
+
+    await runner.checkGog();
+
+    expect(opened).toEqual([{ url: GOG_HOME_URL, action: 'getFreeGames' }]);
+  });
+
+  // Regression (3.0): gog.com opened on every scheduled run, hourly at the
+  // shortest setting, with nothing to claim.
+  it('does not reopen the fallback tab on the same calendar day', async () => {
+    const { runner, opened } = gogRunner(unauthorized);
+
+    await runner.checkGog();
+    await runner.checkGog();
+
+    expect(opened).toHaveLength(1);
+  });
+
+  it('opens no fallback tab once a gog.com page has reported the account signed out', async () => {
+    await setStorageItem('gogLoggedIn', false);
+    const { runner, opened } = gogRunner(unauthorized);
+
+    await runner.checkGog();
+
+    expect(opened).toEqual([]);
+  });
+
+  it('opens the fallback tab regardless when forced (manual claim or a "Log in" click)', async () => {
+    await setStorageItem('gogLoggedIn', false);
+    const { runner, opened } = gogRunner(unauthorized);
+
+    await runner.checkGog();
+    await runner.checkGog(true);
+    await runner.checkGog(true);
+
+    expect(opened).toHaveLength(2);
+  });
+
+  it('does not record the fallback date when opening the tab fails, so the next run retries', async () => {
+    const { runner } = gogRunner(unauthorized);
+    runner.openTabAndSendActionToContent = async () => { throw new Error('tab never loaded'); };
+
+    await expect(runner.checkGog()).rejects.toThrow();
+
+    expect(await getStorageItem('gogLastTabCheck')).toBeNull();
+  });
 });
 
 describe('checkPlatformLogin', () => {
@@ -499,6 +710,20 @@ describe('checkPlatformLogin', () => {
     await runner.checkPlatformLogin(Platforms.GOG);
 
     expect(opened).toEqual([{ url: GOG_HOME_URL, action: 'getFreeGames' }]);
+  });
+
+  it('opens a single gog.com tab even when that tab itself fails', async () => {
+    const runner = Object.create(background);
+    runner.getGogGamesList = async () => { throw new Error('GOG giveaway status requires a signed-in session'); };
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => {
+      opened.push(url);
+      throw new Error('tab never loaded');
+    };
+
+    await runner.checkPlatformLogin(Platforms.GOG);
+
+    expect(opened).toEqual([GOG_HOME_URL]);
   });
 });
 
@@ -938,5 +1163,357 @@ describe('completePendingAccessRequest', () => {
     await runner.completePendingAccessRequest();
 
     expect(await getStorageItem<boolean>('primeGamingClaimGog')).toBeNull();
+  });
+});
+
+// A minimal freeGamesPromotions payload: each title free right now.
+function epicPromotions(...slugs: string[]) {
+  const elements = slugs.map((slug) => ({
+    title: slug,
+    catalogNs: { mappings: [{ pageSlug: slug }] },
+    price: { totalPrice: { discountPrice: 0 } },
+    promotions: {
+      promotionalOffers: [{ promotionalOffers: [{ startDate: '2026-10-29T15:00:00Z', endDate: '2026-11-05T15:00:00Z' }] }],
+    },
+  }));
+  return respondWith(200, JSON.stringify({ data: { Catalog: { searchStore: { elements } } } }));
+}
+
+const epicLink = (slug: string) => `https://store.epicgames.com/en-US/p/${slug}`;
+
+describe('getEpicGamesList claiming', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function epicRunner(openKeys: string[] = []) {
+    const runner = Object.create(background);
+    const claimed: string[][] = [];
+    runner.claimGames = async (games: { link: string }[]) => { claimed.push(games.map((g) => g.link)); };
+    runner.openEpicProductKeys = async () => new Set(openKeys);
+    return { runner, claimed };
+  }
+
+  // Regression (3.0 report: "0 games claimed"): a game counted as done as soon
+  // as it was listed, so one failed claim tab (e.g. Epic's redesigned buy
+  // button) meant it was never tried again that week.
+  it('claims a game that was listed before but never confirmed claimed', async () => {
+    vi.stubGlobal('fetch', epicPromotions('home-19212a'));
+    await setStorageItem('epicGames', [{ title: 'home-19212a', link: epicLink('home-19212a') }]);
+    const { runner, claimed } = epicRunner();
+
+    await runner.getEpicGamesList(true);
+
+    expect(claimed).toEqual([[epicLink('home-19212a')]]);
+  });
+
+  it('skips games a claim tab confirmed as claimed or already owned', async () => {
+    vi.stubGlobal('fetch', epicPromotions('home-19212a', 'sker-ritual-aac702'));
+    await setStorageItem('epicClaimed', ['p/home-19212a']);
+    const { runner, claimed } = epicRunner();
+
+    await runner.getEpicGamesList(true);
+
+    expect(claimed).toEqual([[epicLink('sker-ritual-aac702')]]);
+  });
+
+  it('retries an unconfirmed game at most once a day on automatic runs', async () => {
+    vi.stubGlobal('fetch', epicPromotions('home-19212a'));
+    const { runner, claimed } = epicRunner();
+
+    await runner.getEpicGamesList(true);
+    await runner.getEpicGamesList(true);
+
+    expect(claimed).toHaveLength(1);
+  });
+
+  it('a manual claim (force) retries it anyway', async () => {
+    vi.stubGlobal('fetch', epicPromotions('home-19212a'));
+    const { runner, claimed } = epicRunner();
+
+    await runner.getEpicGamesList(true);
+    await runner.getEpicGamesList(true, true);
+
+    expect(claimed).toHaveLength(2);
+  });
+
+  // Each claim tab would only land on Epic's login page.
+  it('claims nothing automatically while Epic reports the account signed out', async () => {
+    vi.stubGlobal('fetch', epicPromotions('home-19212a'));
+    await setStorageItem('epicLoggedIn', false);
+    const { runner, claimed } = epicRunner();
+
+    await runner.getEpicGamesList(true);
+    expect(claimed).toEqual([]);
+
+    await runner.getEpicGamesList(true, true);
+    expect(claimed).toHaveLength(1);
+  });
+
+  it('still lists the free games for the popup when nothing is claimed', async () => {
+    vi.stubGlobal('fetch', epicPromotions('home-19212a'));
+    const { runner, claimed } = epicRunner();
+
+    await runner.getEpicGamesList(false);
+
+    expect(claimed).toEqual([]);
+    expect((await getStorageItem<{ link: string }[]>('epicGames'))?.map((g) => g.link)).toEqual([epicLink('home-19212a')]);
+  });
+
+  // A tab left open on a captcha is still the user's to finish; another one
+  // for the same game would only pile up next to it.
+  it('does not open another tab for a game whose claim tab is still open, even when forced', async () => {
+    vi.stubGlobal('fetch', epicPromotions('home-19212a', 'sker-ritual-aac702'));
+    const { runner, claimed } = epicRunner(['p/home-19212a']);
+
+    await runner.getEpicGamesList(true, true);
+
+    expect(claimed).toEqual([[epicLink('sker-ritual-aac702')]]);
+  });
+
+  it('forgets confirmed games once Epic stops listing them', async () => {
+    vi.stubGlobal('fetch', epicPromotions('home-19212a'));
+    await setStorageItem('epicClaimed', ['p/last-weeks-game', 'p/home-19212a']);
+    const { runner } = epicRunner();
+
+    await runner.getEpicGamesList(true);
+
+    expect(await getStorageItem('epicClaimed')).toEqual(['p/home-19212a']);
+  });
+});
+
+describe('store health', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    vi.spyOn(fakeBrowser.action, 'setBadgeText').mockResolvedValue(undefined as never);
+    vi.spyOn(fakeBrowser.action, 'setBadgeBackgroundColor').mockResolvedValue(undefined as never);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Every other store's check stubbed out, so only the one under test runs.
+  function healthRunner() {
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetchWithRetry(input, init, []);
+    runner.getSteamGamesList = async () => {};
+    runner.checkGog = async () => {};
+    runner.checkIndieGalaWheel = async () => {};
+    runner.getIndieGalaGamesList = async () => {};
+    runner.checkPrimeGaming = async () => {};
+    runner.claimGames = async () => {};
+    runner.openEpicProductKeys = async () => new Set();
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+    return { runner, opened };
+  }
+
+  const epicProblem = async () => activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.Epic]));
+
+  // Regression: after the API failed, a tab opened on the store home page to
+  // scrape it with selectors Epic's redesign removed, which never found anything.
+  it('records Epic as unreachable and opens no tab when its API cannot be reached', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    const { runner, opened } = healthRunner();
+
+    await runner.runFreeGamesChecks();
+
+    expect((await epicProblem())?.problem).toBe('network');
+    expect(opened).toEqual([]);
+  });
+
+  it('records Epic as changed when its API answers without a game list', async () => {
+    vi.stubGlobal('fetch', respondWith(200, '{"data":{}}'));
+    const { runner } = healthRunner();
+
+    await runner.runFreeGamesChecks();
+
+    expect((await epicProblem())?.problem).toBe('changed');
+  });
+
+  it('records a working Epic check, clearing an earlier problem', async () => {
+    await recordHealthError(Platforms.Epic, 'network', 'Failed to fetch', new Date(Date.now() - 60_000));
+    vi.stubGlobal('fetch', epicPromotions('home-19212a'));
+    const { runner } = healthRunner();
+
+    await runner.runFreeGamesChecks();
+
+    expect(await epicProblem()).toBeNull();
+  });
+
+  it('records nothing for a store the user has switched off', async () => {
+    await setStorageItem('epicCheck', false);
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    const { runner } = healthRunner();
+
+    await runner.runFreeGamesChecks();
+
+    expect(await getStorageItem(HEALTH_KEYS[Platforms.Epic])).toBeNull();
+  });
+
+  it('records Steam as changed when its search page has no result list', async () => {
+    vi.stubGlobal('fetch', respondWith(200, '<div id="global_actions"></div><p>new layout</p>'));
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetchWithRetry(input, init, []);
+
+    await expect(runner.getSteamGamesList(true)).rejects.toBeInstanceOf(StoreChangedError);
+  });
+
+  it('does not count a signed-out GOG account as a store problem', async () => {
+    vi.stubGlobal('fetch', respondWith(401, '{"message":"Unauthorized"}'));
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetchWithRetry(input, init, []);
+    runner.openTabAndSendActionToContent = async () => {};
+
+    await runner.checkGog();
+
+    expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.GOG]))).toBeNull();
+  });
+
+  it('shows "!" on the toolbar after a run where a store check failed and nothing was claimed', async () => {
+    const runner = Object.create(background);
+    runner.runFreeGamesChecks = async function (this: typeof background) {
+      await this.recordStoreFailure(Platforms.Epic, new StoreChangedError('no game list'));
+    };
+    const badges: string[] = [];
+    runner.setBadgeText = async (text: string) => { badges.push(text); };
+
+    await runner.getFreeGamesList();
+
+    expect(badges.at(-1)).toBe('!');
+  });
+
+  it('records what a claim tab reports and flags a problem on the toolbar', async () => {
+    const runner = Object.create(background);
+    const badges: string[] = [];
+    runner.setBadgeText = async (text: string) => { badges.push(text); };
+
+    await runner.handleMessage({
+      target: 'background',
+      action: 'reportHealth',
+      data: { platform: Platforms.Epic, problem: 'changed', detail: 'No "Get" button' },
+    });
+
+    const claimProblem = async () => activeProblem(await getStorageItem<PlatformHealth>(healthKey(Platforms.Epic, 'claim')));
+    expect((await claimProblem())?.detail).toBe('No "Get" button');
+    expect(badges).toEqual(['!']);
+
+    await runner.handleMessage({ target: 'background', action: 'reportHealth', data: { platform: Platforms.Epic } });
+    expect(await claimProblem()).toBeNull();
+  });
+
+  // Regression: a signed-out answer proves GOG is reachable, but used to leave
+  // an earlier "can't reach store" up for good.
+  it('clears an earlier GOG warning once GOG answers, even signed out', async () => {
+    await recordHealthError(Platforms.GOG, 'network', 'Failed to fetch', new Date(Date.now() - 60_000));
+    vi.stubGlobal('fetch', respondWith(401, '{"message":"Unauthorized"}'));
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetchWithRetry(input, init, []);
+    runner.openTabAndSendActionToContent = async () => {};
+
+    await runner.checkGog();
+
+    expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.GOG]))).toBeNull();
+  });
+
+  it('reads an overloaded GOG (503) as unreachable, not changed', async () => {
+    vi.stubGlobal('fetch', respondWith(503, ''));
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetchWithRetry(input, init, []);
+    runner.openTabAndSendActionToContent = async () => {};
+
+    await runner.checkGog();
+
+    expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.GOG]))?.problem).toBe('network');
+  });
+
+  // A page that can't load offline would only add a dead tab.
+  it('opens no fallback tab when the store could not be reached', async () => {
+    const runner = Object.create(background);
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await runner.runStoreCheck(Platforms.Steam, true, async () => { throw new NetworkError('Failed to fetch'); }, 'https://store.steampowered.com/');
+    await runner.runStoreCheck(Platforms.Steam, true, async () => { throw new StoreChangedError('no result list'); }, 'https://store.steampowered.com/');
+
+    expect(opened).toEqual(['https://store.steampowered.com/']);
+  });
+
+  // Regression (3.0 report): a check at browser start, before the network was
+  // up, used up the whole day.
+  it('does not count a run where no store could be reached, and retries it soon', async () => {
+    const runner = Object.create(background);
+    runner.runFreeGamesChecks = async function (this: typeof background) {
+      await this.recordStoreFailure(Platforms.Epic, new NetworkError('Failed to fetch'));
+      await this.recordStoreFailure(Platforms.Steam, new NetworkError('Failed to fetch'));
+    };
+    runner.setBadgeText = async () => {};
+
+    await runner.getFreeGamesAndSetOpenedFlag(new Date().toISOString());
+
+    expect(await getStorageItem('lastOpened')).toBeNull();
+    expect(await fakeBrowser.alarms.get('retryAfterOffline')).toBeDefined();
+  });
+
+  it('counts a run where at least one store answered', async () => {
+    const runner = Object.create(background);
+    runner.runFreeGamesChecks = async function (this: typeof background) {
+      await this.recordStoreFailure(Platforms.Epic, new NetworkError('Failed to fetch'));
+      await this.recordStoreOk(Platforms.Steam);
+    };
+    runner.setBadgeText = async () => {};
+    const opened = new Date().toISOString();
+
+    await runner.getFreeGamesAndSetOpenedFlag(opened);
+
+    expect(await getStorageItem('lastOpened')).toBe(opened);
+  });
+});
+
+describe('bringing a captcha tab to the user', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // A captcha only the user can solve, in a tab opened in the background.
+  // Selected and flagged (dock bounce / taskbar flash), but not raised over
+  // whatever the user is doing, and with no notifications permission.
+  it('selects the tab in its window and flags the window', async () => {
+    const tabUpdates: unknown[] = [];
+    const windowUpdates: unknown[] = [];
+    vi.spyOn(fakeBrowser.tabs, 'update').mockImplementation((async (id: number, props: unknown) => { tabUpdates.push([id, props]); }) as never);
+    vi.spyOn(fakeBrowser.windows, 'update').mockImplementation((async (id: number, props: unknown) => { windowUpdates.push([id, props]); }) as never);
+    const runner = Object.create(background);
+
+    await runner.handleMessage({ target: 'background', action: 'bringTabToFront' }, { tab: { id: 7, windowId: 3 } });
+
+    expect(tabUpdates).toEqual([[7, { active: true }]]);
+    expect(windowUpdates).toEqual([[3, { drawAttention: true }]]);
+  });
+
+  it('does nothing for a message that did not come from a tab', async () => {
+    const tabsUpdate = vi.spyOn(fakeBrowser.tabs, 'update').mockResolvedValue(undefined as never);
+    const runner = Object.create(background);
+
+    await runner.handleMessage({ target: 'background', action: 'bringTabToFront' }, {});
+
+    expect(tabsUpdate).not.toHaveBeenCalled();
+  });
+
+  it('survives the tab having been closed meanwhile', async () => {
+    vi.spyOn(fakeBrowser.tabs, 'update').mockRejectedValue(new Error('No tab with id: 7') as never);
+    const runner = Object.create(background);
+
+    await expect(runner.handleMessage({ target: 'background', action: 'bringTabToFront' }, { tab: { id: 7, windowId: 3 } }))
+        .resolves.toBeUndefined();
   });
 });

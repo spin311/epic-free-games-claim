@@ -1,4 +1,4 @@
-import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
+import {setStorageItem, useStorage} from "@/entrypoints/hooks/useStorage.ts";
 import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
 
 function OnButton() {
@@ -24,8 +24,16 @@ function OnButton() {
         </>
     )
 
-    function toggleActive() {
-        setActive(!active);
+    // Saved before messaging, not just by useStorage's own (later) effect:
+    // the background reads `active` straight away to decide whether to check.
+    async function toggleActive() {
+        const next = !active;
+        setActive(next);
+        try {
+            await setStorageItem("active", next);
+        } catch (e) {
+            console.error("Saving the power state failed:", e);
+        }
         sendMessage({ action: "updateActive", target: "background" });
     }
 
