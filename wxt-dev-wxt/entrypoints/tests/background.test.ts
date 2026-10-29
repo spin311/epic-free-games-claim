@@ -1474,3 +1474,46 @@ describe('store health', () => {
     expect(await getStorageItem('lastOpened')).toBe(opened);
   });
 });
+
+describe('bringing a captcha tab to the user', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // A captcha only the user can solve, in a tab opened in the background.
+  // Selected and flagged (dock bounce / taskbar flash), but not raised over
+  // whatever the user is doing, and with no notifications permission.
+  it('selects the tab in its window and flags the window', async () => {
+    const tabUpdates: unknown[] = [];
+    const windowUpdates: unknown[] = [];
+    vi.spyOn(fakeBrowser.tabs, 'update').mockImplementation((async (id: number, props: unknown) => { tabUpdates.push([id, props]); }) as never);
+    vi.spyOn(fakeBrowser.windows, 'update').mockImplementation((async (id: number, props: unknown) => { windowUpdates.push([id, props]); }) as never);
+    const runner = Object.create(background);
+
+    await runner.handleMessage({ target: 'background', action: 'bringTabToFront' }, { tab: { id: 7, windowId: 3 } });
+
+    expect(tabUpdates).toEqual([[7, { active: true }]]);
+    expect(windowUpdates).toEqual([[3, { drawAttention: true }]]);
+  });
+
+  it('does nothing for a message that did not come from a tab', async () => {
+    const tabsUpdate = vi.spyOn(fakeBrowser.tabs, 'update').mockResolvedValue(undefined as never);
+    const runner = Object.create(background);
+
+    await runner.handleMessage({ target: 'background', action: 'bringTabToFront' }, {});
+
+    expect(tabsUpdate).not.toHaveBeenCalled();
+  });
+
+  it('survives the tab having been closed meanwhile', async () => {
+    vi.spyOn(fakeBrowser.tabs, 'update').mockRejectedValue(new Error('No tab with id: 7') as never);
+    const runner = Object.create(background);
+
+    await expect(runner.handleMessage({ target: 'background', action: 'bringTabToFront' }, { tab: { id: 7, windowId: 3 } }))
+        .resolves.toBeUndefined();
+  });
+});

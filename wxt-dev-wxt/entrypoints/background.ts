@@ -519,6 +519,9 @@ export const background = {
       // Over a claimed count, if one is showing: a claim that needs the user
       // matters more than how many tabs opened.
       await this.showProblemBadge();
+    } else if (request.action === "bringTabToFront") {
+      const tab = sender?.tab;
+      if (tab?.id != null) await this.bringTabToFront(tab.id, tab.windowId);
     } else if (request.action === "closeTab") {
       const tabId = sender?.tab?.id;
       if (tabId != null) {
@@ -528,6 +531,20 @@ export const background = {
           // Tab may already be closed (e.g. the user closed it manually).
         }
       }
+    }
+  },
+
+  // For a tab only the user can finish (a captcha), opened in the background:
+  // selected in its window, and the window flagged (dock bounce, taskbar
+  // flash) rather than raised over whatever the user is doing. Needs no
+  // permission, unlike a desktop notification.
+  async bringTabToFront(tabId: number, windowId?: number) {
+    try {
+      await browser.tabs.update(tabId, { active: true });
+      if (windowId != null) await browser.windows.update(windowId, { drawAttention: true });
+    } catch (e) {
+      // The tab may already be closed (e.g. the user closed it).
+      console.warn("bringTabToFront failed:", e);
     }
   },
 

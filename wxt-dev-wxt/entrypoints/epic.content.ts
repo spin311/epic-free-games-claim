@@ -74,11 +74,9 @@ export default defineContentScript({
 
             let claimed = await completePurchase(40_000);
             if (!claimed && isCaptchaUp()) {
-                // Only the user can pass this, so the tab stays for them (as
-                // GOG's redeem page does), and the order is still completed and
-                // counted once they have.
-                console.warn('[claimer] Epic wants a captcha solved; waiting for the user');
-                await reportHealth('captcha', 'Epic wants a captcha solved in its open tab to finish a claim');
+                // Only the user can pass this (see announceCaptcha), so the tab
+                // stays for them, as GOG's redeem page does, and the order is
+                // still completed and counted once they have.
                 claimed = await completePurchase(CAPTCHA_WAIT_MS);
             }
             if (claimed) {
@@ -166,6 +164,23 @@ export default defineContentScript({
             return [...sameOriginFrameDocuments(document), document];
         }
 
+        // Set while a captcha waits for the user, across completePurchase
+        // calls, so each one is announced once.
+        let isCaptchaPending = false;
+
+        // Only the user can pass a captcha: select its tab and flag the
+        // browser window (see the background's bringTabToFront), and say so in
+        // the popup. Never throws: the claim carries on either way.
+        async function announceCaptcha() {
+            console.warn('[claimer] Epic wants a captcha solved; waiting for the user');
+            await reportHealth('captcha', 'Epic wants a captcha solved in its open tab to finish a claim');
+            try {
+                await browser.runtime.sendMessage({ target: 'background', action: 'bringTabToFront' });
+            } catch (error: unknown) {
+                console.error('[claimer] Could not bring the captcha tab forward:', error);
+            }
+        }
+
         function isCaptchaUp(): boolean {
             return getSearchRoots().some((root) => isCaptchaShown(root));
         }
@@ -194,7 +209,6 @@ export default defineContentScript({
             // it mid-transition cancels the purchase and wedges the flow. One
             // click + a generous wait is what actually advances it.
             const clickedLabels = new Set<string>();
-            let sawCaptcha = false;
 
             while (Date.now() < deadline) {
                 const roots = getSearchRoots();
@@ -205,16 +219,20 @@ export default defineContentScript({
                 }
 
                 // A captcha blocks whatever is under it, so click nothing while
-                // it's up. Once it's gone, Epic may move on by itself or want
-                // the interrupted step again: give it a moment, then let the
-                // confirmation labels be clicked once more.
+                // it's up, and bring it to the user as soon as it shows. Once
+                // it's gone, Epic may move on by itself or want the interrupted
+                // step again: give it a moment, then let the confirmation
+                // labels be clicked once more.
                 if (roots.some((root) => isCaptchaShown(root))) {
-                    sawCaptcha = true;
+                    if (!isCaptchaPending) {
+                        isCaptchaPending = true;
+                        await announceCaptcha();
+                    }
                     await wait(1000);
                     continue;
                 }
-                if (sawCaptcha) {
-                    sawCaptcha = false;
+                if (isCaptchaPending) {
+                    isCaptchaPending = false;
                     clickedLabels.clear();
                     await wait(3000);
                     continue;
