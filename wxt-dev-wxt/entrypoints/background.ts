@@ -3,7 +3,7 @@ import {getStorageItem, getStorageItems, setStorageItem} from "@/entrypoints/hoo
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFrequency.ts";
-import {addToCartInMainWorld, parseSteamFreeGames, STEAM_GAMES_URL} from "@/entrypoints/utils/steamGames.ts";
+import {addToCartInMainWorld, parseSteamFreeGames, parseSteamLoginState, STEAM_GAMES_URL} from "@/entrypoints/utils/steamGames.ts";
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
@@ -23,7 +23,13 @@ import {
   selectClaimableOffers,
   updateClaimAttempts,
 } from "@/entrypoints/utils/primeGamingApi.ts";
-import {LoginState, PRIME_MEMBERSHIP_KEY, recordLoginState, recordPrimeMembership} from "@/entrypoints/utils/loginState.ts";
+import {
+  LOGIN_STATE_KEYS,
+  LoginState,
+  PRIME_MEMBERSHIP_KEY,
+  recordLoginState,
+  recordPrimeMembership,
+} from "@/entrypoints/utils/loginState.ts";
 import {
   setBadgeBackgroundColor as setActionBadgeBackgroundColor,
   setBadgeText as setActionBadgeText,
@@ -33,7 +39,9 @@ import {browser, type Browser} from "wxt/browser";
 import {EpicElement, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
 import {
   EPIC_API_URL,
+  EPIC_CLAIMED_KEY,
   EPIC_GAMES_URL,
+  epicProductKey,
   formatEpicFreeGame,
   partitionEpicPromotions,
   withEpicEnglishLocale,
@@ -66,7 +74,7 @@ export const background = {
   claimedSomethingThisRun: false,
 
   async main() {
-    browser.runtime.onStartup.addListener(() => this.handleStartup());
+    browser.runtime.onStartup.addListener(() => this.checkIfActiveAndDue());
 
     browser.runtime.onMessage.addListener((request: MessageRequest, sender: Browser.runtime.MessageSender) =>
         this.handleMessage(request, sender)
@@ -76,7 +84,7 @@ export const background = {
 
     browser.alarms.onAlarm.addListener((alarm: Browser.alarms.Alarm) => {
       if (alarm.name === ALARM_NAME) {
-        void this.handleAlarmTriggered();
+        void this.checkIfActiveAndDue();
       }
     });
 
@@ -129,18 +137,11 @@ export const background = {
     }
   },
 
-  async handleStartup() {
-    const result = await getStorageItems(["active", "claimFrequency"]);
-    if (!isActive(result?.active)) return;
-
-    const frequency = result.claimFrequency || ClaimFrequency.DAILY;
-    
-    // Always check on startup, regardless of frequency setting
-    // The checkAndClaimIfDue method handles the frequency-specific logic
-    await this.checkAndClaimIfDue(frequency);
-  },
-
-  async handleAlarmTriggered() {
+  // Browser start, the alarm, a fresh install and switching the power button
+  // on all ask the same thing: if active, check now when claimFrequency says
+  // a check is due (checkAndClaimIfDue). Nothing has run yet on a fresh
+  // install, so that one always checks.
+  async checkIfActiveAndDue() {
     const result = await getStorageItems(["active", "claimFrequency"]);
     if (!isActive(result?.active)) return;
 
@@ -261,7 +262,7 @@ export const background = {
     // sit there unclaimed.
     await contentScriptSync;
     try {
-      await this.getEpicGamesList(claimEpic);
+      await this.getEpicGamesList(claimEpic, force);
     } catch (e) {
       console.error("getEpicGamesList failed:", e);
       if (claimEpic) await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
@@ -278,10 +279,9 @@ export const background = {
     // worth avoiding altogether when the user doesn't want GOG at all.
     if (claimGog) {
       try {
-        await this.getGogGamesList(claimGog);
+        await this.checkGog(force);
       } catch (e) {
-        console.error("getGogGamesList failed:", e);
-        await this.openTabAndSendActionToContent(GOG_HOME_URL, "getFreeGames");
+        console.error("checkGog failed:", e);
       }
     }
     // Wheel spun before the regular freebie claim, per spec — the two are
@@ -418,8 +418,13 @@ export const background = {
       } else {
         console.warn("Missing tabId or appId", { tabId, appId, sender });
       }
-    } else if (request.action === "updateFrequency" || request.action === "updateActive") {
+    } else if (request.action === "updateFrequency") {
       await this.initializeAlarms();
+    } else if (request.action === "updateActive") {
+      await this.initializeAlarms();
+      // Switching it on checks now if a check is due, not only from the next
+      // alarm or browser start on.
+      await this.checkIfActiveAndDue();
     } else if (request.action === "checkPlatformLogin") {
       const platform = request.data?.platform as Platforms | undefined;
       if (platform) await this.checkPlatformLogin(platform);
@@ -468,19 +473,18 @@ export const background = {
     });
   },
 
-  // Deliberately does nothing on a fresh install — claiming only ever
-  // happens on a browser restart (handleStartup) or once the configured
-  // claimFrequency interval is actually due (handleAlarmTriggered), never
-  // as a side effect of installing or of flipping a setting. LoginStatus
-  // shows a "Log in" prompt by default (see LoginStatus.tsx) so the popup
-  // still has something useful to show before either of those has run.
-  handleInstall(r: Browser.runtime.InstalledDetails) {
+  // A fresh install checks right away: otherwise nothing happened until the
+  // next browser restart, or a day later on the default frequency, and the
+  // popup just sat at "0 games claimed". An update only badges.
+  async handleInstall(r: Browser.runtime.InstalledDetails) {
     if (r.reason === "update") {
       void setActionBadgeBackgroundColor("#50ca26");
       void this.setBadgeText("New");
+    } else if (r.reason === "install") {
+      await this.checkIfActiveAndDue();
     }
   },
-  async getEpicGamesList(shouldClaim: boolean = true) {
+  async getEpicGamesList(shouldClaim: boolean = true, force: boolean = false) {
     const response = await fetch(EPIC_API_URL);
     if (!response.ok) {
       console.error("Failed to fetch Epic Games data:", response.statusText);
@@ -492,26 +496,66 @@ export const background = {
     const games: EpicElement[] = data?.data?.Catalog?.searchStore?.elements ?? [];
 
     const { current: freeGames, future: futureFreeGames } = partitionEpicPromotions(games);
-
-    const currFreeGames: FreeGame[] = await getStorageItem("epicGames") || [];
-    const newGames = freeGames.filter((game) =>
-        !currFreeGames.some((g) => g?.title === game?.title)
-    );
+    const listed = freeGames.map(g => formatEpicFreeGame(g, false));
 
     // Both lists are persisted before any claiming happens, and both are written
     // unconditionally. Claiming used to sit between the two writes, so a failed
     // claim aborted the futureGames refresh and left last week's "upcoming"
     // entry next to this week's free entry in the popup.
-    await setStorageItem("epicGames", freeGames.map(g => formatEpicFreeGame(g, false)));
+    await setStorageItem("epicGames", listed);
     await setStorageItem("futureGames", futureFreeGames.map(g => formatEpicFreeGame(g, true)));
 
-    if (shouldClaim && newGames.length > 0) {
-      await this.claimGames(newGames.map(g => formatEpicFreeGame(g, false)));
-    }
+    if (shouldClaim) await this.claimEpicGames(listed, force);
+  },
+
+  // A game is done only once its claim tab confirmed it, as claimed or already
+  // owned (EPIC_CLAIMED_KEY). It used to be done as soon as it was listed, so
+  // one failed tab meant no retry that week. Any other listed game is retried
+  // at most once a day (the same throttle as Prime Gaming's offers) and not
+  // while Epic reports the account signed out, since every tab would only land
+  // on Epic's login page. `force` (manual claim) skips both.
+  async claimEpicGames(listed: FreeGame[], force: boolean) {
+    const listedKeys = new Set(listed.map((game) => epicProductKey(game.link)));
+    // Pruned to what's still free, so the record can't grow forever.
+    const claimedKeys = ((await getStorageItem<string[]>(EPIC_CLAIMED_KEY)) ?? [])
+        .filter((key) => listedKeys.has(key));
+    await setStorageItem(EPIC_CLAIMED_KEY, claimedKeys);
+
+    if (!force && (await getStorageItem<LoginState>(LOGIN_STATE_KEYS[Platforms.Epic])) === false) return;
+
+    // A game whose claim tab is still open (left for the user on a captcha)
+    // is theirs to finish; another tab would only pile up next to it.
+    const openKeys = await this.openEpicProductKeys();
+    const pending = listed.filter((game) => {
+      const key = epicProductKey(game.link) ?? "";
+      return !claimedKeys.includes(key) && !openKeys.has(key);
+    });
+    const now = new Date();
+    const attempts = (await getStorageItem<ClaimAttempts>("epicClaimAttempts")) ?? {};
+    const toClaim = force ? pending : excludeRecentlyAttempted(pending, attempts, now);
+    // Recorded before claiming, so even a run that dies mid-claim still
+    // counts as an attempt and can't turn into a reopen-every-run loop.
+    await setStorageItem("epicClaimAttempts", updateClaimAttempts(attempts, toClaim, listed, now));
+    if (toClaim.length > 0) await this.claimGames(toClaim);
+  },
+
+  // Separate so tests can stand in for the tabs API.
+  async openEpicProductKeys(): Promise<Set<string>> {
+    const tabs = await browser.tabs.query({ url: "https://store.epicgames.com/*" });
+    return new Set(tabs.map((tab) => epicProductKey(tab.url ?? "")).filter((key): key is string => key !== null));
   },
 
   async getSteamGamesList(shouldClaim: boolean = true) {
-    const html = await fetch(STEAM_GAMES_URL).then(r => r.text());
+    // Credentialed so the page carries the user's own header — an anonymous
+    // request could never show a session.
+    const html = await fetch(STEAM_GAMES_URL, { credentials: "include" }).then(r => r.text());
+
+    // Read before the games: Steam rarely lists a free one, and no claim tab
+    // (the only other place this gets recorded) opens without one. Only a
+    // signed-in header counts — same reasoning as GOG's 401: the worker's
+    // request is the one that may lack the cookie, so a signed-out page from
+    // here isn't proof. A real Steam tab records that.
+    if (parseSteamLoginState(html) === true) await recordLoginState(Platforms.Steam, true);
 
     const gamesArr = parseSteamFreeGames(html);
     if (!gamesArr) return;
@@ -535,6 +579,9 @@ export const background = {
     if (lookup.unauthorized) {
       throw new Error("GOG giveaway status requires a signed-in session");
     }
+    // Confirmed live: a signed-out request gets a 401 whether or not a
+    // giveaway is running, so any other answer means the session went along.
+    await recordLoginState(Platforms.GOG, true);
     const game = lookup.game;
     if (!game) return;
 
@@ -543,6 +590,32 @@ export const background = {
 
     await setStorageItem("gogGames", [game]);
     if (shouldClaim) await this.claimGames([game]);
+  },
+
+  // getGogGamesList's ambiguous 401 is settled by a real gog.com tab, but not
+  // on every run (hourly at the shortest setting): at most once a day, and not
+  // at all once a gog.com page has already said "signed out" — reopening it
+  // would only repeat that. Signing in ends it either way: the worker's own
+  // check then gets through. `force` (manual claim, "Log in" click) skips both.
+  async checkGog(force: boolean = false) {
+    try {
+      await this.getGogGamesList(true);
+      return;
+    } catch (e) {
+      console.error("getGogGamesList failed:", e);
+    }
+
+    const now = new Date().toISOString();
+    if (!force) {
+      if ((await getStorageItem<LoginState>(LOGIN_STATE_KEYS[Platforms.GOG])) === false) return;
+      const lastCheck = await getStorageItem<string>("gogLastTabCheck");
+      if (lastCheck && !areDatesDifferent(lastCheck, now)) return;
+    }
+
+    // Flag set only after the tab/message actually goes out (mirrors
+    // checkIndieGalaWheel), so a failed attempt is retried on the next run.
+    await this.openTabAndSendActionToContent(GOG_HOME_URL, "getFreeGames");
+    await setStorageItem("gogLastTabCheck", now);
   },
 
   // Freebies listing is public, so unlike GOG this practically never throws for
@@ -709,7 +782,7 @@ export const background = {
           await this.getEpicGamesList(true);
           break;
         case Platforms.GOG:
-          await this.getGogGamesList(true);
+          await this.checkGog(true);
           break;
         case Platforms.IndieGala:
           await this.getIndieGalaGamesList(true);
@@ -723,7 +796,8 @@ export const background = {
       const fallbackUrl = {
         [Platforms.Steam]: STEAM_GAMES_URL,
         [Platforms.Epic]: EPIC_GAMES_URL,
-        [Platforms.GOG]: GOG_HOME_URL,
+        // checkGog already fell back to its own tab.
+        [Platforms.GOG]: undefined,
         [Platforms.IndieGala]: INDIEGALA_FREEBIES_URL,
         [Platforms.PrimeGaming]: undefined,
       }[platform];
