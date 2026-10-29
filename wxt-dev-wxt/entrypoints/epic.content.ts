@@ -1,12 +1,11 @@
-import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import { browser } from 'wxt/browser';
-import {mergeIntoStorageItem, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {mergeIntoStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import { oncePerPageRun } from "@/entrypoints/utils/oncePerPageRun";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
-import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
 import {closeCurrentTab, onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {detectAndRecordLoginState} from "@/entrypoints/utils/loginState.ts";
 import {EPIC_CLAIMED_KEY, epicProductKey} from "@/entrypoints/utils/epicGames.ts";
+import {HealthProblem} from "@/entrypoints/utils/health.ts";
 import {
     getRndInteger,
     wait,
@@ -43,42 +42,11 @@ export default defineContentScript({
         // On every Epic page, not just the extension's own tabs: signing in on
         // the store is what lifts the background's "signed out" pause on
         // claiming. Never awaited here, so it can't delay (or fail) a claim.
-        const loginStateDetected = detectAndRecordLoginState(Platforms.Epic);
-        onClaimMessage({ getFreeGames: getFreeGamesList, claimGames: claimCurrentFreeGame });
-
-        async function getFreeGamesList() {
-            await waitForPageLoad();
-            const games = document.querySelector('section.css-2u323');
-            const freeGames = games?.querySelectorAll('a.css-g3jcms:has(div.css-82y1uz)') as NodeListOf<HTMLAnchorElement>;
-            const loginState = await loginStateDetected;
-            let gamesArr: FreeGame[] = [];
-            freeGames?.forEach((freeGame) => {
-                const newFreeGame = {
-                    link: freeGame.href ?? '',
-                    img: freeGame.getElementsByTagName('img')[0]?.dataset.image ?? '',
-                    title: freeGame.getElementsByTagName('h6')[0]?.innerHTML ?? '',
-                    platform: Platforms.Epic
-                };
-                gamesArr.push(newFreeGame);
-            });
-            if (gamesArr.length > 0) {
-                // An inconclusive read must not block claiming, so only a
-                // definite "signed out" reports loggedIn: false upstream.
-                const freeGamesResponse: FreeGamesResponse = {
-                    freeGames: gamesArr,
-                    loggedIn: loginState !== false
-                }
-                await setStorageItem("epicGames", gamesArr);
-                await browser.runtime.sendMessage({
-                    target: 'background',
-                    action: 'claimFreeGames',
-                    data: freeGamesResponse
-                });
-            }
-            // Nothing further needed from this tab — background opens its own
-            // claim tab(s) for whatever this reported.
-            await closeCurrentTab();
-        }
+        void detectAndRecordLoginState(Platforms.Epic);
+        // No getFreeGames here: the background lists Epic's games from its
+        // API, and the store-page scrape it once fell back to lost its
+        // selectors in Epic's 2026 redesign.
+        onClaimMessage({ claimGames: claimCurrentFreeGame });
 
         async function claimCurrentFreeGame() {
             await waitForPageLoad();
@@ -88,6 +56,7 @@ export default defineContentScript({
             if (buyButton === 'owned') {
                 console.log('[claimer] Already in library');
                 await markClaimed();
+                await reportHealth();
                 await closeCurrentTab();
                 return;
             }
@@ -95,6 +64,7 @@ export default defineContentScript({
                 // Not marked claimed, so the background retries it tomorrow.
                 console.warn('[claimer] No "Get" button on this page; it may have changed');
                 logClaimDiagnostics();
+                await reportHealth('changed', 'Couldn\'t find the "Get" button on a free game\'s page');
                 await closeCurrentTab();
                 return;
             }
@@ -108,11 +78,13 @@ export default defineContentScript({
                 // GOG's redeem page does), and the order is still completed and
                 // counted once they have.
                 console.warn('[claimer] Epic wants a captcha solved; waiting for the user');
+                await reportHealth('captcha', 'Epic wants a captcha solved in its open tab to finish a claim');
                 claimed = await completePurchase(CAPTCHA_WAIT_MS);
             }
             if (claimed) {
                 await incrementCounter();
                 await markClaimed();
+                await reportHealth();
                 console.log('[claimer] Claim completed');
             } else if (isCaptchaUp()) {
                 // Still unsolved: the tab stays open, and the background won't
@@ -121,6 +93,7 @@ export default defineContentScript({
             } else {
                 console.warn('[claimer] Could not complete claim within timeout');
                 logClaimDiagnostics();
+                await reportHealth('unfinished', 'Epic\'s checkout didn\'t finish; it\'s retried tomorrow');
             }
             await closeCurrentTab();
         }
@@ -136,6 +109,20 @@ export default defineContentScript({
                 await wait(500);
             }
             return null;
+        }
+
+        // For the popup's health status (see health.ts); no problem means the
+        // claim worked. Never throws: the tab must still close after it.
+        async function reportHealth(problem?: HealthProblem, detail?: string) {
+            try {
+                await browser.runtime.sendMessage({
+                    target: 'background',
+                    action: 'reportHealth',
+                    data: { platform: Platforms.Epic, problem, detail },
+                });
+            } catch (error: unknown) {
+                console.error('[claimer] Could not report the claim outcome:', error);
+            }
         }
 
         // Tells the background to stop retrying this game (see

@@ -1,4 +1,5 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
+import { assertStoreOk } from "@/entrypoints/utils/network.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import {
   detectExternalPlatform,
@@ -240,7 +241,7 @@ export function updateClaimAttempts(
 // background can fall back to the old open-the-claims-page check.
 export async function fetchPrimeLookup(fetchImpl: typeof fetch = fetch): Promise<PrimeLookup> {
   const page = await fetchImpl(LUNA_CLAIMS_URL, { credentials: "include", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
-  if (!page.ok) throw new Error(`Luna claims page responded ${page.status}`);
+  assertStoreOk(page, "Luna's claims page");
   const csrfToken = extractCsrfToken(await page.text());
   if (!csrfToken) throw new Error("Luna claims page had no csrf token");
 
@@ -256,7 +257,7 @@ export async function fetchPrimeLookup(fetchImpl: typeof fetch = fetch): Promise
     },
     body: JSON.stringify({ operationName: "PrimeFreeGames", variables: { pageSize: 999 }, query: FREE_GAMES_QUERY }),
   });
-  if (!response.ok) throw new Error(`Luna GraphQL responded ${response.status}`);
+  assertStoreOk(response, "Luna's GraphQL API");
   return parsePrimeLookup(JSON.parse(await response.text()));
 }
 

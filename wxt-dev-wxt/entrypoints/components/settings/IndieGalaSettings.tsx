@@ -1,5 +1,6 @@
 import Checkbox from "@/entrypoints/components/Checkbox.tsx";
 import LoginStatus from "@/entrypoints/components/LoginStatus.tsx";
+import HealthStatus from "@/entrypoints/components/HealthStatus.tsx";
 import { useStorage } from "@/entrypoints/hooks/useStorage.ts";
 import { useOptionalAccess } from "@/entrypoints/hooks/useOptionalAccess.ts";
 import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts";
@@ -34,7 +35,7 @@ function IndieGalaSettings() {
     return (
         <div className="platform-group">
             <Checkbox name="IndieGala" checked={isIndieGalaOn} onChange={e => handleIndieGalaCheckChange(e.target.checked)}
-                      trailing={isIndieGalaOn && <LoginStatus state={indieGalaLoggedIn} loginUrl="https://www.indiegala.com/login" platform={Platforms.IndieGala}/>}/>
+                      trailing={isIndieGalaOn && <><HealthStatus platform={Platforms.IndieGala}/><LoginStatus state={indieGalaLoggedIn} loginUrl="https://www.indiegala.com/login" platform={Platforms.IndieGala}/></>}/>
             {isIndieGalaOn && (
                 <div className="sub-options">
                     <Checkbox name="Wheel of Fortune" checked={isWheelOn}

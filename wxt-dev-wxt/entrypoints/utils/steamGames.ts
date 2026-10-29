@@ -12,6 +12,12 @@ export function parseSteamLoginState(html: string): LoginState {
   return readSteamLoginState(parse(html));
 }
 
+// The search page's result list, present whether or not anything is free.
+// Missing means the page changed (or isn't the search page at all).
+export function hasSteamResultList(html: string): boolean {
+  return parse(html).querySelector('div#search_result_container') !== null;
+}
+
 // Parses the free-games search page; null when the result container has no rows
 // (the page layout changed or the search returned nothing).
 export function parseSteamFreeGames(html: string): FreeGame[] | null {

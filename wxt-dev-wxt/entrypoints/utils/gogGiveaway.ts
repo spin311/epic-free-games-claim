@@ -1,6 +1,7 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { appendRedeemParams } from "@/entrypoints/utils/redeemCode.ts";
+import { assertStoreOk } from "@/entrypoints/utils/network.ts";
 
 // GOG's own store client (productcard bundle_min.js) resolves exactly these two
 // endpoints for its giveaway button, so we talk to them directly instead of
@@ -123,9 +124,7 @@ export async function fetchGiveaway(fetchImpl: typeof fetch = fetch): Promise<Gi
     if (response.status === 404) {
         return { unauthorized: false, game: null };
     }
-    if (!response.ok) {
-        throw new Error(`GOG giveaway status responded ${response.status}`);
-    }
+    assertStoreOk(response, "GOG's giveaway status");
 
     return { unauthorized: false, game: parseGiveawayStatus(parseJsonBody(await response.text())) };
 }

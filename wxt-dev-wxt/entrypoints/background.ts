@@ -3,7 +3,13 @@ import {getStorageItem, getStorageItems, setStorageItem} from "@/entrypoints/hoo
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {ClaimFrequency, ClaimFrequencyMinutes} from "@/entrypoints/enums/claimFrequency.ts";
-import {addToCartInMainWorld, parseSteamFreeGames, parseSteamLoginState, STEAM_GAMES_URL} from "@/entrypoints/utils/steamGames.ts";
+import {
+  addToCartInMainWorld,
+  hasSteamResultList,
+  parseSteamFreeGames,
+  parseSteamLoginState,
+  STEAM_GAMES_URL,
+} from "@/entrypoints/utils/steamGames.ts";
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
@@ -40,7 +46,6 @@ import {EpicElement, EpicSearchResponse} from "@/entrypoints/types/epicGame.ts";
 import {
   EPIC_API_URL,
   EPIC_CLAIMED_KEY,
-  EPIC_GAMES_URL,
   epicProductKey,
   formatEpicFreeGame,
   partitionEpicPromotions,
@@ -57,12 +62,25 @@ import {
   TOGGLES_ENABLED_WITH,
 } from "@/entrypoints/utils/optionalAccess.ts";
 import {syncRuntimeContentScripts} from "@/entrypoints/utils/runtimeContentScripts.ts";
+import {
+  assertStoreOk,
+  fetchWithRetry,
+  SignedOutError,
+  StoreChangedError,
+} from "@/entrypoints/utils/network.ts";
+import {classifyFailure, HealthProblem, recordHealthError, recordHealthOk} from "@/entrypoints/utils/health.ts";
 
 const ALARM_NAME = "checkFreeGames";
+// One-off: a run where no store could be reached (offline, e.g. right after
+// browser start) is tried again this soon instead of at the next due check.
+const OFFLINE_RETRY_ALARM = "retryAfterOffline";
+const OFFLINE_RETRY_MINUTES = 15;
 let isChecking = false;
 // Distinct from the green claimed-count badge (see handleInstall) so "still
 // working" never reads as "N games claimed".
 const CLAIMING_BADGE_COLOR = "#f0ad4e";
+// "!" on the toolbar: a store check failed (see health.ts); the popup says which.
+const PROBLEM_BADGE_COLOR = "#d9534f";
 // Chains every syncContentScripts call: main() and a permissions event can
 // start one at the same moment (a grant wakes the worker), and two overlapping
 // syncs would both try to register the same script id.
@@ -72,6 +90,12 @@ export const background = {
   // Set by claimGames() during a run so getFreeGamesList's finally block
   // knows whether to leave the badge's claimed-count alone or clear it.
   claimedSomethingThisRun: false,
+  // Set by recordStoreFailure during a run, for the same finally block.
+  storeFailedThisRun: false,
+  // How many store checks ran this run, and how many couldn't reach their
+  // store (see getFreeGamesAndSetOpenedFlag).
+  storeChecksThisRun: 0,
+  unreachableStoresThisRun: 0,
 
   async main() {
     browser.runtime.onStartup.addListener(() => this.checkIfActiveAndDue());
@@ -83,7 +107,7 @@ export const background = {
     browser.runtime.onInstalled.addListener((r: Browser.runtime.InstalledDetails) => this.handleInstall(r));
 
     browser.alarms.onAlarm.addListener((alarm: Browser.alarms.Alarm) => {
-      if (alarm.name === ALARM_NAME) {
+      if (alarm.name === ALARM_NAME || alarm.name === OFFLINE_RETRY_ALARM) {
         void this.checkIfActiveAndDue();
       }
     });
@@ -177,6 +201,12 @@ export const background = {
 
   async getFreeGamesAndSetOpenedFlag(opened: string) {
     await this.getFreeGamesList();
+    // Not stamped when no store could be reached: on the daily or
+    // browser-start setting that would skip the rest of the day.
+    if (this.storeChecksThisRun > 0 && this.unreachableStoresThisRun === this.storeChecksThisRun) {
+      await browser.alarms.create(OFFLINE_RETRY_ALARM, { delayInMinutes: OFFLINE_RETRY_MINUTES });
+      return;
+    }
     await setStorageItem("lastOpened", opened);
   },
 
@@ -231,6 +261,9 @@ export const background = {
   // throttles (the fallback's day gate and the per-offer retry cooldown).
   async getFreeGamesList(force: boolean = false) {
     this.claimedSomethingThisRun = false;
+    this.storeFailedThisRun = false;
+    this.storeChecksThisRun = 0;
+    this.unreachableStoresThisRun = 0;
     await setStorageItem("isClaiming", true);
     await this.setBadgeText("…");
     await setActionBadgeBackgroundColor(CLAIMING_BADGE_COLOR);
@@ -238,9 +271,12 @@ export const background = {
       await this.runFreeGamesChecks(force);
     } finally {
       await setStorageItem("isClaiming", false);
-      // Leave the count claimGames() already set alone; only clear the "in
-      // progress" placeholder if nothing this run ever replaced it.
-      if (!this.claimedSomethingThisRun) await this.setBadgeText("");
+      // Leave the count claimGames() already set alone; otherwise replace the
+      // "in progress" placeholder with "!" if a store check failed.
+      if (!this.claimedSomethingThisRun) {
+        if (this.storeFailedThisRun) await this.showProblemBadge();
+        else await this.setBadgeText("");
+      }
     }
   },
 
@@ -261,18 +297,10 @@ export const background = {
     // A claim tab opened before its content script is registered would just
     // sit there unclaimed.
     await contentScriptSync;
-    try {
-      await this.getEpicGamesList(claimEpic, force);
-    } catch (e) {
-      console.error("getEpicGamesList failed:", e);
-      if (claimEpic) await this.openTabAndSendActionToContent(EPIC_GAMES_URL, "getFreeGames");
-    }
-    try {
-      await this.getSteamGamesList(claimSteam);
-    } catch (e) {
-      console.error("getSteamGamesList failed:", e);
-      if (claimSteam) await this.openTabAndSendActionToContent(STEAM_GAMES_URL, "getFreeGames");
-    }
+    // No fallback tab for Epic: the store page it used to scrape lost those
+    // selectors in Epic's 2026 redesign, and the API rarely fails for long.
+    await this.runStoreCheck(Platforms.Epic, claimEpic, () => this.getEpicGamesList(claimEpic, force));
+    await this.runStoreCheck(Platforms.Steam, claimSteam, () => this.getSteamGamesList(claimSteam), STEAM_GAMES_URL);
     // Skipped entirely (not just un-claimed) when disabled — unlike the other
     // platforms' public/no-auth APIs, GOG's status endpoint needs the user's
     // session and has genuine failure modes (signed out, transport errors)
@@ -295,18 +323,68 @@ export const background = {
     // Listing only (no claim) still needs the host: without it the browser
     // blocks the cross-origin fetch, which would just fail every run.
     if (canReachIndieGala) {
-      try {
-        await this.getIndieGalaGamesList(claimIndieGala);
-      } catch (e) {
-        console.error("getIndieGalaGamesList failed:", e);
-        if (claimIndieGala) await this.openTabAndSendActionToContent(INDIEGALA_FREEBIES_URL, "getFreeGames");
-      }
+      await this.runStoreCheck(
+          Platforms.IndieGala, claimIndieGala, () => this.getIndieGalaGamesList(claimIndieGala), INDIEGALA_FREEBIES_URL
+      );
     }
     try {
       await this.checkPrimeGaming(claimPrimeGaming, force);
     } catch (e) {
-      console.error("checkPrimeGaming failed:", e);
+      if (claimPrimeGaming) await this.recordStoreFailure(Platforms.PrimeGaming, e);
+      else console.error("checkPrimeGaming failed:", e);
     }
+  },
+
+  // One store's check, recorded for the popup's health status (see
+  // health.ts), but only while the store is switched on: the popup shows
+  // nothing for one that's off. A fallback tab, if any, is a last attempt
+  // through a real page and must not abort the other stores' checks.
+  async runStoreCheck(platform: Platforms, isEnabled: boolean, check: () => Promise<void>, fallbackUrl?: string) {
+    try {
+      await check();
+      if (isEnabled) await this.recordStoreOk(platform);
+    } catch (e) {
+      if (!isEnabled) {
+        console.error(`${platform} check failed:`, e);
+        return;
+      }
+      await this.recordStoreFailure(platform, e);
+      // A page that can't load offline would only add a dead tab.
+      if (!fallbackUrl || classifyFailure(e) === "network") return;
+      try {
+        await this.openTabAndSendActionToContent(fallbackUrl, "getFreeGames");
+      } catch (fallbackError) {
+        console.error(`${platform} fallback tab failed:`, fallbackError);
+      }
+    }
+  },
+
+  async recordStoreOk(platform: Platforms) {
+    this.storeChecksThisRun++;
+    await recordHealthOk(platform);
+  },
+
+  async recordStoreFailure(platform: Platforms, error: unknown) {
+    console.error(`${platform} check failed:`, error);
+    const problem = classifyFailure(error);
+    // Signed out: the store answered, which is all health tracks.
+    if (!problem) return this.recordStoreOk(platform);
+    this.storeChecksThisRun++;
+    if (problem === "network") this.unreachableStoresThisRun++;
+    await recordHealthError(platform, problem, error instanceof Error ? error.message : String(error));
+    this.storeFailedThisRun = true;
+  },
+
+  async showProblemBadge() {
+    await setActionBadgeBackgroundColor(PROBLEM_BADGE_COLOR);
+    await this.setBadgeText("!");
+  },
+
+  // Every store request from the background goes through here: retried while
+  // the network is down or the store is overloaded (see fetchWithRetry).
+  // Separate so tests can skip the retry delays.
+  fetchStore(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
+    return fetchWithRetry(input, init);
   },
 
   async claimGames(games: FreeGame[]) {
@@ -428,6 +506,19 @@ export const background = {
     } else if (request.action === "checkPlatformLogin") {
       const platform = request.data?.platform as Platforms | undefined;
       if (platform) await this.checkPlatformLogin(platform);
+    } else if (request.action === "reportHealth") {
+      // A claim tab's outcome (see epic.content.ts); no problem means it worked.
+      const platform = request.data?.platform as Platforms | undefined;
+      if (!platform) return;
+      const problem = request.data?.problem as HealthProblem | undefined;
+      if (!problem) {
+        await recordHealthOk(platform, new Date(), "claim");
+        return;
+      }
+      await recordHealthError(platform, problem, String(request.data?.detail ?? ""), new Date(), "claim");
+      // Over a claimed count, if one is showing: a claim that needs the user
+      // matters more than how many tabs opened.
+      await this.showProblemBadge();
     } else if (request.action === "closeTab") {
       const tabId = sender?.tab?.id;
       if (tabId != null) {
@@ -485,15 +576,13 @@ export const background = {
     }
   },
   async getEpicGamesList(shouldClaim: boolean = true, force: boolean = false) {
-    const response = await fetch(EPIC_API_URL);
-    if (!response.ok) {
-      console.error("Failed to fetch Epic Games data:", response.statusText);
-      return;
-    }
-
+    const response = assertStoreOk(await this.fetchStore(EPIC_API_URL), "Epic's free-games API");
     const data = (await response.json()) as EpicSearchResponse;
 
-    const games: EpicElement[] = data?.data?.Catalog?.searchStore?.elements ?? [];
+    const games: EpicElement[] | undefined = data?.data?.Catalog?.searchStore?.elements;
+    if (!Array.isArray(games)) {
+      throw new StoreChangedError("Epic's free-games API answered without a game list");
+    }
 
     const { current: freeGames, future: futureFreeGames } = partitionEpicPromotions(games);
     const listed = freeGames.map(g => formatEpicFreeGame(g, false));
@@ -548,7 +637,11 @@ export const background = {
   async getSteamGamesList(shouldClaim: boolean = true) {
     // Credentialed so the page carries the user's own header — an anonymous
     // request could never show a session.
-    const html = await fetch(STEAM_GAMES_URL, { credentials: "include" }).then(r => r.text());
+    const response = assertStoreOk(await this.fetchStore(STEAM_GAMES_URL, { credentials: "include" }), "Steam's search page");
+    const html = await response.text();
+    // "No free game" and "no result list at all" both parse to null below;
+    // only the second means the page changed.
+    if (!hasSteamResultList(html)) throw new StoreChangedError("Steam's search page has no result list");
 
     // Read before the games: Steam rarely lists a free one, and no claim tab
     // (the only other place this gets recorded) opens without one. Only a
@@ -575,9 +668,9 @@ export const background = {
   // the cookie — so it is thrown rather than recorded as "signed out", letting
   // getFreeGamesList retry the whole lookup from a real gog.com tab.
   async getGogGamesList(shouldClaim: boolean = true) {
-    const lookup = await fetchGiveaway();
+    const lookup = await fetchGiveaway((input, init) => this.fetchStore(input, init));
     if (lookup.unauthorized) {
-      throw new Error("GOG giveaway status requires a signed-in session");
+      throw new SignedOutError("GOG giveaway status requires a signed-in session");
     }
     // Confirmed live: a signed-out request gets a 401 whether or not a
     // giveaway is running, so any other answer means the session went along.
@@ -600,9 +693,10 @@ export const background = {
   async checkGog(force: boolean = false) {
     try {
       await this.getGogGamesList(true);
+      await this.recordStoreOk(Platforms.GOG);
       return;
     } catch (e) {
-      console.error("getGogGamesList failed:", e);
+      await this.recordStoreFailure(Platforms.GOG, e);
     }
 
     const now = new Date().toISOString();
@@ -622,7 +716,7 @@ export const background = {
   // an auth reason — only network/HTTP failures reach the catch block in
   // getFreeGamesList, which falls back to a real tab.
   async getIndieGalaGamesList(shouldClaim: boolean = true) {
-    const freebies = await fetchFreebies();
+    const freebies = await fetchFreebies((input, init) => this.fetchStore(input, init));
     if (freebies.length === 0) return;
 
     const gamesArr: FreeGame[] = freebies.map((f) => f.game);
@@ -681,8 +775,12 @@ export const background = {
     let lookup: PrimeLookup | null = null;
     try {
       lookup = await this.loadPrimeLookup();
+      await this.recordStoreOk(Platforms.PrimeGaming);
     } catch (e) {
-      console.warn("Prime Gaming background lookup failed; falling back to the claims page:", e);
+      // Recorded even though the claims page below may still work: the
+      // lookup is what the extension relies on, so its breaking is news.
+      console.warn("Prime Gaming background lookup failed; falling back to the claims page");
+      await this.recordStoreFailure(Platforms.PrimeGaming, e);
     }
     if (lookup?.status === "signed-out") {
       await recordLoginState(Platforms.PrimeGaming, false);
@@ -725,7 +823,7 @@ export const background = {
     // extension id on Chrome, an internal UUID on Firefox).
     const extensionHost = new URL(browser.runtime.getURL("/")).host;
     await ensureLunaOriginRule(browser.declarativeNetRequest, extensionHost);
-    return fetchPrimeLookup();
+    return fetchPrimeLookup((input, init) => this.fetchStore(input, init));
   },
 
   async claimPrimeOffers(offers: PrimeOffer[], force: boolean = false) {
@@ -795,7 +893,8 @@ export const background = {
       console.error(`checkPlatformLogin failed for ${platform}:`, e);
       const fallbackUrl = {
         [Platforms.Steam]: STEAM_GAMES_URL,
-        [Platforms.Epic]: EPIC_GAMES_URL,
+        // Its store-page scrape lost its selectors in Epic's 2026 redesign.
+        [Platforms.Epic]: undefined,
         // checkGog already fell back to its own tab.
         [Platforms.GOG]: undefined,
         [Platforms.IndieGala]: INDIEGALA_FREEBIES_URL,

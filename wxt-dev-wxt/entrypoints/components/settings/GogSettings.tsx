@@ -1,5 +1,6 @@
 import Checkbox from "@/entrypoints/components/Checkbox.tsx";
 import LoginStatus from "@/entrypoints/components/LoginStatus.tsx";
+import HealthStatus from "@/entrypoints/components/HealthStatus.tsx";
 import { useStorage } from "@/entrypoints/hooks/useStorage.ts";
 import { useOptionalAccess } from "@/entrypoints/hooks/useOptionalAccess.ts";
 import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts";
@@ -15,7 +16,7 @@ function GogSettings() {
     return (
         <div className="platform-group">
             <Checkbox name="GOG" checked={isGogOn} onChange={e => access.setWithAccess("gogCheck", e.target.checked, setGogCheck)}
-                      trailing={isGogOn && <LoginStatus state={gogLoggedIn} loginUrl="https://www.gog.com/en" platform={Platforms.GOG}/>}/>
+                      trailing={isGogOn && <><HealthStatus platform={Platforms.GOG}/><LoginStatus state={gogLoggedIn} loginUrl="https://www.gog.com/en" platform={Platforms.GOG}/></>}/>
         </div>
     );
 }

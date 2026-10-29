@@ -1,4 +1,5 @@
 import { parse } from 'node-html-parser';
+import { assertStoreOk } from "@/entrypoints/utils/network.ts";
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 
@@ -107,10 +108,7 @@ export async function claimFreebie(
 // GOG's status check. Throws on a non-ok HTTP response so getFreeGamesList's
 // existing per-platform catch block falls back to a real tab.
 export async function fetchFreebies(fetchImpl: typeof fetch = fetch): Promise<IndieGalaFreebie[]> {
-  const response = await fetchImpl(INDIEGALA_FREEBIES_URL);
-  if (!response.ok) {
-    throw new Error(`IndieGala freebies page responded ${response.status}`);
-  }
+  const response = assertStoreOk(await fetchImpl(INDIEGALA_FREEBIES_URL), "IndieGala's freebies page");
   const html = await response.text();
   return parseFreebiesList(html);
 }

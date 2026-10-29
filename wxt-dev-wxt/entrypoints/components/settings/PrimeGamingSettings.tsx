@@ -1,5 +1,6 @@
 import Checkbox from "@/entrypoints/components/Checkbox.tsx";
 import LoginStatus from "@/entrypoints/components/LoginStatus.tsx";
+import HealthStatus from "@/entrypoints/components/HealthStatus.tsx";
 import { useStorage } from "@/entrypoints/hooks/useStorage.ts";
 import { useOptionalAccess } from "@/entrypoints/hooks/useOptionalAccess.ts";
 import { LOGIN_STATE_KEYS, LoginState, PRIME_MEMBERSHIP_KEY } from "@/entrypoints/utils/loginState.ts";
@@ -42,8 +43,8 @@ function PrimeGamingSettings() {
     return (
         <div className="platform-group">
             <Checkbox name="Prime Gaming" checked={isPrimeOn} onChange={e => access.setWithAccess("primeGamingCheck", e.target.checked, setPrimeGamingCheck)}
-                      trailing={isPrimeOn && <LoginStatus state={primeGamingLoggedIn} loginUrl="https://gaming.amazon.com/home" platform={Platforms.PrimeGaming}
-                                                   accountWarning={primeWarning}/>}/>
+                      trailing={isPrimeOn && <><HealthStatus platform={Platforms.PrimeGaming}/><LoginStatus state={primeGamingLoggedIn} loginUrl="https://gaming.amazon.com/home" platform={Platforms.PrimeGaming}
+                                                   accountWarning={primeWarning}/></>}/>
             {isPrimeOn && (
                 <div className="sub-options">
                     <p className="hint">Claim offers that go to:</p>

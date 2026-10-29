@@ -12,6 +12,9 @@ import { INDIEGALA_WHEEL_URL } from '../utils/indieGalaWheel';
 import { ExternalPlatform, PRIME_GAMING_HOME_URL } from '../utils/primeGamingGiveaway';
 import { GOG_HOME_URL } from '../utils/gogGiveaway';
 import { AccessGroup } from '../utils/optionalAccess';
+import { fetchWithRetry } from '../utils/network';
+import { activeProblem, HEALTH_KEYS, healthKey, PlatformHealth, recordHealthError } from '../utils/health';
+import { NetworkError, StoreChangedError } from '../utils/network';
 
 // fake-browser implements neither `permissions` nor `scripting`. Every optional
 // host reads as granted by default, so the suites below run with the full
@@ -570,7 +573,7 @@ describe('login state from the background checks', () => {
   });
 
   it('records a signed-in Steam session from the fetched page, even with no free game', async () => {
-    const fetchMock = respondWith(200, '<div id="global_actions"><div id="account_pulldown"></div></div>');
+    const fetchMock = respondWith(200, '<div id="global_actions"><div id="account_pulldown"></div></div><div id="search_result_container"></div>');
     vi.stubGlobal('fetch', fetchMock);
     const runner = Object.create(background);
 
@@ -584,7 +587,7 @@ describe('login state from the background checks', () => {
   // Same reasoning as GOG's 401: the worker's request is the one that may
   // lack the cookie, so only a real Steam tab may record "signed out".
   it('does not record a signed-out Steam session from the worker\'s fetch', async () => {
-    vi.stubGlobal('fetch', respondWith(200, '<div id="global_actions"><a>sign in</a></div>'));
+    vi.stubGlobal('fetch', respondWith(200, '<div id="global_actions"><a>sign in</a></div><div id="search_result_container"></div>'));
     const runner = Object.create(background);
 
     await runner.getSteamGamesList(true);
@@ -1280,5 +1283,194 @@ describe('getEpicGamesList claiming', () => {
     await runner.getEpicGamesList(true);
 
     expect(await getStorageItem('epicClaimed')).toEqual(['p/home-19212a']);
+  });
+});
+
+describe('store health', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    vi.spyOn(fakeBrowser.action, 'setBadgeText').mockResolvedValue(undefined as never);
+    vi.spyOn(fakeBrowser.action, 'setBadgeBackgroundColor').mockResolvedValue(undefined as never);
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  // Every other store's check stubbed out, so only the one under test runs.
+  function healthRunner() {
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetchWithRetry(input, init, []);
+    runner.getSteamGamesList = async () => {};
+    runner.checkGog = async () => {};
+    runner.checkIndieGalaWheel = async () => {};
+    runner.getIndieGalaGamesList = async () => {};
+    runner.checkPrimeGaming = async () => {};
+    runner.claimGames = async () => {};
+    runner.openEpicProductKeys = async () => new Set();
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+    return { runner, opened };
+  }
+
+  const epicProblem = async () => activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.Epic]));
+
+  // Regression: after the API failed, a tab opened on the store home page to
+  // scrape it with selectors Epic's redesign removed, which never found anything.
+  it('records Epic as unreachable and opens no tab when its API cannot be reached', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    const { runner, opened } = healthRunner();
+
+    await runner.runFreeGamesChecks();
+
+    expect((await epicProblem())?.problem).toBe('network');
+    expect(opened).toEqual([]);
+  });
+
+  it('records Epic as changed when its API answers without a game list', async () => {
+    vi.stubGlobal('fetch', respondWith(200, '{"data":{}}'));
+    const { runner } = healthRunner();
+
+    await runner.runFreeGamesChecks();
+
+    expect((await epicProblem())?.problem).toBe('changed');
+  });
+
+  it('records a working Epic check, clearing an earlier problem', async () => {
+    await recordHealthError(Platforms.Epic, 'network', 'Failed to fetch', new Date(Date.now() - 60_000));
+    vi.stubGlobal('fetch', epicPromotions('home-19212a'));
+    const { runner } = healthRunner();
+
+    await runner.runFreeGamesChecks();
+
+    expect(await epicProblem()).toBeNull();
+  });
+
+  it('records nothing for a store the user has switched off', async () => {
+    await setStorageItem('epicCheck', false);
+    vi.stubGlobal('fetch', vi.fn(async () => { throw new TypeError('Failed to fetch'); }));
+    const { runner } = healthRunner();
+
+    await runner.runFreeGamesChecks();
+
+    expect(await getStorageItem(HEALTH_KEYS[Platforms.Epic])).toBeNull();
+  });
+
+  it('records Steam as changed when its search page has no result list', async () => {
+    vi.stubGlobal('fetch', respondWith(200, '<div id="global_actions"></div><p>new layout</p>'));
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetchWithRetry(input, init, []);
+
+    await expect(runner.getSteamGamesList(true)).rejects.toBeInstanceOf(StoreChangedError);
+  });
+
+  it('does not count a signed-out GOG account as a store problem', async () => {
+    vi.stubGlobal('fetch', respondWith(401, '{"message":"Unauthorized"}'));
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetchWithRetry(input, init, []);
+    runner.openTabAndSendActionToContent = async () => {};
+
+    await runner.checkGog();
+
+    expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.GOG]))).toBeNull();
+  });
+
+  it('shows "!" on the toolbar after a run where a store check failed and nothing was claimed', async () => {
+    const runner = Object.create(background);
+    runner.runFreeGamesChecks = async function (this: typeof background) {
+      await this.recordStoreFailure(Platforms.Epic, new StoreChangedError('no game list'));
+    };
+    const badges: string[] = [];
+    runner.setBadgeText = async (text: string) => { badges.push(text); };
+
+    await runner.getFreeGamesList();
+
+    expect(badges.at(-1)).toBe('!');
+  });
+
+  it('records what a claim tab reports and flags a problem on the toolbar', async () => {
+    const runner = Object.create(background);
+    const badges: string[] = [];
+    runner.setBadgeText = async (text: string) => { badges.push(text); };
+
+    await runner.handleMessage({
+      target: 'background',
+      action: 'reportHealth',
+      data: { platform: Platforms.Epic, problem: 'changed', detail: 'No "Get" button' },
+    });
+
+    const claimProblem = async () => activeProblem(await getStorageItem<PlatformHealth>(healthKey(Platforms.Epic, 'claim')));
+    expect((await claimProblem())?.detail).toBe('No "Get" button');
+    expect(badges).toEqual(['!']);
+
+    await runner.handleMessage({ target: 'background', action: 'reportHealth', data: { platform: Platforms.Epic } });
+    expect(await claimProblem()).toBeNull();
+  });
+
+  // Regression: a signed-out answer proves GOG is reachable, but used to leave
+  // an earlier "can't reach store" up for good.
+  it('clears an earlier GOG warning once GOG answers, even signed out', async () => {
+    await recordHealthError(Platforms.GOG, 'network', 'Failed to fetch', new Date(Date.now() - 60_000));
+    vi.stubGlobal('fetch', respondWith(401, '{"message":"Unauthorized"}'));
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetchWithRetry(input, init, []);
+    runner.openTabAndSendActionToContent = async () => {};
+
+    await runner.checkGog();
+
+    expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.GOG]))).toBeNull();
+  });
+
+  it('reads an overloaded GOG (503) as unreachable, not changed', async () => {
+    vi.stubGlobal('fetch', respondWith(503, ''));
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetchWithRetry(input, init, []);
+    runner.openTabAndSendActionToContent = async () => {};
+
+    await runner.checkGog();
+
+    expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.GOG]))?.problem).toBe('network');
+  });
+
+  // A page that can't load offline would only add a dead tab.
+  it('opens no fallback tab when the store could not be reached', async () => {
+    const runner = Object.create(background);
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await runner.runStoreCheck(Platforms.Steam, true, async () => { throw new NetworkError('Failed to fetch'); }, 'https://store.steampowered.com/');
+    await runner.runStoreCheck(Platforms.Steam, true, async () => { throw new StoreChangedError('no result list'); }, 'https://store.steampowered.com/');
+
+    expect(opened).toEqual(['https://store.steampowered.com/']);
+  });
+
+  // Regression (3.0 report): a check at browser start, before the network was
+  // up, used up the whole day.
+  it('does not count a run where no store could be reached, and retries it soon', async () => {
+    const runner = Object.create(background);
+    runner.runFreeGamesChecks = async function (this: typeof background) {
+      await this.recordStoreFailure(Platforms.Epic, new NetworkError('Failed to fetch'));
+      await this.recordStoreFailure(Platforms.Steam, new NetworkError('Failed to fetch'));
+    };
+    runner.setBadgeText = async () => {};
+
+    await runner.getFreeGamesAndSetOpenedFlag(new Date().toISOString());
+
+    expect(await getStorageItem('lastOpened')).toBeNull();
+    expect(await fakeBrowser.alarms.get('retryAfterOffline')).toBeDefined();
+  });
+
+  it('counts a run where at least one store answered', async () => {
+    const runner = Object.create(background);
+    runner.runFreeGamesChecks = async function (this: typeof background) {
+      await this.recordStoreFailure(Platforms.Epic, new NetworkError('Failed to fetch'));
+      await this.recordStoreOk(Platforms.Steam);
+    };
+    runner.setBadgeText = async () => {};
+    const opened = new Date().toISOString();
+
+    await runner.getFreeGamesAndSetOpenedFlag(opened);
+
+    expect(await getStorageItem('lastOpened')).toBe(opened);
   });
 });

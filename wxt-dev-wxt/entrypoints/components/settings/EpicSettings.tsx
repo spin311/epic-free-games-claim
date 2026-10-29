@@ -1,5 +1,6 @@
 import Checkbox from "@/entrypoints/components/Checkbox.tsx";
 import LoginStatus from "@/entrypoints/components/LoginStatus.tsx";
+import HealthStatus from "@/entrypoints/components/HealthStatus.tsx";
 import { useStorage } from "@/entrypoints/hooks/useStorage.ts";
 import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
@@ -17,7 +18,7 @@ function EpicSettings() {
     return (
         <div className="platform-group">
             <Checkbox name="Epic Games" checked={epicCheck} onChange={e => setEpicCheck(e.target.checked)}
-                      trailing={epicCheck && <LoginStatus state={epicLoggedIn} loginUrl={EPIC_LOGIN_URL} platform={Platforms.Epic}/>}/>
+                      trailing={epicCheck && <><HealthStatus platform={Platforms.Epic}/><LoginStatus state={epicLoggedIn} loginUrl={EPIC_LOGIN_URL} platform={Platforms.Epic}/></>}/>
         </div>
     );
 }
