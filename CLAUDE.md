@@ -30,6 +30,7 @@ The repo root only holds the README, images, and a stub `package.json`.
 | Build (Firefox) | `npm run build:firefox` |
 | Type-check | `npm run compile` (`tsc --noEmit`) — **clean, 0 errors** |
 | Test | `npm test` (Vitest, `test:watch` for watch mode) |
+| Live store canary | `npm run canary` (needs network + `npx playwright install chromium`; opens a visible browser) |
 | Package zip | `npm run zip` / `npm run zip:firefox` |
 
 **Verification gates (all must stay green):** `npm run compile` (type-check), `npm test`
@@ -38,6 +39,13 @@ The repo root only holds the README, images, and a stub `package.json`.
 Tests use WXT's Vitest integration (`WxtVitest`), which mocks `#imports`/`browser`/`storage`.
 DOM-dependent suites run under `jsdom`; storage suites use `// @vitest-environment node` to
 avoid an esbuild/jsdom `TextEncoder` clash. Test files live next to sources as `*.test.ts`.
+
+**Store canary:** `canary/stores.canary.ts` checks, signed out and against the live stores, what
+the extension depends on (Epic's API and product-page "Get" button, Steam's search page, GOG's 401
+contract, IndieGala's freebies, Prime Gaming's lookup), using the extension's own parsers. It runs
+daily in `.github/workflows/canary.yml` (headed Chromium under `xvfb-run`: Epic answers headless
+browsers with 403). A failure means a store changed; a check a store blocks from CI is skipped with
+a warning annotation. When a store's markup or API changes, update the canary along with the code.
 
 > Note: both `package-lock.json` and `pnpm-lock.yaml` are present. The README documents
 > npm; prefer `npm` unless told otherwise, and don't add a second lockfile's worth of churn.
@@ -62,7 +70,11 @@ avoid an esbuild/jsdom `TextEncoder` clash. Test files live next to sources as `
   `primeGamingGiveaway.ts`, `primeGamingApi.ts` (background Luna GraphQL lookup: Prime Gaming is
   checked without opening a tab, signed-out / no-Prime accounts included; the claims-page tab
   is only a fallback), `legacyGamesRedeem.ts` (Legacy Games promo-form helpers),
-  `optionalAccess.ts` / `runtimeContentScripts.ts` (optional host access — see `wxt.config.ts` below)
+  `optionalAccess.ts` / `runtimeContentScripts.ts` (optional host access — see `wxt.config.ts` below),
+  `network.ts` (`fetchWithRetry`: every background store request goes through `background.fetchStore`),
+  `health.ts` (per-store last-check health shown in the popup's `HealthStatus` and as a red "!" badge:
+  "network", "changed" — a store no longer matches the extension — or "captcha"; throw
+  `StoreChangedError` where a response has an unexpected shape, never fail silently)
 - `wxt.config.ts` — manifest, permissions, browser targets. `@/*` aliases the project root.
   `declarativeNetRequestWithHostAccess` exists only so the background lookup can send Luna's
   Origin on its own GraphQL request (Luna rejects the extension origin with 403); it carries no

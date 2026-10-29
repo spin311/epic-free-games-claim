@@ -1,0 +1,40 @@
+name: Store canary
+
+# Daily live check that each store still looks the way the extension expects
+# (see wxt-dev-wxt/canary/stores.canary.ts). A failed run means a store
+# changed and the extension likely needs an update; GitHub emails the repo
+# owner about failed scheduled runs. A check the store blocked from CI shows
+# up as a warning on the run instead of a failure.
+on:
+  schedule:
+    - cron: "23 7 * * *"
+  workflow_dispatch:
+  # Also whenever the canary itself changes, so a change is proven on
+  # GitHub's runners before it merges.
+  pull_request:
+    paths:
+      - "wxt-dev-wxt/canary/**"
+      - "wxt-dev-wxt/vitest.canary.config.ts"
+      - ".github/workflows/canary.yml"
+
+permissions:
+  contents: read
+
+jobs:
+  canary:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    defaults:
+      run:
+        working-directory: wxt-dev-wxt
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: wxt-dev-wxt/package-lock.json
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      # Headed browser (Epic refuses headless ones) on a virtual display.
+      - run: xvfb-run --auto-servernum npm run canary
