@@ -68,6 +68,40 @@ export function findButtonByText(root: Document | HTMLElement, text: string): HT
     return buttons.find((btn) => (btn.textContent ?? '').trim().toLowerCase() === target) ?? null;
 }
 
+// Epic's store redesign (confirmed live, Oct 2026) dropped the buy button's
+// data-testid="purchase-cta-button": it's now a hashed-class <button> whose
+// CSS-module name still reads _sidebarBuyButton_<hash>. Both forms are matched
+// (the old one in case a page still renders it). Only a "Get" label means a
+// free, unowned game — an owned one reads "In Library", which must never be
+// clicked (it hands off to the Epic launcher) — and other "Get" buttons on the
+// page (free add-ons) are not the game's own.
+const EPIC_BUY_BUTTON_SELECTOR = '[data-testid="purchase-cta-button"], button[class*="_sidebarBuyButton_"]';
+
+function findEpicBuyButtonByLabel(root: Document | HTMLElement, label: string): HTMLButtonElement | null {
+    const buttons = Array.from(root.querySelectorAll<HTMLButtonElement>(EPIC_BUY_BUTTON_SELECTOR));
+    return buttons.find((btn) => (btn.textContent ?? '').trim().toLowerCase() === label) ?? null;
+}
+
+export function findEpicGetButton(root: Document | HTMLElement): HTMLButtonElement | null {
+    return findEpicBuyButtonByLabel(root, 'get');
+}
+
+// Only the buy button itself saying so counts: no buy button at all means the
+// page changed (or never rendered), which is a failure to retry.
+export function isEpicGameOwned(root: Document | HTMLElement): boolean {
+    return findEpicBuyButtonByLabel(root, 'in library') !== null;
+}
+
+// Confirmed live (Oct 2026): after "Get" → "Continue", Epic can put up an
+// interactive hCaptcha. Its page always carries a 0x0 hCaptcha frame, so only
+// a frame with an actual size means a challenge is waiting for a person.
+export function isCaptchaShown(root: Document | HTMLElement): boolean {
+    return Array.from(root.querySelectorAll<HTMLIFrameElement>('iframe[src*="hcaptcha.com"]')).some((frame) => {
+        const rect = frame.getBoundingClientRect();
+        return rect.width > 0 && rect.height > 0;
+    });
+}
+
 // Epic's page can have MULTIPLE role="dialog" elements at once, so we must scan
 // them all (not just the first) to find the "Device not supported" modal — matched
 // by its text — and return its "Continue" button.

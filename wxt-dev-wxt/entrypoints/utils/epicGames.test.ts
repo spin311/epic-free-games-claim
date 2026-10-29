@@ -2,6 +2,7 @@
 import { describe, it, expect } from 'vitest';
 import {
   EPIC_FREE_GAMES_URL,
+  epicProductKey,
   formatEpicFreeGame,
   partitionEpicPromotions,
   resolveEpicSlug,
@@ -152,5 +153,23 @@ describe('partitionEpicPromotions', () => {
     const { current, future } = partitionEpicPromotions([alsoUpcoming]);
     expect(current).toHaveLength(1);
     expect(future).toEqual([]);
+  });
+});
+
+describe('epicProductKey', () => {
+  // The claim tab only knows where it landed, the background only the link
+  // it opened; both must reduce to the same key.
+  it('is the same for the link the background builds and the page the tab lands on', () => {
+    expect(epicProductKey('https://store.epicgames.com/en-US/p/home-19212a')).toBe('p/home-19212a');
+    expect(epicProductKey('https://store.epicgames.com/p/home-19212a?lang=en-US')).toBe('p/home-19212a');
+  });
+
+  it('keeps bundles apart from products', () => {
+    expect(epicProductKey('https://store.epicgames.com/en-US/bundle/some-bundle')).toBe('bundle/some-bundle');
+  });
+
+  it('is null for a page that is not one product, e.g. the free-games hub fallback', () => {
+    expect(epicProductKey(EPIC_FREE_GAMES_URL)).toBeNull();
+    expect(epicProductKey('not a url')).toBeNull();
   });
 });
