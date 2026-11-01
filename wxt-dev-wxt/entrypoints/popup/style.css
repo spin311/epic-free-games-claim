@@ -541,6 +541,78 @@ a.health-status:hover {
     margin-bottom: 0.5em;
 }
 
+/* GitHub Sponsors promo above the footer. The button mirrors GitHub's own
+   Sponsor button in both color schemes; the global p and a rules are overridden
+   so it doesn't pick up the centered grey text or the green link color. */
+.sponsor-promo {
+  align-self: stretch;
+  display: flex;
+  align-items: center;
+  gap: 0.6em;
+  margin: 0.75em 1em 0;
+  padding: 0.5em 0.7em;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+}
+
+.sponsor-promo-text {
+  margin: 0;
+  text-align: left;
+  font-size: 0.85em;
+  line-height: 1.35;
+  color: #c0bbbb;
+}
+
+.sponsor-button,
+.sponsor-button:hover {
+  color: #f0f6fc;
+}
+
+.sponsor-button {
+  flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3em;
+  padding: 0.3em 0.75em;
+  font-size: 0.9em;
+  font-weight: 600;
+  background-color: #21262d;
+  border: 1px solid #3d444d;
+  border-radius: 6px;
+  transition: border-color 0.2s ease;
+}
+
+.sponsor-button:hover {
+  border-color: #db61a2;
+}
+
+.sponsor-heart {
+  color: #db61a2;
+}
+
+@media (prefers-color-scheme: light) {
+  .sponsor-promo {
+    background-color: #f6f8fa;
+  }
+  .sponsor-promo-text {
+    color: #213547;
+  }
+  .sponsor-button,
+  .sponsor-button:hover {
+    color: #24292f;
+  }
+  .sponsor-button {
+    background-color: #ffffff;
+    border-color: #d0d7de;
+  }
+  .sponsor-button:hover {
+    border-color: #bf3989;
+  }
+  .sponsor-heart {
+    color: #bf3989;
+  }
+}
+
 .footer {
   width: 100%;
   display: flex;
