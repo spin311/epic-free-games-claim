@@ -63,6 +63,16 @@ git clone https://github.com/spin311/epic-free-games-claim.git cd epic-free-game
 - Click "Manually claim" to fetch and claim free games instantly.
 - Switch to the "Free Games" tab to view all available free games.
 
+## Support
+
+Donations help me make tools like this for free in my spare time. Any amount helps! ❤️
+
+Sponsor me on GitHub, or donate with PayPal or any credit card:
+
+[![Sponsor on GitHub](https://img.shields.io/badge/Sponsor-GitHub-ea4aaa?style=for-the-badge&logo=githubsponsors&logoColor=white)](https://github.com/sponsors/spin311)
+
+[![Donate with PayPal button](https://www.paypalobjects.com/en_US/i/btn/btn_donateCC_LG.gif)](https://www.paypal.com/donate/?hosted_button_id=4WXEWMN3QGLGY)
+
 ## Contributing
 
 Pull requests and issues are welcome!  
