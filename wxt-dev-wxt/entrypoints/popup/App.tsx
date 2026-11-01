@@ -6,6 +6,7 @@ import GamesList from "@/entrypoints/components/GamesList.tsx";
 import {ActiveTabs} from "@/entrypoints/enums/activeTabs.ts";
 import Settings from "@/entrypoints/components/Settings.tsx";
 import Footer from "@/entrypoints/components/Footer.tsx";
+import SponsorPromo from "@/entrypoints/components/SponsorPromo.tsx";
 
 function App() {
     const [activeTab, setActiveTab] = useStorage<ActiveTabs>("activeTab", ActiveTabs.MAIN);
@@ -35,6 +36,7 @@ function App() {
                     <GamesList/>
                 </div>
             )}
+            <SponsorPromo/>
             <Footer/>
         </div>
     );
