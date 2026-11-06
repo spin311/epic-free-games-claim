@@ -6,7 +6,7 @@ import { closeCurrentTab } from "@/entrypoints/utils/contentMessaging.ts";
 import { findSpinButton, isWheelResultShown, parseWheelPrize, StoredWheelPrize, WheelPrize } from "@/entrypoints/utils/indieGalaWheel.ts";
 import { getRndInteger, realClick, wait, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
 import { runtimeContentScriptOptions } from "@/entrypoints/utils/runtimeContentScripts.ts";
-import { detectAndRecordLoginState } from "@/entrypoints/utils/loginState.ts";
+import { detectAndRecordLoginState, readIndieGalaLoginState } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { findPasscodeInput, findRevealButton, giftKeyContainers, GiftKey, readGiftKeys } from "@/entrypoints/utils/indieGalaGifts.ts";
 
@@ -44,6 +44,10 @@ export default defineContentScript({
             // means "already spun" or "nothing configured" — nothing to do.
             const button = await waitForSpinButton();
             if (!button) {
+                // No wheel for a signed-out visitor: the day's spin is still
+                // to come once signed in (the signed-in menu is filled in by
+                // the time this wait is over).
+                if (readIndieGalaLoginState(document) !== true) await sendToBackground("wheelSignedOut", null);
                 await closeCurrentTab();
                 return;
             }

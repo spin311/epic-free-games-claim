@@ -17,7 +17,8 @@ function IndieGalaSettings() {
     const [indieGalaWheelCheck, setIndieGalaWheelCheck] = useStorage<boolean>("indieGalaWheelCheck", false);
     const [indieGalaWheelLastPrize] = useStorage<StoredWheelPrize | null>("indieGalaWheelLastPrize", null);
     const lastSteamKey = useStorageValue<SteamKeyRecord>(LAST_STEAM_KEY_KEY);
-    const [indieGalaLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.IndieGala], null);
+    // Live and read-only: a store visit can record it while the popup is open.
+    const indieGalaLoggedIn = useStorageValue<LoginState>(LOGIN_STATE_KEYS[Platforms.IndieGala]);
     const access = useOptionalAccess();
     const isIndieGalaOn = access.isOn("indieGalaCheck", indieGalaCheck);
     const isWheelOn = access.isOn("indieGalaWheelCheck", indieGalaWheelCheck);

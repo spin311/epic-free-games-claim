@@ -105,6 +105,60 @@ describe('power button', () => {
   });
 });
 
+describe('found-issue fixes', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  // A tab whose content script never takes the message has nothing driving
+  // it: left open, it just sits there (the Firefox wheel/Epic report).
+  it('closes a tab whose content script never answered', async () => {
+    const create = vi.spyOn(fakeBrowser.tabs, 'create').mockResolvedValue({ id: 5 } as never);
+    const remove = vi.spyOn(fakeBrowser.tabs, 'remove').mockResolvedValue(undefined as never);
+    const runner = Object.create(background);
+    runner.waitForTabToLoad = async () => {};
+    runner.sendMessageWithRetry = async () => { throw new Error('Could not establish connection'); };
+
+    await expect(runner.openTabAndSendActionToContent('https://www.indiegala.com/', 'spinWheel')).rejects.toThrow();
+
+    expect(remove).toHaveBeenCalledWith(5);
+    create.mockRestore();
+    remove.mockRestore();
+  });
+
+  it('settles a "Log in" click even when its fallback tab fails', async () => {
+    const runner = Object.create(background);
+    runner.getSteamGamesList = async () => { throw new Error('Steam is down'); };
+    runner.openTabAndSendActionToContent = async () => { throw new Error('tab never loaded'); };
+
+    await expect(runner.checkPlatformLogin(Platforms.Steam)).resolves.toBeUndefined();
+  });
+
+  // Regression: a signed-out visit found no Spin button, and the day still
+  // counted as done, so signing in later that day got no spin until tomorrow.
+  it('frees the day again when the wheel tab found the account signed out', async () => {
+    await setStorageItem('indieGalaWheelLastCheck', new Date().toISOString());
+    const runner = Object.create(background);
+
+    await runner.handleMessage({ target: 'background', action: 'wheelSignedOut' });
+
+    expect(await getStorageItem('indieGalaWheelLastCheck')).toBeNull();
+    expect(await getStorageItem('indieGalaLoggedIn')).toBe(false);
+  });
+
+  // ...and opens no wheel tab while signed out, until a check sees the session.
+  it('opens no wheel tab while IndieGala is known to be signed out', async () => {
+    await setStorageItem('indieGalaLoggedIn', false);
+    const runner = Object.create(background);
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await runner.checkIndieGalaWheel(true);
+
+    expect(opened).toEqual([]);
+  });
+});
+
 // The background lookup opens no tab; these stand in for it.
 const apiFails = async () => { throw new Error('Luna GraphQL responded 403'); };
 

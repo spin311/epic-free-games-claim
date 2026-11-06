@@ -1,7 +1,7 @@
 import Checkbox from "@/entrypoints/components/Checkbox.tsx";
 import LoginStatus from "@/entrypoints/components/LoginStatus.tsx";
 import HealthStatus from "@/entrypoints/components/HealthStatus.tsx";
-import { useStorage } from "@/entrypoints/hooks/useStorage.ts";
+import { useStorage, useStorageValue } from "@/entrypoints/hooks/useStorage.ts";
 import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 
@@ -13,7 +13,8 @@ const EPIC_LOGIN_URL = "https://www.epicgames.com/id/login?redirectUrl=https%3A%
 
 function EpicSettings() {
     const [epicCheck, setEpicCheck] = useStorage<boolean>("epicCheck", true);
-    const [epicLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.Epic], null);
+    // Live and read-only: a store visit can record it while the popup is open.
+    const epicLoggedIn = useStorageValue<LoginState>(LOGIN_STATE_KEYS[Platforms.Epic]);
 
     return (
         <div className="platform-group">

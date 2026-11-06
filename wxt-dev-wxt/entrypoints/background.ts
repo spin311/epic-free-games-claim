@@ -482,11 +482,20 @@ export const background = {
 
   // Background tabs so a claim run never steals focus from whatever the user
   // is actually doing — content scripts don't need the tab visible to work.
+  // A tab whose page never loads, or whose script never takes the message,
+  // has nothing driving it, so it's closed rather than left sitting there.
   async openTabAndSendActionToContent(url: string, action: string, data?: unknown) {
     const tab = await browser.tabs.create({ url, active: false });
     if (!tab || !tab.id) return;
-    await this.waitForTabToLoad(tab.id);
-    await this.sendMessageWithRetry(tab.id, data === undefined ? { target: "content", action } : { target: "content", action, data });
+    try {
+      await this.waitForTabToLoad(tab.id);
+      await this.sendMessageWithRetry(tab.id, data === undefined ? { target: "content", action } : { target: "content", action, data });
+    } catch (e) {
+      await browser.tabs.remove(tab.id).catch(() => {
+        // Already closed (e.g. by the user).
+      });
+      throw e;
+    }
   },
 
   // The content script registers its onMessage listener at document_idle, which
@@ -556,6 +565,11 @@ export const background = {
     } else if (request.action === "bringTabToFront") {
       const tab = sender?.tab;
       if (tab?.id != null) await this.bringTabToFront(tab.id, tab.windowId);
+    } else if (request.action === "wheelSignedOut") {
+      // The day's spin is still to come: the next run retries once a check
+      // sees the session again (see checkIndieGalaWheel).
+      await setStorageItem("indieGalaWheelLastCheck", null);
+      await recordLoginState(Platforms.IndieGala, false);
     } else if (request.action === "wheelSpun") {
       const outcome = await collectWonSteamKeys(String(request.data?.label ?? ""), this.keyFlowDeps());
       if (outcome === "pending") await this.showProblemBadge();
@@ -843,6 +857,9 @@ export const background = {
     const today = new Date().toISOString();
     const lastCheck = await getStorageItem<string>("indieGalaWheelLastCheck");
     if (lastCheck && !areDatesDifferent(lastCheck, today)) return;
+    // A signed-out account has no wheel: no tab until a check sees the
+    // session again (the freebies check right after this one does).
+    if ((await getStorageItem<LoginState>(LOGIN_STATE_KEYS[Platforms.IndieGala])) === false) return;
 
     // The gifts there before the spin, so a Steam key it wins can be told
     // apart afterwards (see collectWonSteamKeys).
@@ -996,7 +1013,12 @@ export const background = {
         [Platforms.IndieGala]: INDIEGALA_FREEBIES_URL,
         [Platforms.PrimeGaming]: undefined,
       }[platform];
-      if (fallbackUrl) await this.openTabAndSendActionToContent(fallbackUrl, "getFreeGames");
+      if (!fallbackUrl) return;
+      try {
+        await this.openTabAndSendActionToContent(fallbackUrl, "getFreeGames");
+      } catch (fallbackError) {
+        console.error(`checkPlatformLogin fallback tab failed for ${platform}:`, fallbackError);
+      }
     }
   },
 
