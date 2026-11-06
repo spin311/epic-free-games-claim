@@ -21,11 +21,15 @@ export default defineContentScript({
         if (!oncePerPageRun('_myIndieGalaContentScriptInjected' as keyof Window)) {
             return;
         }
+        // On every freebies page, not just the extension's own tabs, like
+        // Epic's and Steam's: a visit after signing in is what clears a stored
+        // "signed out". Never awaited here, so it can't delay a claim.
+        const loginStateDetected = detectAndRecordLoginState(Platforms.IndieGala);
         onClaimMessage({ getFreeGames: getFreeGamesList, claimGames: claimCurrentFreebie });
 
         async function getFreeGamesList() {
             await waitForPageLoad();
-            const loginState = await detectAndRecordLoginState(Platforms.IndieGala);
+            const loginState = await loginStateDetected;
 
             let freebies;
             try {
@@ -62,7 +66,6 @@ export default defineContentScript({
         // no extra fetch needed.
         async function claimCurrentFreebie() {
             await waitForPageLoad();
-            void detectAndRecordLoginState(Platforms.IndieGala);
             await dismissAdultCheck();
 
             const csrfToken = document.querySelector('input[name="csrfmiddlewaretoken"]')?.getAttribute('value');

@@ -584,6 +584,58 @@ describe('login state from the background checks', () => {
     expect(fetchMock.mock.calls[0]).toEqual([expect.any(String), expect.objectContaining({ credentials: 'include' })]);
   });
 
+  // Regression (3.1.0, Firefox): IndieGala's session was only ever read in a
+  // claim tab, and none opens once "signed out" is stored, so signing in
+  // never cleared it. The freebies page the worker fetches anyway shows it.
+  it('records a signed-in IndieGala session from the fetched freebies page, even with no freebie', async () => {
+    await setStorageItem('indieGalaLoggedIn', false);
+    const fetchMock = respondWith(200, '<div class="right header-top-user"><div class="header-top-logged">me</div></div>');
+    vi.stubGlobal('fetch', fetchMock);
+    const runner = Object.create(background);
+
+    await runner.getIndieGalaGamesList(true);
+
+    expect(await getStorageItem('indieGalaLoggedIn')).toBe(true);
+    expect(fetchMock.mock.calls[0]).toEqual([expect.any(String), expect.objectContaining({ credentials: 'include' })]);
+  });
+
+  it('claims new IndieGala freebies in the same run that finds the session again', async () => {
+    await setStorageItem('indieGalaLoggedIn', false);
+    vi.stubGlobal('fetch', respondWith(200, `<div class="right header-top-user"></div>
+      <div class="products-col-inner"><a class="fit-click" href="https://freebies.indiegala.com/leaper"></a>
+      <img data-img-src="https://www.indiegalacdn.com/imgs/devs/freebies/products/a1db8f5b-f9c3-4004-84fc-ce90d0bb5872/prodmain/1.png"/>
+      <div class="product-title">Leaper</div></div>`));
+    const runner = Object.create(background);
+    const claimed: string[] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(...games.map((g) => g.title)); };
+
+    await runner.getIndieGalaGamesList(true);
+
+    expect(claimed).toEqual(['Leaper']);
+  });
+
+  // A challenge or error page has no header at all: that says nothing, so a
+  // stored "signed out" stays and keeps the claim tabs shut.
+  it('leaves a stored IndieGala login state alone when the fetched page has no header', async () => {
+    await setStorageItem('indieGalaLoggedIn', false);
+    vi.stubGlobal('fetch', respondWith(200, '<title>Just a moment...</title>'));
+    const runner = Object.create(background);
+
+    await runner.getIndieGalaGamesList(true);
+
+    expect(await getStorageItem('indieGalaLoggedIn')).toBe(false);
+  });
+
+  it('does not record a signed-out IndieGala session from the worker\'s fetch', async () => {
+    await setStorageItem('indieGalaLoggedIn', true);
+    vi.stubGlobal('fetch', respondWith(200, '<div class="right header-top-user"><div class="header-top-notlogged">Login</div></div>'));
+    const runner = Object.create(background);
+
+    await runner.getIndieGalaGamesList(true);
+
+    expect(await getStorageItem('indieGalaLoggedIn')).toBe(true);
+  });
+
   // Same reasoning as GOG's 401: the worker's request is the one that may
   // lack the cookie, so only a real Steam tab may record "signed out".
   it('does not record a signed-out Steam session from the worker\'s fetch', async () => {

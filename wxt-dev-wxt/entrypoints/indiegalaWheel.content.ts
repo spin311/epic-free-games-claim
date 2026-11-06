@@ -6,6 +6,8 @@ import { closeCurrentTab } from "@/entrypoints/utils/contentMessaging.ts";
 import { findSpinButton, parseWheelPrize, StoredWheelPrize, WheelPrize } from "@/entrypoints/utils/indieGalaWheel.ts";
 import { getRndInteger, realClick, wait, waitForPageLoad } from "@/entrypoints/utils/helpers.ts";
 import { runtimeContentScriptOptions } from "@/entrypoints/utils/runtimeContentScripts.ts";
+import { detectAndRecordLoginState } from "@/entrypoints/utils/loginState.ts";
+import { Platforms } from "@/entrypoints/enums/platforms.ts";
 
 const { matches, runAt, allFrames, registration } = runtimeContentScriptOptions('indiegalaWheel');
 
@@ -19,6 +21,10 @@ export default defineContentScript({
         if (!oncePerPageRun('_myIndieGalaWheelContentScriptInjected' as keyof Window)) {
             return;
         }
+        // This is the extension's only script on www.indiegala.com, where the
+        // popup's "Log in" link lands, so it also records the session there
+        // (see readIndieGalaLoginState). Never awaited: the spin doesn't wait.
+        void detectAndRecordLoginState(Platforms.IndieGala);
 
         browser.runtime.onMessage.addListener((request: MessageRequest) => {
             if (request.target !== "content") return;

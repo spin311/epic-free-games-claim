@@ -2,6 +2,7 @@ import { parse } from 'node-html-parser';
 import { assertStoreOk } from "@/entrypoints/utils/network.ts";
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
+import { LoginState, readIndieGalaLoginState } from "@/entrypoints/utils/loginState.ts";
 
 export const INDIEGALA_FREEBIES_URL = "https://freebies.indiegala.com/";
 
@@ -103,12 +104,26 @@ export async function claimFreebie(
   }
 }
 
+export type FreebiesPage = {
+  freebies: IndieGalaFreebie[];
+  loginState: LoginState;
+};
+
 // The freebies listing is public — no session required to see what's currently
 // free — so this can run from the background service worker directly, unlike
-// GOG's status check. Throws on a non-ok HTTP response so getFreeGamesList's
-// existing per-platform catch block falls back to a real tab.
-export async function fetchFreebies(fetchImpl: typeof fetch = fetch): Promise<IndieGalaFreebie[]> {
-  const response = assertStoreOk(await fetchImpl(INDIEGALA_FREEBIES_URL), "IndieGala's freebies page");
+// GOG's status check. Credentialed anyway: the page's header also shows the
+// user's session, and an anonymous request could never show one. Throws on a
+// non-ok HTTP response so getFreeGamesList's existing per-platform catch block
+// falls back to a real tab.
+export async function fetchFreebiesPage(fetchImpl: typeof fetch = fetch): Promise<FreebiesPage> {
+  const response = assertStoreOk(
+      await fetchImpl(INDIEGALA_FREEBIES_URL, { credentials: "include" }),
+      "IndieGala's freebies page"
+  );
   const html = await response.text();
-  return parseFreebiesList(html);
+  return { freebies: parseFreebiesList(html), loginState: readIndieGalaLoginState(parse(html)) };
+}
+
+export async function fetchFreebies(fetchImpl: typeof fetch = fetch): Promise<IndieGalaFreebie[]> {
+  return (await fetchFreebiesPage(fetchImpl)).freebies;
 }

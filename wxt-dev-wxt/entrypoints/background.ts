@@ -11,7 +11,7 @@ import {
   STEAM_GAMES_URL,
 } from "@/entrypoints/utils/steamGames.ts";
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
-import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
+import {fetchFreebiesPage, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
 import {
   EXTERNAL_PLATFORM_STORAGE_KEYS,
@@ -734,7 +734,13 @@ export const background = {
   // an auth reason — only network/HTTP failures reach the catch block in
   // getFreeGamesList, which falls back to a real tab.
   async getIndieGalaGamesList(shouldClaim: boolean = true) {
-    const freebies = await fetchFreebies((input, init) => this.fetchStore(input, init));
+    const { freebies, loginState } = await fetchFreebiesPage((input, init) => this.fetchStore(input, init));
+    // Read before the freebies and the claim gate below: no claim tab (the
+    // only other place a session showed up) opens once "signed out" is stored,
+    // so signing in never cleared it. Only a signed-in header counts, for the
+    // same reason as Steam's: the worker's request may be the one lacking the
+    // cookie. A real IndieGala page records "signed out".
+    if (loginState === true) await recordLoginState(Platforms.IndieGala, true);
     if (freebies.length === 0) return;
 
     const gamesArr: FreeGame[] = freebies.map((f) => f.game);

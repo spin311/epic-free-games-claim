@@ -80,7 +80,7 @@ describe('parseFreebiesList', () => {
   });
 });
 
-import { claimFreebie, fetchFreebies } from './indieGalaGiveaway';
+import { claimFreebie, fetchFreebies, fetchFreebiesPage } from './indieGalaGiveaway';
 
 // Builds a minimal Response-like stub; the helpers only touch these members.
 function response(status: number, body: unknown, ok = status >= 200 && status < 300) {
@@ -149,5 +149,25 @@ describe('fetchFreebies', () => {
   it('throws on a non-ok HTTP response so the caller can fall back to a tab', async () => {
     const fetchImpl = vi.fn().mockResolvedValue(response(503, 'down', false));
     await expect(fetchFreebies(fetchImpl)).rejects.toThrow('503');
+  });
+});
+
+describe('fetchFreebiesPage', () => {
+  it('reads a signed-in session from the same page as the freebies, with credentials', async () => {
+    const html = `<div class="right header-top-user"><div class="header-top-logged">me</div></div>${CARD_HTML('leaper', 'a1db8f5b-f9c3-4004-84fc-ce90d0bb5872', 'Leaper')}`;
+    const fetchImpl = vi.fn().mockResolvedValue(response(200, html));
+
+    const page = await fetchFreebiesPage(fetchImpl);
+
+    expect(page.loginState).toBe(true);
+    expect(page.freebies.map((f) => f.slug)).toEqual(['leaper']);
+    expect(fetchImpl).toHaveBeenCalledWith(expect.any(String), expect.objectContaining({ credentials: 'include' }));
+  });
+
+  it('reads the signed-out marker', async () => {
+    const html = '<div class="right header-top-user"><div class="header-top-notlogged"><a href="#">Login</a></div></div>';
+    const fetchImpl = vi.fn().mockResolvedValue(response(200, html));
+
+    expect((await fetchFreebiesPage(fetchImpl)).loginState).toBe(false);
   });
 });
