@@ -1,4 +1,4 @@
-import {mergeIntoStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {getStorageItem, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 
 export function getRndInteger(min: number, max: number) {
     return Math.floor(Math.random() * (max - min + 1) ) + min;
@@ -165,6 +165,15 @@ function isDocumentReady() {
     return state === 'complete' || state === 'interactive';
 }
 
+// The claimed-games count. Read as a number whatever is stored: with nothing
+// stored yet, the old append-style write left [1] (and then [1, 1, ...]), so a
+// stored list is read as its sum.
 export async function incrementCounter(value: number = 1) {
-    await mergeIntoStorageItem("counter", value);
+    const stored = await getStorageItem<unknown>("counter");
+    const current = typeof stored === "number"
+        ? stored
+        : Array.isArray(stored)
+            ? stored.reduce((sum: number, item) => sum + (typeof item === "number" ? item : 0), 0)
+            : 0;
+    await setStorageItem("counter", current + value);
 }

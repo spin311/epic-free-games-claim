@@ -53,14 +53,16 @@ export function readSteamLoginState(doc: QueryRoot): LoginState {
     return !!actions.querySelector('#account_pulldown');
 }
 
-// The header container is present on every page; when signed out it wraps a
-// child .header-top-notlogged element (confirmed live, unauthenticated). Only
-// that known signed-out signal is checked, so this doesn't depend on knowing
-// what the signed-in markup looks like.
-export function readIndieGalaLoginState(doc: Document): LoginState {
+// Two hosts, two headers (both confirmed live, Nov 2026):
+// - freebies.indiegala.com serves .header-top-user on every page, wrapping a
+//   .header-top-notlogged child only when signed out.
+// - www.indiegala.com serves #main-menu-user as .not-logged to everyone; the
+//   site's own script swaps in .logged once it learns the visitor is signed
+//   in. So .not-logged there proves nothing, and only .logged counts.
+export function readIndieGalaLoginState(doc: QueryRoot): LoginState {
     const userCont = doc.querySelector('.header-top-user');
-    if (!userCont) return null;
-    return !userCont.querySelector('.header-top-notlogged');
+    if (userCont) return !userCont.querySelector('.header-top-notlogged');
+    return doc.querySelector('#main-menu-user > .logged') ? true : null;
 }
 
 // Confirmed live by vogler/free-games-claimer's prime-gaming.js: the user

@@ -2,6 +2,20 @@ export function areDatesDifferent(date1: string, date2: string): boolean {
   return !!date1 && new Date(date1).toDateString() !== new Date(date2).toDateString();
 }
 
+// Once Daily: due on a new calendar day, and with an hour chosen (0-23, local
+// time), only from that hour on. A browser closed at that hour claims on the
+// first check after it, the same day.
+export function isDailyClaimDue(lastOpened: string, now: Date, claimHour: number | null): boolean {
+  if (!areDatesDifferent(lastOpened, now.toISOString())) return false;
+  return claimHour === null || now.getHours() >= claimHour;
+}
+
+export function nextHourStart(now: Date): Date {
+  const next = new Date(now);
+  next.setHours(now.getHours() + 1, 0, 0, 0);
+  return next;
+}
+
 export function didEnoughTimePass(lastOpened: string, requiredMinutes: number): boolean {
   const lastDate = new Date(lastOpened);
   const now = new Date();

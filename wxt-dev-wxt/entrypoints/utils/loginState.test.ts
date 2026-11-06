@@ -72,6 +72,19 @@ describe('readIndieGalaLoginState', () => {
     const doc = docFrom('<div>no header here</div>');
     expect(readIndieGalaLoginState(doc)).toBeNull();
   });
+
+  // www.indiegala.com (confirmed live, Nov 2026): the user menu is served as
+  // .not-logged to everyone, and the site's own script swaps in .logged once
+  // its /ajax/user/get-data call says the visitor is signed in.
+  it('is true on the main site once the signed-in menu has rendered', () => {
+    const doc = docFrom('<li id="main-menu-user"><div class="logged"><a href="/library">me</a></div></li>');
+    expect(readIndieGalaLoginState(doc)).toBe(true);
+  });
+
+  it('is null on the main site while only the served signed-out menu is there', () => {
+    const doc = docFrom('<li id="main-menu-user"><div class="not-logged"><a href="/login">LOGIN</a></div></li>');
+    expect(readIndieGalaLoginState(doc)).toBeNull();
+  });
 });
 
 describe('readPrimeGamingLoginState', () => {

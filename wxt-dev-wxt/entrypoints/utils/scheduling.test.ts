@@ -4,6 +4,8 @@ import {
   areDatesDifferent,
   didEnoughTimePass,
   isActive,
+  isDailyClaimDue,
+  nextHourStart,
   shouldCheckPrimeGamingToday,
 } from './scheduling';
 
@@ -86,5 +88,34 @@ describe('shouldCheckPrimeGamingToday', () => {
     const lastCheck = '2026-09-13T12:00:00Z'; // Sunday
     const now = new Date('2026-09-19T12:00:00Z'); // Saturday, 6 days later
     expect(shouldCheckPrimeGamingToday(lastCheck, now)).toBe(true);
+  });
+});
+
+describe('isDailyClaimDue', () => {
+  const at = (day: number, hour: number) => new Date(2026, 10, day, hour, 30);
+
+  it('is due on a new day at any hour when no hour is set', () => {
+    expect(isDailyClaimDue(at(5, 20).toISOString(), at(6, 1), null)).toBe(true);
+  });
+
+  it('waits for the chosen hour on a new day', () => {
+    expect(isDailyClaimDue(at(5, 20).toISOString(), at(6, 7), 8)).toBe(false);
+    expect(isDailyClaimDue(at(5, 20).toISOString(), at(6, 8), 8)).toBe(true);
+  });
+
+  // The browser may be closed at that hour: the first check after it claims.
+  it('is still due later the same day', () => {
+    expect(isDailyClaimDue(at(5, 20).toISOString(), at(6, 23), 8)).toBe(true);
+  });
+
+  it('is never due twice on one day', () => {
+    expect(isDailyClaimDue(at(6, 9).toISOString(), at(6, 23), 8)).toBe(false);
+  });
+});
+
+describe('nextHourStart', () => {
+  it('is the start of the next full hour', () => {
+    const next = nextHourStart(new Date(2026, 10, 6, 9, 41, 12));
+    expect(next).toEqual(new Date(2026, 10, 6, 10, 0, 0, 0));
   });
 });

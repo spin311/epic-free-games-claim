@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { findSpinButton, parseWheelPrize, INDIEGALA_WHEEL_URL } from './indieGalaWheel';
+import { findSpinButton, isWheelResultShown, parseWheelPrize, INDIEGALA_WHEEL_URL } from './indieGalaWheel';
 
 function docFrom(html: string): Document {
   return new DOMParser().parseFromString(`<body>${html}</body>`, 'text/html');
@@ -61,5 +61,19 @@ describe('parseWheelPrize', () => {
   it('returns null while the results panel exists but has not been populated yet', () => {
     const doc = docFrom(RESULTS_HTML('', ''));
     expect(parseWheelPrize(doc)).toBeNull();
+  });
+});
+
+describe('isWheelResultShown', () => {
+  const docWith = (classes: string) =>
+    new DOMParser().parseFromString(`<div class="${classes}"><h4><span>You win:</span><span>💿 10 GalaSilver</span></h4></div>`, 'text/html');
+
+  // The prize text is filled in on click; the card only shows after the spin.
+  it('is false while the result card is still hidden', () => {
+    expect(isWheelResultShown(docWith('fortune-wheel-results opacity-0 display-none'))).toBe(false);
+  });
+
+  it('is true once the page shows the result card', () => {
+    expect(isWheelResultShown(docWith('fortune-wheel-results fortune-wheel-tier-c'))).toBe(true);
   });
 });

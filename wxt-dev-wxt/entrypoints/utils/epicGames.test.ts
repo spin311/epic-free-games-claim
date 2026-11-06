@@ -3,6 +3,7 @@ import { describe, it, expect } from 'vitest';
 import {
   EPIC_FREE_GAMES_URL,
   epicProductKey,
+  withEpicClaimStatus,
   formatEpicFreeGame,
   partitionEpicPromotions,
   resolveEpicSlug,
@@ -171,5 +172,25 @@ describe('epicProductKey', () => {
   it('is null for a page that is not one product, e.g. the free-games hub fallback', () => {
     expect(epicProductKey(EPIC_FREE_GAMES_URL)).toBeNull();
     expect(epicProductKey('not a url')).toBeNull();
+  });
+});
+
+describe('withEpicClaimStatus', () => {
+  const game = (link: string) => ({ title: link, link, img: '', platform: Platforms.Epic });
+
+  // A claim tab records a game as soon as it sees it claimed or "In Library",
+  // so this is what the account owns among the current free games.
+  it('marks the games a claim tab confirmed, whatever locale the link has', () => {
+    const games = [game('https://store.epicgames.com/en-US/p/flotsam-266287'), game('https://store.epicgames.com/en-US/p/other-game')];
+
+    const marked = withEpicClaimStatus(games, ['p/flotsam-266287']);
+
+    expect(marked.map((g) => g.claimed)).toEqual([true, undefined]);
+    expect(games[0]).not.toHaveProperty('claimed');
+  });
+
+  it('leaves the list alone when nothing was confirmed', () => {
+    const games = [game('https://store.epicgames.com/en-US/p/flotsam-266287')];
+    expect(withEpicClaimStatus(games, [])).toEqual(games);
   });
 });

@@ -9,9 +9,10 @@ export type FreeGame = {
     startDate?: string;
     endDate?: string;
     future?: boolean;
-    // Prime Gaming only, from Amazon's own per-user state (unset when not
-    // known): whether this account already collected it, and the store it
-    // goes to.
+    // Whether this account already has it (unset when not known): Amazon's
+    // own per-user state for Prime Gaming, Steam's ownership list for Steam,
+    // and a claim tab's confirmation for Epic (see withEpicClaimStatus).
     claimed?: boolean;
+    // Prime Gaming only: the store the game goes to.
     store?: string;
 }

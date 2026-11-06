@@ -105,6 +105,129 @@ describe('power button', () => {
   });
 });
 
+describe('claim hour (Once Daily)', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    vi.useFakeTimers({ toFake: ['Date'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function dueRunner() {
+    const runner = Object.create(background);
+    let checks = 0;
+    runner.getFreeGamesAndSetOpenedFlag = async () => { checks++; };
+    return { runner, checks: () => checks };
+  }
+
+  it('waits for the chosen hour before the day\'s claim', async () => {
+    await setStorageItem('claimFrequency', 'daily');
+    await setStorageItem('claimHour', 18);
+    await setStorageItem('lastOpened', new Date(2026, 10, 5, 20).toISOString());
+    const { runner, checks } = dueRunner();
+
+    vi.setSystemTime(new Date(2026, 10, 6, 9));
+    await runner.checkIfActiveAndDue();
+    expect(checks()).toBe(0);
+
+    vi.setSystemTime(new Date(2026, 10, 6, 18, 0, 5));
+    await runner.checkIfActiveAndDue();
+    expect(checks()).toBe(1);
+  });
+
+  // An hourly alarm on the hour, so the chosen hour is caught on time and a
+  // laptop asleep at that hour claims within the hour it wakes up in.
+  it('checks every hour on the hour once an hour is chosen', async () => {
+    await setStorageItem('claimFrequency', 'daily');
+    await setStorageItem('claimHour', 18);
+    vi.setSystemTime(new Date(2026, 10, 6, 9, 41));
+    const runner = Object.create(background);
+
+    await runner.initializeAlarms();
+
+    const alarm = await fakeBrowser.alarms.get('checkFreeGames');
+    expect(alarm?.periodInMinutes).toBe(60);
+    expect(alarm?.scheduledTime).toBe(new Date(2026, 10, 6, 10).getTime());
+  });
+
+  it('moves an hourly alarm that isn\'t on the hour once an hour is chosen', async () => {
+    await setStorageItem('claimFrequency', 'daily');
+    await setStorageItem('claimHour', 18);
+    vi.setSystemTime(new Date(2026, 10, 6, 9, 41));
+    await fakeBrowser.alarms.create('checkFreeGames', { when: new Date(2026, 10, 6, 10, 17).getTime(), periodInMinutes: 60 });
+    const runner = Object.create(background);
+
+    await runner.initializeAlarms();
+
+    expect((await fakeBrowser.alarms.get('checkFreeGames'))?.scheduledTime).toBe(new Date(2026, 10, 6, 10).getTime());
+  });
+
+  it('keeps the plain daily alarm with no hour chosen', async () => {
+    await setStorageItem('claimFrequency', 'daily');
+    const runner = Object.create(background);
+
+    await runner.initializeAlarms();
+
+    expect((await fakeBrowser.alarms.get('checkFreeGames'))?.periodInMinutes).toBe(1440);
+  });
+});
+
+describe('found-issue fixes', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  // A tab whose content script never takes the message has nothing driving
+  // it: left open, it just sits there (the Firefox wheel/Epic report).
+  it('closes a tab whose content script never answered', async () => {
+    const create = vi.spyOn(fakeBrowser.tabs, 'create').mockResolvedValue({ id: 5 } as never);
+    const remove = vi.spyOn(fakeBrowser.tabs, 'remove').mockResolvedValue(undefined as never);
+    const runner = Object.create(background);
+    runner.waitForTabToLoad = async () => {};
+    runner.sendMessageWithRetry = async () => { throw new Error('Could not establish connection'); };
+
+    await expect(runner.openTabAndSendActionToContent('https://www.indiegala.com/', 'spinWheel')).rejects.toThrow();
+
+    expect(remove).toHaveBeenCalledWith(5);
+    create.mockRestore();
+    remove.mockRestore();
+  });
+
+  it('settles a "Log in" click even when its fallback tab fails', async () => {
+    const runner = Object.create(background);
+    runner.getSteamGamesList = async () => { throw new Error('Steam is down'); };
+    runner.openTabAndSendActionToContent = async () => { throw new Error('tab never loaded'); };
+
+    await expect(runner.checkPlatformLogin(Platforms.Steam)).resolves.toBeUndefined();
+  });
+
+  // Regression: a signed-out visit found no Spin button, and the day still
+  // counted as done, so signing in later that day got no spin until tomorrow.
+  it('frees the day again when the wheel tab found the account signed out', async () => {
+    await setStorageItem('indieGalaWheelLastCheck', new Date().toISOString());
+    const runner = Object.create(background);
+
+    await runner.handleMessage({ target: 'background', action: 'wheelSignedOut' });
+
+    expect(await getStorageItem('indieGalaWheelLastCheck')).toBeNull();
+    expect(await getStorageItem('indieGalaLoggedIn')).toBe(false);
+  });
+
+  // ...and opens no wheel tab while signed out, until a check sees the session.
+  it('opens no wheel tab while IndieGala is known to be signed out', async () => {
+    await setStorageItem('indieGalaLoggedIn', false);
+    const runner = Object.create(background);
+    const opened: string[] = [];
+    runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+    await runner.checkIndieGalaWheel(true);
+
+    expect(opened).toEqual([]);
+  });
+});
+
 // The background lookup opens no tab; these stand in for it.
 const apiFails = async () => { throw new Error('Luna GraphQL responded 403'); };
 
@@ -584,6 +707,58 @@ describe('login state from the background checks', () => {
     expect(fetchMock.mock.calls[0]).toEqual([expect.any(String), expect.objectContaining({ credentials: 'include' })]);
   });
 
+  // Regression (3.1.0, Firefox): IndieGala's session was only ever read in a
+  // claim tab, and none opens once "signed out" is stored, so signing in
+  // never cleared it. The freebies page the worker fetches anyway shows it.
+  it('records a signed-in IndieGala session from the fetched freebies page, even with no freebie', async () => {
+    await setStorageItem('indieGalaLoggedIn', false);
+    const fetchMock = respondWith(200, '<div class="right header-top-user"><div class="header-top-logged">me</div></div>');
+    vi.stubGlobal('fetch', fetchMock);
+    const runner = Object.create(background);
+
+    await runner.getIndieGalaGamesList(true);
+
+    expect(await getStorageItem('indieGalaLoggedIn')).toBe(true);
+    expect(fetchMock.mock.calls[0]).toEqual([expect.any(String), expect.objectContaining({ credentials: 'include' })]);
+  });
+
+  it('claims new IndieGala freebies in the same run that finds the session again', async () => {
+    await setStorageItem('indieGalaLoggedIn', false);
+    vi.stubGlobal('fetch', respondWith(200, `<div class="right header-top-user"></div>
+      <div class="products-col-inner"><a class="fit-click" href="https://freebies.indiegala.com/leaper"></a>
+      <img data-img-src="https://www.indiegalacdn.com/imgs/devs/freebies/products/a1db8f5b-f9c3-4004-84fc-ce90d0bb5872/prodmain/1.png"/>
+      <div class="product-title">Leaper</div></div>`));
+    const runner = Object.create(background);
+    const claimed: string[] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(...games.map((g) => g.title)); };
+
+    await runner.getIndieGalaGamesList(true);
+
+    expect(claimed).toEqual(['Leaper']);
+  });
+
+  // A challenge or error page has no header at all: that says nothing, so a
+  // stored "signed out" stays and keeps the claim tabs shut.
+  it('leaves a stored IndieGala login state alone when the fetched page has no header', async () => {
+    await setStorageItem('indieGalaLoggedIn', false);
+    vi.stubGlobal('fetch', respondWith(200, '<title>Just a moment...</title>'));
+    const runner = Object.create(background);
+
+    await runner.getIndieGalaGamesList(true);
+
+    expect(await getStorageItem('indieGalaLoggedIn')).toBe(false);
+  });
+
+  it('does not record a signed-out IndieGala session from the worker\'s fetch', async () => {
+    await setStorageItem('indieGalaLoggedIn', true);
+    vi.stubGlobal('fetch', respondWith(200, '<div class="right header-top-user"><div class="header-top-notlogged">Login</div></div>'));
+    const runner = Object.create(background);
+
+    await runner.getIndieGalaGamesList(true);
+
+    expect(await getStorageItem('indieGalaLoggedIn')).toBe(true);
+  });
+
   // Same reasoning as GOG's 401: the worker's request is the one that may
   // lack the cookie, so only a real Steam tab may record "signed out".
   it('does not record a signed-out Steam session from the worker\'s fetch', async () => {
@@ -817,9 +992,298 @@ describe('claimGames resilience', () => {
   });
 });
 
+describe('a Steam key won on IndieGala\'s wheel', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const giftItem = (id: string) => `<div class="profile-private-page-library-gift-item">
+    <div class="profile-private-page-library-gift-title-item"><a href="/gift-bundle/${id}">Gift link</a></div>
+    <div class="profile-private-page-library-gift-title-item"><i class="fa fa-unlock"></i><span>PW${id}</span></div></div>`;
+  const library = (...ids: string[]) =>
+    `<div class="profile-private-page-library-tab-gameplay">${ids.map(giftItem).join('')}</div>`;
+  const giftUrl = (id: string) => `https://www.indiegala.com/gift-bundle/${id}`;
+
+  function recordOpenedTabs(runner: Record<string, unknown>) {
+    const opened: { url: string; action: string; data?: unknown }[] = [];
+    runner.openTabAndSendActionToContent = async (url: string, action: string, data?: unknown) => {
+      opened.push(data === undefined ? { url, action } : { url, action, data });
+    };
+    return opened;
+  }
+
+  it('remembers the gifts already in the library before it spins', async () => {
+    vi.stubGlobal('fetch', respondWith(200, library('old')));
+    const runner = Object.create(background);
+    const opened = recordOpenedTabs(runner);
+
+    await runner.checkIndieGalaWheel(true);
+
+    expect(await getStorageItem('indieGalaKnownGifts')).toEqual([giftUrl('old')]);
+    expect(opened).toEqual([{ url: INDIEGALA_WHEEL_URL, action: 'spinWheel' }]);
+  });
+
+  it('opens a gift that appeared after the spin, to read its key', async () => {
+    await setStorageItem('indieGalaKnownGifts', [giftUrl('old')]);
+    vi.stubGlobal('fetch', respondWith(200, library('new', 'old')));
+    const runner = Object.create(background);
+    runner.wait = async () => {};
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({ target: 'background', action: 'wheelSpun', data: { label: '🤩 ✨ Steam key' } });
+
+    expect(opened).toEqual([{ url: giftUrl('new'), action: 'revealGiftKey', data: { password: 'PWnew' } }]);
+  });
+
+  // The gift may show up a moment after the spin; and if it never does, a
+  // Steam key prize must still not be lost.
+  it('keeps a pointer to the library when a Steam key prize\'s gift never shows up', async () => {
+    await setStorageItem('indieGalaKnownGifts', [giftUrl('old')]);
+    const fetchMock = respondWith(200, library('old'));
+    vi.stubGlobal('fetch', fetchMock);
+    const runner = Object.create(background);
+    runner.wait = async () => {};
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({ target: 'background', action: 'wheelSpun', data: { label: '🤩 ✨ Steam key' } });
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(opened).toEqual([]);
+    expect(await getStorageItem('pendingRedemptions')).toEqual([
+      expect.objectContaining({ code: '', platform: 'IndieGala', redeemUrl: 'https://www.indiegala.com/library' }),
+    ]);
+  });
+
+  it('does nothing more for any other prize', async () => {
+    await setStorageItem('indieGalaKnownGifts', [giftUrl('old')]);
+    vi.stubGlobal('fetch', respondWith(200, library('old')));
+    const runner = Object.create(background);
+    runner.wait = async () => {};
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({ target: 'background', action: 'wheelSpun', data: { label: '💿 10 GalaSilver' } });
+
+    expect(opened).toEqual([]);
+    expect(await getStorageItem('pendingRedemptions')).toBeNull();
+  });
+
+  it('takes a Steam key read from the gift to Steam\'s activation page', async () => {
+    const runner = Object.create(background);
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({
+      target: 'background', action: 'giftKeysRead',
+      data: { keys: [{ title: 'Some Game', key: 'AAAAA-BBBBB-CCCCC', isSteam: true }] },
+    }, { url: giftUrl('new'), tab: { id: 7 } });
+
+    expect(opened).toEqual([{
+      url: 'https://store.steampowered.com/account/registerkey?key=AAAAA-BBBBB-CCCCC',
+      action: 'activateSteamKey',
+      data: { title: 'Some Game' },
+    }]);
+  });
+
+  it('keeps the gift page when its key couldn\'t be read, or isn\'t for Steam', async () => {
+    const runner = Object.create(background);
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({
+      target: 'background', action: 'giftKeysRead',
+      data: { keys: [{ title: 'Some Game', key: null, isSteam: true }, { title: 'Uplay Game', key: 'K', isSteam: false }] },
+    }, { url: giftUrl('new'), tab: { id: 7 } });
+
+    expect(opened).toEqual([]);
+    const pending = await getStorageItem<{ title: string; redeemUrl: string; platform: string }[]>('pendingRedemptions');
+    expect(pending?.map((p) => [p.title, p.platform, p.redeemUrl])).toEqual([
+      ['Some Game', 'IndieGala', giftUrl('new')],
+      ['Uplay Game', 'IndieGala', giftUrl('new')],
+    ]);
+  });
+
+  // Only an IndieGala gift page may report keys: its address, from the
+  // browser, is what the pending entry links to.
+  it('ignores keys reported from anywhere but an IndieGala gift page', async () => {
+    const runner = Object.create(background);
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({
+      target: 'background', action: 'giftKeysRead',
+      data: { keys: [{ title: 'Some Game', key: 'AAAAA-BBBBB-CCCCC', isSteam: true }] },
+    }, { url: 'https://evil.example/gift-bundle/x', tab: { id: 7 } });
+
+    expect(opened).toEqual([]);
+    expect(await getStorageItem('pendingRedemptions')).toBeNull();
+  });
+
+  it('submits a key only on Steam\'s activation page', async () => {
+    const executeScript = vi.spyOn(fakeBrowser.scripting, 'executeScript').mockResolvedValue([{ result: true }] as never);
+    const runner = Object.create(background);
+
+    await runner.handleMessage({ target: 'background', action: 'steamRegisterKey' }, { url: 'https://store.steampowered.com/app/10/', tab: { id: 7 } });
+    expect(executeScript).not.toHaveBeenCalled();
+
+    await runner.handleMessage({ target: 'background', action: 'steamRegisterKey' }, { url: 'https://store.steampowered.com/account/registerkey?key=K', tab: { id: 7 } });
+    expect(executeScript).toHaveBeenCalledTimes(1);
+    executeScript.mockRestore();
+  });
+
+  it('keeps a key Steam didn\'t take in the pending list', async () => {
+    const runner = Object.create(background);
+
+    await runner.handleMessage({
+      target: 'background', action: 'steamKeyResult',
+      data: { key: 'AAAAA-BBBBB-CCCCC', title: 'Some Game', outcome: 'rate-limited', products: [], message: 'Too many' },
+    });
+
+    expect(await getStorageItem('pendingRedemptions')).toEqual([
+      expect.objectContaining({ code: 'AAAAA-BBBBB-CCCCC', platform: 'Steam' }),
+    ]);
+  });
+});
+
+describe('Steam ownership', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const searchPage = `<div id="search_result_container">
+    <a class="search_result_row" href="https://store.steampowered.com/app/10/Owned_Game/"><span class="title">Owned Game</span></a>
+    <a class="search_result_row" href="https://store.steampowered.com/app/30/New_Game/"><span class="title">New Game</span></a>
+  </div>`;
+
+  function stubSteam(userdata: unknown) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes('/dynamicstore/userdata/')
+            ? new Response(JSON.stringify(userdata), { status: 200 })
+            : new Response(searchPage, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('marks the games the account owns in the list and claims only the others', async () => {
+    const fetchMock = stubSteam({ rgOwnedApps: [10] });
+    const runner = Object.create(background);
+    const claimed: string[] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(...games.map((g) => g.title)); };
+
+    await runner.getSteamGamesList(true);
+
+    expect(claimed).toEqual(['New Game']);
+    const stored = await getStorageItem<{ title: string; claimed?: boolean }[]>('steamGames');
+    expect(stored?.map((g) => [g.title, g.claimed ?? false])).toEqual([['Owned Game', true], ['New Game', false]]);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/dynamicstore/userdata/'), expect.objectContaining({ credentials: 'include' }));
+  });
+
+  // Ownership is a nicety on top of the listing: losing it must not cost a claim.
+  it('still lists and claims when the ownership lookup fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes('/dynamicstore/userdata/')
+            ? new Response('oops', { status: 500 })
+            : new Response(searchPage, { status: 200 })));
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init);
+    const claimed: string[] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(...games.map((g) => g.title)); };
+
+    await runner.getSteamGamesList(true);
+
+    expect(claimed).toEqual(['Owned Game', 'New Game']);
+  });
+
+  it('keeps the last known in-library marks when the ownership lookup fails', async () => {
+    stubSteam({ rgOwnedApps: [10] });
+    const runner = Object.create(background);
+    runner.claimGames = async () => {};
+    await runner.getSteamGamesList(true);
+
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes('/dynamicstore/userdata/')
+            ? new Response('{"unexpected": true}', { status: 200 })
+            : new Response(searchPage, { status: 200 })));
+    await runner.getSteamGamesList(true);
+
+    const stored = await getStorageItem<{ title: string; claimed?: boolean }[]>('steamGames');
+    expect(stored?.map((g) => [g.title, g.claimed ?? false])).toEqual([['Owned Game', true], ['New Game', false]]);
+  });
+
+  it('updates the in-library marks on a run with no new game', async () => {
+    stubSteam({ rgOwnedApps: [] });
+    const runner = Object.create(background);
+    runner.claimGames = async () => {};
+    await runner.getSteamGamesList(true);
+
+    stubSteam({ rgOwnedApps: [10, 30] });
+    await runner.getSteamGamesList(true);
+
+    const stored = await getStorageItem<{ claimed?: boolean }[]>('steamGames');
+    expect(stored?.map((g) => g.claimed)).toEqual([true, true]);
+  });
+});
+
+describe('waitForTabToLoad', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Regression (3.1.0, confirmed live in Firefox 145): right after
+  // tabs.create, Firefox reports the new tab as "complete" on about:blank.
+  // Taking that as the page's load sent the claim message into a page still
+  // loading, so the ~3s of retries ran out and the tab sat there unclaimed
+  // (Epic) or unspun (IndieGala's wheel).
+  it('waits past the about:blank "complete" Firefox reports for a new tab', async () => {
+    const states = [
+      { status: 'complete', url: 'about:blank' },
+      { status: 'loading', url: 'https://www.indiegala.com/' },
+      { status: 'complete', url: 'https://www.indiegala.com/' },
+    ];
+    let calls = 0;
+    vi.spyOn(fakeBrowser.tabs, 'get').mockImplementation((async () => ({ id: 1, ...states[Math.min(calls++, states.length - 1)] })) as never);
+    const runner = Object.create(background);
+
+    await runner.waitForTabToLoad(1);
+
+    expect(calls).toBe(3);
+  });
+
+  it('resolves at once for a tab that has already loaded its page', async () => {
+    const get = vi.spyOn(fakeBrowser.tabs, 'get').mockResolvedValue({ id: 1, status: 'complete', url: 'https://store.epicgames.com/p/flotsam-266287' } as never);
+    const runner = Object.create(background);
+
+    await runner.waitForTabToLoad(1);
+
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  // Never hangs a claim run: a tab that never gets past about:blank is given up on.
+  it('rejects once a tab never loads its page', async () => {
+    vi.spyOn(fakeBrowser.tabs, 'get').mockResolvedValue({ id: 1, status: 'complete', url: 'about:blank' } as never);
+    const runner = Object.create(background);
+
+    await expect(runner.waitForTabToLoad(1, 300)).rejects.toThrow(/didn't load/);
+  });
+});
+
 describe('checkIndieGalaWheel', () => {
   beforeEach(() => {
     fakeBrowser.reset();
+    // The library snapshot taken before each spin.
+    vi.stubGlobal('fetch', respondWith(200, '<div class="profile-private-page-library-tab-gameplay"></div>'));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('opens the IndieGala homepage to spin when due and enabled', async () => {

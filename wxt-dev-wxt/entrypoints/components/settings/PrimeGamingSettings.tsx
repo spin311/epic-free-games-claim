@@ -1,7 +1,7 @@
 import Checkbox from "@/entrypoints/components/Checkbox.tsx";
 import LoginStatus from "@/entrypoints/components/LoginStatus.tsx";
 import HealthStatus from "@/entrypoints/components/HealthStatus.tsx";
-import { useStorage } from "@/entrypoints/hooks/useStorage.ts";
+import { useStorage, useStorageValue } from "@/entrypoints/hooks/useStorage.ts";
 import { useOptionalAccess } from "@/entrypoints/hooks/useOptionalAccess.ts";
 import { LOGIN_STATE_KEYS, LoginState, PRIME_MEMBERSHIP_KEY } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
@@ -34,7 +34,8 @@ function PrimeGamingSettings() {
     // as an email, and otherwise fills in the code alone.
     const [legacyEmail, setLegacyEmail] = useStorage<string>(LEGACY_EMAIL_STORAGE_KEY, "");
     const isLegacyEmailInvalid = legacyEmail.trim() !== "" && normalizeEmail(legacyEmail) === null;
-    const [primeGamingLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.PrimeGaming], null);
+    // Live and read-only: a store visit can record it while the popup is open.
+    const primeGamingLoggedIn = useStorageValue<LoginState>(LOGIN_STATE_KEYS[Platforms.PrimeGaming]);
     const [hasPrime] = useStorage<boolean | null>(PRIME_MEMBERSHIP_KEY, null);
     const primeWarning = hasPrime === false
         ? { label: "No Prime", title: "Signed in, but this Amazon account has no Prime membership, so Prime Gaming offers can't be claimed." }

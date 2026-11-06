@@ -11,8 +11,20 @@ import {
   STEAM_GAMES_URL,
 } from "@/entrypoints/utils/steamGames.ts";
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
-import {fetchFreebies, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
+import {markSteamOwned, parseSteamOwnedApps, STEAM_USERDATA_URL} from "@/entrypoints/utils/steamOwnership.ts";
+import {fetchFreebiesPage, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
+import {registerKeyInMainWorld, STEAM_ACTIVATION_PAGE} from "@/entrypoints/utils/steamKeyActivation.ts";
+import {
+  collectWonSteamKeys,
+  handleGiftKeys,
+  isIndieGalaGiftUrl,
+  KeyFlowDeps,
+  parseGiftKeys,
+  parseSteamKeyReport,
+  recordSteamKeyResult,
+  snapshotGifts,
+} from "@/entrypoints/utils/steamKeyFlow.ts";
 import {
   EXTERNAL_PLATFORM_STORAGE_KEYS,
   PRIME_GAMING_HOME_URL,
@@ -51,7 +63,14 @@ import {
   partitionEpicPromotions,
   withEpicEnglishLocale,
 } from "@/entrypoints/utils/epicGames.ts";
-import {areDatesDifferent, didEnoughTimePass, isActive, shouldCheckPrimeGamingToday} from "@/entrypoints/utils/scheduling.ts";
+import {
+  areDatesDifferent,
+  didEnoughTimePass,
+  isActive,
+  isDailyClaimDue,
+  nextHourStart,
+  shouldCheckPrimeGamingToday,
+} from "@/entrypoints/utils/scheduling.ts";
 import {PLATFORM_ACCESS_TOGGLES, resolvePlatformToggles} from "@/entrypoints/utils/platformToggles.ts";
 import {
   AccessGroup,
@@ -75,7 +94,17 @@ const ALARM_NAME = "checkFreeGames";
 // browser start) is tried again this soon instead of at the next due check.
 const OFFLINE_RETRY_ALARM = "retryAfterOffline";
 const OFFLINE_RETRY_MINUTES = 15;
+// How long a claim tab may take to load its page before it's given up on,
+// so one page that never loads can't stall the rest of a claim run.
+const TAB_LOAD_TIMEOUT_MS = 60_000;
+const TAB_LOAD_POLL_MS = 100;
+const HOURLY_CHECK_MINUTES = 60;
 let isChecking = false;
+
+// Stored as 0-23, or null for "any time".
+function readClaimHour(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 23 ? value : null;
+}
 // Distinct from the green claimed-count badge (see handleInstall) so "still
 // working" never reads as "N games claimed".
 const CLAIMING_BADGE_COLOR = "#f0ad4e";
@@ -166,14 +195,14 @@ export const background = {
   // a check is due (checkAndClaimIfDue). Nothing has run yet on a fresh
   // install, so that one always checks.
   async checkIfActiveAndDue() {
-    const result = await getStorageItems(["active", "claimFrequency"]);
+    const result = await getStorageItems(["active", "claimFrequency", "claimHour"]);
     if (!isActive(result?.active)) return;
 
     const frequency = result.claimFrequency || ClaimFrequency.DAILY;
-    await this.checkAndClaimIfDue(frequency);
+    await this.checkAndClaimIfDue(frequency, readClaimHour(result.claimHour));
   },
 
-  async checkAndClaimIfDue(frequency: ClaimFrequency) {
+  async checkAndClaimIfDue(frequency: ClaimFrequency, claimHour: number | null = null) {
     if (isChecking) return;
     isChecking = true;
     try {
@@ -183,7 +212,11 @@ export const background = {
         await this.getFreeGamesAndSetOpenedFlag(today);
         return;
       }
-      if (frequency === ClaimFrequency.DAILY || frequency === ClaimFrequency.BROWSER_START) {
+      if (frequency === ClaimFrequency.DAILY) {
+        if (isDailyClaimDue(lastOpened, new Date(), claimHour)) {
+          await this.getFreeGamesAndSetOpenedFlag(today);
+        }
+      } else if (frequency === ClaimFrequency.BROWSER_START) {
         if (areDatesDifferent(lastOpened, today)) {
           await this.getFreeGamesAndSetOpenedFlag(today);
         }
@@ -211,7 +244,7 @@ export const background = {
   },
 
   async initializeAlarms() {
-    const result = await getStorageItems(["active", "claimFrequency"]);
+    const result = await getStorageItems(["active", "claimFrequency", "claimHour"]);
     if (!isActive(result?.active)) {
       try {
         await browser.alarms.clear(ALARM_NAME);
@@ -232,12 +265,16 @@ export const background = {
       return;
     }
 
-    const minutes = ClaimFrequencyMinutes[frequency as ClaimFrequency];
+    // Once Daily at a chosen hour checks on every hour, on the hour, so the
+    // hour is caught on time (isDailyClaimDue claims once that day).
+    const hasClaimHour = frequency === ClaimFrequency.DAILY && readClaimHour(result.claimHour) !== null;
+    const minutes = hasClaimHour ? HOURLY_CHECK_MINUTES : ClaimFrequencyMinutes[frequency as ClaimFrequency];
     if (minutes > 0) {
       // Check if alarm already exists with correct period
       try {
         const existingAlarm = await browser.alarms.get(ALARM_NAME);
-        if (existingAlarm && existingAlarm.periodInMinutes === minutes) {
+        const isOnTheHour = !hasClaimHour || (existingAlarm && new Date(existingAlarm.scheduledTime).getMinutes() === 0);
+        if (existingAlarm && existingAlarm.periodInMinutes === minutes && isOnTheHour) {
           // Alarm already set correctly, no need to update
           return;
         }
@@ -246,9 +283,9 @@ export const background = {
       }
 
       // Create or update alarm
-      await browser.alarms.create(ALARM_NAME, {
-        periodInMinutes: minutes
-      });
+      await browser.alarms.create(ALARM_NAME, hasClaimHour
+          ? { when: nextHourStart(new Date()).getTime(), periodInMinutes: minutes }
+          : { periodInMinutes: minutes });
     }
   },
 
@@ -437,6 +474,24 @@ export const background = {
     return games.filter((_, index) => verdicts[index]);
   },
 
+  // A Steam key won on IndieGala's wheel (see steamKeyFlow.ts).
+  keyFlowDeps(): KeyFlowDeps {
+    return {
+      openTab: (url, action, data) => this.openTabAndSendActionToContent(url, action, data),
+      fetchImpl: (input, init) => this.fetchStore(input, init),
+      wait: (ms) => this.wait(ms),
+    };
+  },
+
+  async steamRegisterKey(tabId: number): Promise<boolean> {
+    const [injection] = await browser.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: registerKeyInMainWorld,
+    });
+    return injection?.result === true;
+  },
+
   steamAddToCart(tabId: number, appId: number) {
     return browser.scripting.executeScript({
       target: { tabId },
@@ -448,11 +503,20 @@ export const background = {
 
   // Background tabs so a claim run never steals focus from whatever the user
   // is actually doing — content scripts don't need the tab visible to work.
-  async openTabAndSendActionToContent(url: string, action: string) {
+  // A tab whose page never loads, or whose script never takes the message,
+  // has nothing driving it, so it's closed rather than left sitting there.
+  async openTabAndSendActionToContent(url: string, action: string, data?: unknown) {
     const tab = await browser.tabs.create({ url, active: false });
     if (!tab || !tab.id) return;
-    await this.waitForTabToLoad(tab.id);
-    await this.sendMessageWithRetry(tab.id, { target: "content", action });
+    try {
+      await this.waitForTabToLoad(tab.id);
+      await this.sendMessageWithRetry(tab.id, data === undefined ? { target: "content", action } : { target: "content", action, data });
+    } catch (e) {
+      await browser.tabs.remove(tab.id).catch(() => {
+        // Already closed (e.g. by the user).
+      });
+      throw e;
+    }
   },
 
   // The content script registers its onMessage listener at document_idle, which
@@ -461,7 +525,7 @@ export const background = {
   // "Could not establish connection" rejection.
   async sendMessageWithRetry(
       tabId: number,
-      message: { target: string; action: string },
+      message: MessageRequest,
       maxRetries = 10,
       delayMs = 300
   ) {
@@ -522,6 +586,25 @@ export const background = {
     } else if (request.action === "bringTabToFront") {
       const tab = sender?.tab;
       if (tab?.id != null) await this.bringTabToFront(tab.id, tab.windowId);
+    } else if (request.action === "wheelSignedOut") {
+      // The day's spin is still to come: the next run retries once a check
+      // sees the session again (see checkIndieGalaWheel).
+      await setStorageItem("indieGalaWheelLastCheck", null);
+      await recordLoginState(Platforms.IndieGala, false);
+    } else if (request.action === "wheelSpun") {
+      const outcome = await collectWonSteamKeys(String(request.data?.label ?? ""), this.keyFlowDeps());
+      if (outcome === "pending") await this.showProblemBadge();
+    } else if (request.action === "giftKeysRead") {
+      // The page's address comes from the browser, not the message.
+      const giftUrl = sender?.url;
+      if (!isIndieGalaGiftUrl(giftUrl)) return;
+      if (await handleGiftKeys(giftUrl!, parseGiftKeys(request.data?.keys), this.keyFlowDeps())) await this.showProblemBadge();
+    } else if (request.action === "steamRegisterKey") {
+      const tabId = sender?.tab?.id;
+      if (tabId != null && sender?.url?.startsWith(STEAM_ACTIVATION_PAGE)) return this.steamRegisterKey(tabId);
+    } else if (request.action === "steamKeyResult") {
+      const report = parseSteamKeyReport(request.data);
+      if (report && await recordSteamKeyResult(report) === "pending") await this.showProblemBadge();
     } else if (request.action === "closeTab") {
       const tabId = sender?.tab?.id;
       if (tabId != null) {
@@ -562,23 +645,20 @@ export const background = {
     return new Promise((r) => setTimeout(r, ms));
   },
 
-  async waitForTabToLoad(tabId: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      async function checkTab() {
-        try {
-          const tab = await browser.tabs.get(tabId);
-          if (!tab) return reject(new Error("tab not found"));
-          if (tab.status === "complete") {
-            resolve();
-          } else {
-            setTimeout(checkTab, 100);
-          }
-        } catch (error) {
-          reject(error);
-        }
+  // A new tab starts on about:blank, and Firefox reports that as "complete"
+  // before the real page has even started loading (confirmed live), so only
+  // a complete page of the tab's own counts as loaded.
+  async waitForTabToLoad(tabId: number, timeoutMs: number = TAB_LOAD_TIMEOUT_MS): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const tab = await browser.tabs.get(tabId);
+      if (!tab) throw new Error("tab not found");
+      if (tab.status === "complete" && tab.url !== "about:blank") return;
+      if (Date.now() >= deadline) {
+        throw new Error(`tab ${tabId} didn't load its page within ${timeoutMs / 1000}s`);
       }
-      void checkTab();
-    });
+      await new Promise((resolve) => setTimeout(resolve, TAB_LOAD_POLL_MS));
+    }
   },
 
   // A fresh install checks right away: otherwise nothing happened until the
@@ -667,17 +747,42 @@ export const background = {
     // here isn't proof. A real Steam tab records that.
     if (parseSteamLoginState(html) === true) await recordLoginState(Platforms.Steam, true);
 
-    const gamesArr = parseSteamFreeGames(html);
-    if (!gamesArr) return;
-
+    const parsed = parseSteamFreeGames(html);
+    if (!parsed) return;
     const currFreeGames: FreeGame[] = await getStorageItem("steamGames") || [];
-    const newGames: FreeGame[] = gamesArr.filter(game =>
-        !currFreeGames.some(g => g?.title === game?.title)
-    );
-    if (newGames.length === 0) return;
+    const owned = await this.loadSteamOwnedApps();
+    // Without an answer the last known marks stand, rather than every game
+    // reading as not owned until the next run.
+    const gamesArr = owned
+        ? markSteamOwned(parsed, owned)
+        : parsed.map((game) => currFreeGames.some((g) => g?.link === game.link && g.claimed) ? { ...game, claimed: true } : game);
 
-    if (shouldClaim) await this.claimGames(newGames);
-    await setStorageItem('steamGames', newGames);
+    // A game already on the account gets no claim tab: there's nothing to add.
+    const newGames: FreeGame[] = gamesArr.filter(game =>
+        !game.claimed && !currFreeGames.some(g => g?.title === game?.title)
+    );
+
+    if (shouldClaim && newGames.length > 0) await this.claimGames(newGames);
+    // The whole current list, so the popup's in-library marks stay current
+    // on runs that find nothing new.
+    await setStorageItem('steamGames', gamesArr);
+  },
+
+  // Never throws: ownership only adds the in-library marks and spares a claim
+  // tab, so a failed lookup costs neither the listing nor the claim.
+  async loadSteamOwnedApps(): Promise<Set<number> | null> {
+    try {
+      const response = assertStoreOk(
+          await this.fetchStore(STEAM_USERDATA_URL, { credentials: "include" }),
+          "Steam's ownership lookup"
+      );
+      const owned = parseSteamOwnedApps(await response.json());
+      if (!owned) console.warn("Steam's ownership lookup answered in an unexpected shape");
+      return owned;
+    } catch (e) {
+      console.warn("Steam's ownership lookup failed:", e);
+      return null;
+    }
   },
 
   // GOG runs one giveaway at a time and only exposes it to a signed-in session.
@@ -733,7 +838,13 @@ export const background = {
   // an auth reason — only network/HTTP failures reach the catch block in
   // getFreeGamesList, which falls back to a real tab.
   async getIndieGalaGamesList(shouldClaim: boolean = true) {
-    const freebies = await fetchFreebies((input, init) => this.fetchStore(input, init));
+    const { freebies, loginState } = await fetchFreebiesPage((input, init) => this.fetchStore(input, init));
+    // Read before the freebies and the claim gate below: no claim tab (the
+    // only other place a session showed up) opens once "signed out" is stored,
+    // so signing in never cleared it. Only a signed-in header counts, for the
+    // same reason as Steam's: the worker's request may be the one lacking the
+    // cookie. A real IndieGala page records "signed out".
+    if (loginState === true) await recordLoginState(Platforms.IndieGala, true);
     if (freebies.length === 0) return;
 
     const gamesArr: FreeGame[] = freebies.map((f) => f.game);
@@ -767,7 +878,13 @@ export const background = {
     const today = new Date().toISOString();
     const lastCheck = await getStorageItem<string>("indieGalaWheelLastCheck");
     if (lastCheck && !areDatesDifferent(lastCheck, today)) return;
+    // A signed-out account has no wheel: no tab until a check sees the
+    // session again (the freebies check right after this one does).
+    if ((await getStorageItem<LoginState>(LOGIN_STATE_KEYS[Platforms.IndieGala])) === false) return;
 
+    // The gifts there before the spin, so a Steam key it wins can be told
+    // apart afterwards (see collectWonSteamKeys).
+    await snapshotGifts((input, init) => this.fetchStore(input, init));
     // Flag set only after the tab/message actually goes out (mirrors
     // getFreeGamesAndSetOpenedFlag): if this throws, today's attempt never
     // happened, so the next check must still retry rather than silently
@@ -917,7 +1034,12 @@ export const background = {
         [Platforms.IndieGala]: INDIEGALA_FREEBIES_URL,
         [Platforms.PrimeGaming]: undefined,
       }[platform];
-      if (fallbackUrl) await this.openTabAndSendActionToContent(fallbackUrl, "getFreeGames");
+      if (!fallbackUrl) return;
+      try {
+        await this.openTabAndSendActionToContent(fallbackUrl, "getFreeGames");
+      } catch (fallbackError) {
+        console.error(`checkPlatformLogin fallback tab failed for ${platform}:`, fallbackError);
+      }
     }
   },
 
