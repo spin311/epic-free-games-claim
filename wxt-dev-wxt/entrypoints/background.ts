@@ -75,6 +75,10 @@ const ALARM_NAME = "checkFreeGames";
 // browser start) is tried again this soon instead of at the next due check.
 const OFFLINE_RETRY_ALARM = "retryAfterOffline";
 const OFFLINE_RETRY_MINUTES = 15;
+// How long a claim tab may take to load its page before it's given up on,
+// so one page that never loads can't stall the rest of a claim run.
+const TAB_LOAD_TIMEOUT_MS = 60_000;
+const TAB_LOAD_POLL_MS = 100;
 let isChecking = false;
 // Distinct from the green claimed-count badge (see handleInstall) so "still
 // working" never reads as "N games claimed".
@@ -562,23 +566,20 @@ export const background = {
     return new Promise((r) => setTimeout(r, ms));
   },
 
-  async waitForTabToLoad(tabId: number): Promise<void> {
-    return new Promise((resolve, reject) => {
-      async function checkTab() {
-        try {
-          const tab = await browser.tabs.get(tabId);
-          if (!tab) return reject(new Error("tab not found"));
-          if (tab.status === "complete") {
-            resolve();
-          } else {
-            setTimeout(checkTab, 100);
-          }
-        } catch (error) {
-          reject(error);
-        }
+  // A new tab starts on about:blank, and Firefox reports that as "complete"
+  // before the real page has even started loading (confirmed live), so only
+  // a complete page of the tab's own counts as loaded.
+  async waitForTabToLoad(tabId: number, timeoutMs: number = TAB_LOAD_TIMEOUT_MS): Promise<void> {
+    const deadline = Date.now() + timeoutMs;
+    for (;;) {
+      const tab = await browser.tabs.get(tabId);
+      if (!tab) throw new Error("tab not found");
+      if (tab.status === "complete" && tab.url !== "about:blank") return;
+      if (Date.now() >= deadline) {
+        throw new Error(`tab ${tabId} didn't load its page within ${timeoutMs / 1000}s`);
       }
-      void checkTab();
-    });
+      await new Promise((resolve) => setTimeout(resolve, TAB_LOAD_POLL_MS));
+    }
   },
 
   // A fresh install checks right away: otherwise nothing happened until the

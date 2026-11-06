@@ -817,6 +817,53 @@ describe('claimGames resilience', () => {
   });
 });
 
+describe('waitForTabToLoad', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  // Regression (3.1.0, confirmed live in Firefox 145): right after
+  // tabs.create, Firefox reports the new tab as "complete" on about:blank.
+  // Taking that as the page's load sent the claim message into a page still
+  // loading, so the ~3s of retries ran out and the tab sat there unclaimed
+  // (Epic) or unspun (IndieGala's wheel).
+  it('waits past the about:blank "complete" Firefox reports for a new tab', async () => {
+    const states = [
+      { status: 'complete', url: 'about:blank' },
+      { status: 'loading', url: 'https://www.indiegala.com/' },
+      { status: 'complete', url: 'https://www.indiegala.com/' },
+    ];
+    let calls = 0;
+    vi.spyOn(fakeBrowser.tabs, 'get').mockImplementation((async () => ({ id: 1, ...states[Math.min(calls++, states.length - 1)] })) as never);
+    const runner = Object.create(background);
+
+    await runner.waitForTabToLoad(1);
+
+    expect(calls).toBe(3);
+  });
+
+  it('resolves at once for a tab that has already loaded its page', async () => {
+    const get = vi.spyOn(fakeBrowser.tabs, 'get').mockResolvedValue({ id: 1, status: 'complete', url: 'https://store.epicgames.com/p/flotsam-266287' } as never);
+    const runner = Object.create(background);
+
+    await runner.waitForTabToLoad(1);
+
+    expect(get).toHaveBeenCalledTimes(1);
+  });
+
+  // Never hangs a claim run: a tab that never gets past about:blank is given up on.
+  it('rejects once a tab never loads its page', async () => {
+    vi.spyOn(fakeBrowser.tabs, 'get').mockResolvedValue({ id: 1, status: 'complete', url: 'about:blank' } as never);
+    const runner = Object.create(background);
+
+    await expect(runner.waitForTabToLoad(1, 300)).rejects.toThrow(/didn't load/);
+  });
+});
+
 describe('checkIndieGalaWheel', () => {
   beforeEach(() => {
     fakeBrowser.reset();
