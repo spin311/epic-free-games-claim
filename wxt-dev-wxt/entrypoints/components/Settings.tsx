@@ -1,4 +1,4 @@
-import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
+import {setStorageItem, useStorage, useStorageValue} from "@/entrypoints/hooks/useStorage.ts";
 import OnButton from "@/entrypoints/components/OnButton.tsx";
 import {ManualClaimBtn} from "@/entrypoints/components/ManualClaimBtn.tsx";
 import FrequencySelect from "@/entrypoints/components/FrequencySelect.tsx";
@@ -12,12 +12,24 @@ import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
 
 function Settings() {
 
-    const [counter] = useStorage<number>("counter", 0);
+    // Read-only: claim tabs count up while the popup is open, and a write-back
+    // of what the popup read could undo that.
+    const counter = useStorageValue<number>("counter") ?? 0;
     const [isClaiming] = useStorage<boolean>("isClaiming", false);
     const [claimFrequency, setClaimFrequency] = useStorage<ClaimFrequency>("claimFrequency", ClaimFrequency.DAILY);
+    const [claimHour, setClaimHour] = useStorage<number | null>("claimHour", null);
 
-    function handleFrequencyChange(frequency: ClaimFrequency) {
+    // Stored before the background is told, so it reschedules from the new
+    // value rather than the one the popup hasn't written yet.
+    async function handleFrequencyChange(frequency: ClaimFrequency) {
         setClaimFrequency(frequency);
+        await setStorageItem("claimFrequency", frequency);
+        sendMessage({ action: "updateFrequency", target: "background" });
+    }
+
+    async function handleClaimHourChange(hour: number | null) {
+        setClaimHour(hour);
+        await setStorageItem("claimHour", hour);
         sendMessage({ action: "updateFrequency", target: "background" });
     }
 
@@ -33,7 +45,8 @@ function Settings() {
 
             <div className="inputs">
                 <ManualClaimBtn/>
-                <FrequencySelect value={claimFrequency} onChange={handleFrequencyChange} />
+                <FrequencySelect value={claimFrequency} onChange={handleFrequencyChange}
+                                 claimHour={claimHour} onClaimHourChange={handleClaimHourChange} />
                 <div className="checkboxes">
                     <SteamSettings/>
                     <EpicSettings/>

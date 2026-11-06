@@ -105,6 +105,75 @@ describe('power button', () => {
   });
 });
 
+describe('claim hour (Once Daily)', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+    vi.useFakeTimers({ toFake: ['Date'] });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  function dueRunner() {
+    const runner = Object.create(background);
+    let checks = 0;
+    runner.getFreeGamesAndSetOpenedFlag = async () => { checks++; };
+    return { runner, checks: () => checks };
+  }
+
+  it('waits for the chosen hour before the day\'s claim', async () => {
+    await setStorageItem('claimFrequency', 'daily');
+    await setStorageItem('claimHour', 18);
+    await setStorageItem('lastOpened', new Date(2026, 10, 5, 20).toISOString());
+    const { runner, checks } = dueRunner();
+
+    vi.setSystemTime(new Date(2026, 10, 6, 9));
+    await runner.checkIfActiveAndDue();
+    expect(checks()).toBe(0);
+
+    vi.setSystemTime(new Date(2026, 10, 6, 18, 0, 5));
+    await runner.checkIfActiveAndDue();
+    expect(checks()).toBe(1);
+  });
+
+  // An hourly alarm on the hour, so the chosen hour is caught on time and a
+  // laptop asleep at that hour claims within the hour it wakes up in.
+  it('checks every hour on the hour once an hour is chosen', async () => {
+    await setStorageItem('claimFrequency', 'daily');
+    await setStorageItem('claimHour', 18);
+    vi.setSystemTime(new Date(2026, 10, 6, 9, 41));
+    const runner = Object.create(background);
+
+    await runner.initializeAlarms();
+
+    const alarm = await fakeBrowser.alarms.get('checkFreeGames');
+    expect(alarm?.periodInMinutes).toBe(60);
+    expect(alarm?.scheduledTime).toBe(new Date(2026, 10, 6, 10).getTime());
+  });
+
+  it('moves an hourly alarm that isn\'t on the hour once an hour is chosen', async () => {
+    await setStorageItem('claimFrequency', 'daily');
+    await setStorageItem('claimHour', 18);
+    vi.setSystemTime(new Date(2026, 10, 6, 9, 41));
+    await fakeBrowser.alarms.create('checkFreeGames', { when: new Date(2026, 10, 6, 10, 17).getTime(), periodInMinutes: 60 });
+    const runner = Object.create(background);
+
+    await runner.initializeAlarms();
+
+    expect((await fakeBrowser.alarms.get('checkFreeGames'))?.scheduledTime).toBe(new Date(2026, 10, 6, 10).getTime());
+  });
+
+  it('keeps the plain daily alarm with no hour chosen', async () => {
+    await setStorageItem('claimFrequency', 'daily');
+    const runner = Object.create(background);
+
+    await runner.initializeAlarms();
+
+    expect((await fakeBrowser.alarms.get('checkFreeGames'))?.periodInMinutes).toBe(1440);
+  });
+});
+
 describe('found-issue fixes', () => {
   beforeEach(() => {
     fakeBrowser.reset();

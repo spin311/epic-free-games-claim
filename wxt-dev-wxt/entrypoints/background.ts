@@ -63,7 +63,14 @@ import {
   partitionEpicPromotions,
   withEpicEnglishLocale,
 } from "@/entrypoints/utils/epicGames.ts";
-import {areDatesDifferent, didEnoughTimePass, isActive, shouldCheckPrimeGamingToday} from "@/entrypoints/utils/scheduling.ts";
+import {
+  areDatesDifferent,
+  didEnoughTimePass,
+  isActive,
+  isDailyClaimDue,
+  nextHourStart,
+  shouldCheckPrimeGamingToday,
+} from "@/entrypoints/utils/scheduling.ts";
 import {PLATFORM_ACCESS_TOGGLES, resolvePlatformToggles} from "@/entrypoints/utils/platformToggles.ts";
 import {
   AccessGroup,
@@ -91,7 +98,13 @@ const OFFLINE_RETRY_MINUTES = 15;
 // so one page that never loads can't stall the rest of a claim run.
 const TAB_LOAD_TIMEOUT_MS = 60_000;
 const TAB_LOAD_POLL_MS = 100;
+const HOURLY_CHECK_MINUTES = 60;
 let isChecking = false;
+
+// Stored as 0-23, or null for "any time".
+function readClaimHour(value: unknown): number | null {
+  return typeof value === "number" && Number.isInteger(value) && value >= 0 && value <= 23 ? value : null;
+}
 // Distinct from the green claimed-count badge (see handleInstall) so "still
 // working" never reads as "N games claimed".
 const CLAIMING_BADGE_COLOR = "#f0ad4e";
@@ -182,14 +195,14 @@ export const background = {
   // a check is due (checkAndClaimIfDue). Nothing has run yet on a fresh
   // install, so that one always checks.
   async checkIfActiveAndDue() {
-    const result = await getStorageItems(["active", "claimFrequency"]);
+    const result = await getStorageItems(["active", "claimFrequency", "claimHour"]);
     if (!isActive(result?.active)) return;
 
     const frequency = result.claimFrequency || ClaimFrequency.DAILY;
-    await this.checkAndClaimIfDue(frequency);
+    await this.checkAndClaimIfDue(frequency, readClaimHour(result.claimHour));
   },
 
-  async checkAndClaimIfDue(frequency: ClaimFrequency) {
+  async checkAndClaimIfDue(frequency: ClaimFrequency, claimHour: number | null = null) {
     if (isChecking) return;
     isChecking = true;
     try {
@@ -199,7 +212,11 @@ export const background = {
         await this.getFreeGamesAndSetOpenedFlag(today);
         return;
       }
-      if (frequency === ClaimFrequency.DAILY || frequency === ClaimFrequency.BROWSER_START) {
+      if (frequency === ClaimFrequency.DAILY) {
+        if (isDailyClaimDue(lastOpened, new Date(), claimHour)) {
+          await this.getFreeGamesAndSetOpenedFlag(today);
+        }
+      } else if (frequency === ClaimFrequency.BROWSER_START) {
         if (areDatesDifferent(lastOpened, today)) {
           await this.getFreeGamesAndSetOpenedFlag(today);
         }
@@ -227,7 +244,7 @@ export const background = {
   },
 
   async initializeAlarms() {
-    const result = await getStorageItems(["active", "claimFrequency"]);
+    const result = await getStorageItems(["active", "claimFrequency", "claimHour"]);
     if (!isActive(result?.active)) {
       try {
         await browser.alarms.clear(ALARM_NAME);
@@ -248,12 +265,16 @@ export const background = {
       return;
     }
 
-    const minutes = ClaimFrequencyMinutes[frequency as ClaimFrequency];
+    // Once Daily at a chosen hour checks on every hour, on the hour, so the
+    // hour is caught on time (isDailyClaimDue claims once that day).
+    const hasClaimHour = frequency === ClaimFrequency.DAILY && readClaimHour(result.claimHour) !== null;
+    const minutes = hasClaimHour ? HOURLY_CHECK_MINUTES : ClaimFrequencyMinutes[frequency as ClaimFrequency];
     if (minutes > 0) {
       // Check if alarm already exists with correct period
       try {
         const existingAlarm = await browser.alarms.get(ALARM_NAME);
-        if (existingAlarm && existingAlarm.periodInMinutes === minutes) {
+        const isOnTheHour = !hasClaimHour || (existingAlarm && new Date(existingAlarm.scheduledTime).getMinutes() === 0);
+        if (existingAlarm && existingAlarm.periodInMinutes === minutes && isOnTheHour) {
           // Alarm already set correctly, no need to update
           return;
         }
@@ -262,9 +283,9 @@ export const background = {
       }
 
       // Create or update alarm
-      await browser.alarms.create(ALARM_NAME, {
-        periodInMinutes: minutes
-      });
+      await browser.alarms.create(ALARM_NAME, hasClaimHour
+          ? { when: nextHourStart(new Date()).getTime(), periodInMinutes: minutes }
+          : { periodInMinutes: minutes });
     }
   },
 
