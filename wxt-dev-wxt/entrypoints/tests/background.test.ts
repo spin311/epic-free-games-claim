@@ -869,6 +869,89 @@ describe('claimGames resilience', () => {
   });
 });
 
+describe('Steam ownership', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const searchPage = `<div id="search_result_container">
+    <a class="search_result_row" href="https://store.steampowered.com/app/10/Owned_Game/"><span class="title">Owned Game</span></a>
+    <a class="search_result_row" href="https://store.steampowered.com/app/30/New_Game/"><span class="title">New Game</span></a>
+  </div>`;
+
+  function stubSteam(userdata: unknown) {
+    const fetchMock = vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes('/dynamicstore/userdata/')
+            ? new Response(JSON.stringify(userdata), { status: 200 })
+            : new Response(searchPage, { status: 200 }));
+    vi.stubGlobal('fetch', fetchMock);
+    return fetchMock;
+  }
+
+  it('marks the games the account owns in the list and claims only the others', async () => {
+    const fetchMock = stubSteam({ rgOwnedApps: [10] });
+    const runner = Object.create(background);
+    const claimed: string[] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(...games.map((g) => g.title)); };
+
+    await runner.getSteamGamesList(true);
+
+    expect(claimed).toEqual(['New Game']);
+    const stored = await getStorageItem<{ title: string; claimed?: boolean }[]>('steamGames');
+    expect(stored?.map((g) => [g.title, g.claimed ?? false])).toEqual([['Owned Game', true], ['New Game', false]]);
+    expect(fetchMock).toHaveBeenCalledWith(expect.stringContaining('/dynamicstore/userdata/'), expect.objectContaining({ credentials: 'include' }));
+  });
+
+  // Ownership is a nicety on top of the listing: losing it must not cost a claim.
+  it('still lists and claims when the ownership lookup fails', async () => {
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes('/dynamicstore/userdata/')
+            ? new Response('oops', { status: 500 })
+            : new Response(searchPage, { status: 200 })));
+    const runner = Object.create(background);
+    runner.fetchStore = (input: RequestInfo | URL, init?: RequestInit) => fetch(input, init);
+    const claimed: string[] = [];
+    runner.claimGames = async (games: { title: string }[]) => { claimed.push(...games.map((g) => g.title)); };
+
+    await runner.getSteamGamesList(true);
+
+    expect(claimed).toEqual(['Owned Game', 'New Game']);
+  });
+
+  it('keeps the last known in-library marks when the ownership lookup fails', async () => {
+    stubSteam({ rgOwnedApps: [10] });
+    const runner = Object.create(background);
+    runner.claimGames = async () => {};
+    await runner.getSteamGamesList(true);
+
+    vi.stubGlobal('fetch', vi.fn(async (input: RequestInfo | URL) =>
+        String(input).includes('/dynamicstore/userdata/')
+            ? new Response('{"unexpected": true}', { status: 200 })
+            : new Response(searchPage, { status: 200 })));
+    await runner.getSteamGamesList(true);
+
+    const stored = await getStorageItem<{ title: string; claimed?: boolean }[]>('steamGames');
+    expect(stored?.map((g) => [g.title, g.claimed ?? false])).toEqual([['Owned Game', true], ['New Game', false]]);
+  });
+
+  it('updates the in-library marks on a run with no new game', async () => {
+    stubSteam({ rgOwnedApps: [] });
+    const runner = Object.create(background);
+    runner.claimGames = async () => {};
+    await runner.getSteamGamesList(true);
+
+    stubSteam({ rgOwnedApps: [10, 30] });
+    await runner.getSteamGamesList(true);
+
+    const stored = await getStorageItem<{ claimed?: boolean }[]>('steamGames');
+    expect(stored?.map((g) => g.claimed)).toEqual([true, true]);
+  });
+});
+
 describe('waitForTabToLoad', () => {
   beforeEach(() => {
     fakeBrowser.reset();

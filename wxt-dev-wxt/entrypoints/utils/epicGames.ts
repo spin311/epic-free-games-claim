@@ -29,6 +29,18 @@ export function epicProductKey(url: string): string | null {
   }
 }
 
+// The free games a claim tab confirmed (EPIC_CLAIMED_KEY): it records a game
+// once it's claimed or its page says "In Library", so these are on the
+// account. Epic offers no ownership lookup without a further host permission.
+export function withEpicClaimStatus(games: FreeGame[], claimedKeys: readonly string[]): FreeGame[] {
+  if (claimedKeys.length === 0) return games;
+  const claimed = new Set(claimedKeys);
+  return games.map((game) => {
+    const key = epicProductKey(game.link);
+    return key !== null && claimed.has(key) ? { ...game, claimed: true } : game;
+  });
+}
+
 // Force Epic claim pages into English (?lang=en-US) so the content script can match
 // confirmation buttons ("Add to library", etc.) by text regardless of the user's
 // account language. Non-Epic URLs (e.g. Steam) are returned unchanged.

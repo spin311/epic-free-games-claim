@@ -1,15 +1,20 @@
 import GameCard from "@/entrypoints/components/GameCard.tsx";
 import {ManualClaimBtn} from "@/entrypoints/components/ManualClaimBtn.tsx";
 import PendingRedemptions from "@/entrypoints/components/PendingRedemptions.tsx";
-import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
+import {useStorage, useStorageValue} from "@/entrypoints/hooks/useStorage.ts";
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import Checkbox from "@/entrypoints/components/Checkbox.tsx";
 import PlatformFilter, {ALL_PLATFORMS} from "@/entrypoints/components/PlatformFilter.tsx";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
+import {EPIC_CLAIMED_KEY, withEpicClaimStatus} from "@/entrypoints/utils/epicGames.ts";
 
 function freeGamesList() {
     const [steamGames] = useStorage<FreeGame[]>("steamGames", []);
-    const [EpicGames] = useStorage<FreeGame[]>("epicGames", []);
+    const [listedEpicGames] = useStorage<FreeGame[]>("epicGames", []);
+    // Read-only and live: a claim tab records its game after the list was
+    // written, and useStorage's write-back could clobber that record.
+    const epicClaimed = useStorageValue<string[]>(EPIC_CLAIMED_KEY);
+    const EpicGames = withEpicClaimStatus(listedEpicGames, epicClaimed ?? []);
     const [gogGames] = useStorage<FreeGame[]>("gogGames", []);
     const [indieGalaGames] = useStorage<FreeGame[]>("indieGalaGames", []);
     const [primeGamingGames] = useStorage<FreeGame[]>("primeGamingGames", []);

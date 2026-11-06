@@ -11,6 +11,7 @@ import {
   STEAM_GAMES_URL,
 } from "@/entrypoints/utils/steamGames.ts";
 import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
+import {markSteamOwned, parseSteamOwnedApps, STEAM_USERDATA_URL} from "@/entrypoints/utils/steamOwnership.ts";
 import {fetchFreebiesPage, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
 import {
@@ -668,17 +669,42 @@ export const background = {
     // here isn't proof. A real Steam tab records that.
     if (parseSteamLoginState(html) === true) await recordLoginState(Platforms.Steam, true);
 
-    const gamesArr = parseSteamFreeGames(html);
-    if (!gamesArr) return;
-
+    const parsed = parseSteamFreeGames(html);
+    if (!parsed) return;
     const currFreeGames: FreeGame[] = await getStorageItem("steamGames") || [];
-    const newGames: FreeGame[] = gamesArr.filter(game =>
-        !currFreeGames.some(g => g?.title === game?.title)
-    );
-    if (newGames.length === 0) return;
+    const owned = await this.loadSteamOwnedApps();
+    // Without an answer the last known marks stand, rather than every game
+    // reading as not owned until the next run.
+    const gamesArr = owned
+        ? markSteamOwned(parsed, owned)
+        : parsed.map((game) => currFreeGames.some((g) => g?.link === game.link && g.claimed) ? { ...game, claimed: true } : game);
 
-    if (shouldClaim) await this.claimGames(newGames);
-    await setStorageItem('steamGames', newGames);
+    // A game already on the account gets no claim tab: there's nothing to add.
+    const newGames: FreeGame[] = gamesArr.filter(game =>
+        !game.claimed && !currFreeGames.some(g => g?.title === game?.title)
+    );
+
+    if (shouldClaim && newGames.length > 0) await this.claimGames(newGames);
+    // The whole current list, so the popup's in-library marks stay current
+    // on runs that find nothing new.
+    await setStorageItem('steamGames', gamesArr);
+  },
+
+  // Never throws: ownership only adds the in-library marks and spares a claim
+  // tab, so a failed lookup costs neither the listing nor the claim.
+  async loadSteamOwnedApps(): Promise<Set<number> | null> {
+    try {
+      const response = assertStoreOk(
+          await this.fetchStore(STEAM_USERDATA_URL, { credentials: "include" }),
+          "Steam's ownership lookup"
+      );
+      const owned = parseSteamOwnedApps(await response.json());
+      if (!owned) console.warn("Steam's ownership lookup answered in an unexpected shape");
+      return owned;
+    } catch (e) {
+      console.warn("Steam's ownership lookup failed:", e);
+      return null;
+    }
   },
 
   // GOG runs one giveaway at a time and only exposes it to a signed-in session.
