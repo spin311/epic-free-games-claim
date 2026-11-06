@@ -6,6 +6,8 @@ import {FreeGamesResponse} from "@/entrypoints/types/freeGamesResponse.ts";
 import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {closeCurrentTab, onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {detectAndRecordLoginState} from "@/entrypoints/utils/loginState.ts";
+import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
+import {readSteamKeyResult, SteamKeyResult} from "@/entrypoints/utils/steamKeyActivation.ts";
 import {
     clickWhenVisible,
     incrementCounter,
@@ -13,6 +15,8 @@ import {
     waitForElement,
     waitForPageLoad
 } from "@/entrypoints/utils/helpers.ts";
+
+const KEY_RESULT_TIMEOUT_MS = 20_000;
 
 export default defineContentScript({
     matches: ['https://store.steampowered.com/*'],
@@ -26,6 +30,68 @@ export default defineContentScript({
         // can't delay (or fail) a claim.
         const loginStateDetected = detectAndRecordLoginState(Platforms.Steam);
         onClaimMessage({ getFreeGames: getFreeGamesList, claimGames: claimCurrentFreeGame });
+        browser.runtime.onMessage.addListener((request: MessageRequest) => {
+            if (request.target === "content" && request.action === "activateSteamKey") {
+                void activateKey(typeof request.data?.title === "string" ? request.data.title : "");
+            }
+        });
+
+        // On Steam's activation page the background opened with a key from an
+        // IndieGala gift (see handleGiftKeys): agree, submit, and report what
+        // Steam answered. The background kept the key before opening this tab,
+        // so a report that never arrives loses nothing; the tab closes anyway.
+        async function activateKey(title: string) {
+            try {
+                await waitForPageLoad();
+                const key = document.querySelector<HTMLInputElement>("#product_key")?.value.trim() ?? "";
+                const result = key ? await submitKey() : notOnActivationPage();
+                await browser.runtime.sendMessage({
+                    target: "background",
+                    action: "steamKeyResult",
+                    data: { key: key || keyFromUrl(), title, ...result },
+                });
+            } catch (error: unknown) {
+                console.error("[steam] key activation couldn't finish:", error);
+            } finally {
+                await closeCurrentTab();
+            }
+        }
+
+        // Steam's Continue is a javascript: link a content script's click
+        // can't run, so the background calls RegisterProductKey in the page.
+        async function submitKey(): Promise<SteamKeyResult> {
+            let isSubmitted = false;
+            try {
+                isSubmitted = await browser.runtime.sendMessage({ target: "background", action: "steamRegisterKey" }) === true;
+            } catch (error: unknown) {
+                console.error("[steam] couldn't submit the key:", error);
+            }
+            if (!isSubmitted) return { outcome: "failed", products: [], message: "Steam's activation form changed" };
+            const deadline = Date.now() + KEY_RESULT_TIMEOUT_MS;
+            while (Date.now() < deadline) {
+                const result = readSteamKeyResult(document);
+                if (result) return result;
+                await new Promise((resolve) => setTimeout(resolve, 250));
+            }
+            return { outcome: "failed", products: [], message: "Steam didn't answer" };
+        }
+
+        // Signed out, Steam sends the activation link to its login page.
+        function notOnActivationPage(): SteamKeyResult {
+            return location.pathname.startsWith("/login")
+                ? { outcome: "signed-out", products: [], message: "" }
+                : { outcome: "failed", products: [], message: "Steam's activation page changed" };
+        }
+
+        // The login page keeps the activation link in its redir parameter.
+        function keyFromUrl(): string {
+            try {
+                const redir = new URLSearchParams(location.search).get("redir") ?? location.href;
+                return new URL(redir, location.origin).searchParams.get("key") ?? "";
+            } catch {
+                return "";
+            }
+        }
 
         async function getFreeGamesList() {
             await waitForPageLoad();

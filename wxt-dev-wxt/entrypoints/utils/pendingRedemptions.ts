@@ -1,6 +1,8 @@
 import { getStorageItem, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
 
-export type RedeemPlatform = "GOG" | "Windows" | "Legacy";
+// "Steam" is a key for Steam's activation page; "IndieGala" an entry whose
+// key couldn't be read, kept as the IndieGala page it's on.
+export type RedeemPlatform = "GOG" | "Windows" | "Legacy" | "Steam" | "IndieGala";
 
 export interface PendingRedemption {
     code: string;
@@ -8,6 +10,8 @@ export interface PendingRedemption {
     title: string;
     redeemUrl: string;
     addedAt: string;
+    // Why it wasn't redeemed, when known.
+    reason?: string;
 }
 
 export const PENDING_REDEMPTIONS_STORAGE_KEY = "pendingRedemptions";

@@ -6,6 +6,13 @@ import {
     pendingRedemptionKey,
 } from "@/entrypoints/utils/pendingRedemptions.ts";
 
+// Where an entry without a code was kept, and how to get there.
+function codelessText(entry: PendingRedemption): { hint: string; link: string } {
+    return entry.platform === "IndieGala"
+        ? { hint: "Key wasn't read; it's on IndieGala.", link: "Open on IndieGala" }
+        : { hint: "Code wasn't read; it's on Amazon's page.", link: "Open on Amazon" };
+}
+
 // Fallback for GOG/Microsoft codes the redeem content scripts couldn't
 // auto-submit (not signed in, a captcha, already used, ...) — see
 // recordRedeemFallback in pendingRedemptions.ts. Renders nothing when empty,
@@ -35,6 +42,7 @@ function PendingRedemptions() {
             <p className="pending-redemptions-title">Needs manual redeem</p>
             {pending.map((entry) => {
                 const key = pendingRedemptionKey(entry);
+                const codeless = codelessText(entry);
                 return (
                     <div className="pending-redemption" key={key}>
                         <div className="pending-redemption-info">
@@ -44,7 +52,8 @@ function PendingRedemptions() {
                             </p>
                             {entry.code
                                 ? <code className="pending-redemption-code">{entry.code}</code>
-                                : <p className="hint">Code wasn't read; it's on Amazon's page.</p>}
+                                : <p className="hint">{codeless.hint}</p>}
+                            {entry.reason && <p className="hint">{entry.reason}</p>}
                         </div>
                         <div className="pending-redemption-actions">
                             {entry.code && (
@@ -53,7 +62,7 @@ function PendingRedemptions() {
                                 </button>
                             )}
                             <a href={entry.redeemUrl} target="_blank" rel="noopener noreferrer">
-                                {entry.code ? "Try again" : "Open on Amazon"}
+                                {entry.code ? (entry.platform === "Steam" ? "Activate" : "Try again") : codeless.link}
                             </a>
                             <button type="button" onClick={() => handleDismiss(key)} aria-label="Dismiss">
                                 &times;

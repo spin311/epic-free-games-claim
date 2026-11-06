@@ -37,3 +37,11 @@ export function parseWheelPrize(root: Document | HTMLElement): WheelPrize | null
     const text = results.querySelector("p")?.textContent?.trim() ?? "";
     return { label, text };
 }
+
+// The result card loses display-none once the spin animation and its 1.5s
+// pause are over (fortuneWheelInit in IndieGala's scripts.js). In a
+// background tab the animation may never run, so callers bound the wait.
+export function isWheelResultShown(root: Document | HTMLElement): boolean {
+  const results = root.querySelector(".fortune-wheel-results");
+  return results !== null && !results.classList.contains("display-none");
+}

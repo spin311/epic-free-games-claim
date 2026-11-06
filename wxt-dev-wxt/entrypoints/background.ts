@@ -14,6 +14,17 @@ import {GOG_HOME_URL, fetchGiveaway} from "@/entrypoints/utils/gogGiveaway.ts";
 import {markSteamOwned, parseSteamOwnedApps, STEAM_USERDATA_URL} from "@/entrypoints/utils/steamOwnership.ts";
 import {fetchFreebiesPage, INDIEGALA_FREEBIES_URL} from "@/entrypoints/utils/indieGalaGiveaway.ts";
 import {INDIEGALA_WHEEL_URL} from "@/entrypoints/utils/indieGalaWheel.ts";
+import {registerKeyInMainWorld, STEAM_ACTIVATION_PAGE} from "@/entrypoints/utils/steamKeyActivation.ts";
+import {
+  collectWonSteamKeys,
+  handleGiftKeys,
+  isIndieGalaGiftUrl,
+  KeyFlowDeps,
+  parseGiftKeys,
+  parseSteamKeyReport,
+  recordSteamKeyResult,
+  snapshotGifts,
+} from "@/entrypoints/utils/steamKeyFlow.ts";
 import {
   EXTERNAL_PLATFORM_STORAGE_KEYS,
   PRIME_GAMING_HOME_URL,
@@ -442,6 +453,24 @@ export const background = {
     return games.filter((_, index) => verdicts[index]);
   },
 
+  // A Steam key won on IndieGala's wheel (see steamKeyFlow.ts).
+  keyFlowDeps(): KeyFlowDeps {
+    return {
+      openTab: (url, action, data) => this.openTabAndSendActionToContent(url, action, data),
+      fetchImpl: (input, init) => this.fetchStore(input, init),
+      wait: (ms) => this.wait(ms),
+    };
+  },
+
+  async steamRegisterKey(tabId: number): Promise<boolean> {
+    const [injection] = await browser.scripting.executeScript({
+      target: { tabId },
+      world: "MAIN",
+      func: registerKeyInMainWorld,
+    });
+    return injection?.result === true;
+  },
+
   steamAddToCart(tabId: number, appId: number) {
     return browser.scripting.executeScript({
       target: { tabId },
@@ -453,11 +482,11 @@ export const background = {
 
   // Background tabs so a claim run never steals focus from whatever the user
   // is actually doing — content scripts don't need the tab visible to work.
-  async openTabAndSendActionToContent(url: string, action: string) {
+  async openTabAndSendActionToContent(url: string, action: string, data?: unknown) {
     const tab = await browser.tabs.create({ url, active: false });
     if (!tab || !tab.id) return;
     await this.waitForTabToLoad(tab.id);
-    await this.sendMessageWithRetry(tab.id, { target: "content", action });
+    await this.sendMessageWithRetry(tab.id, data === undefined ? { target: "content", action } : { target: "content", action, data });
   },
 
   // The content script registers its onMessage listener at document_idle, which
@@ -466,7 +495,7 @@ export const background = {
   // "Could not establish connection" rejection.
   async sendMessageWithRetry(
       tabId: number,
-      message: { target: string; action: string },
+      message: MessageRequest,
       maxRetries = 10,
       delayMs = 300
   ) {
@@ -527,6 +556,20 @@ export const background = {
     } else if (request.action === "bringTabToFront") {
       const tab = sender?.tab;
       if (tab?.id != null) await this.bringTabToFront(tab.id, tab.windowId);
+    } else if (request.action === "wheelSpun") {
+      const outcome = await collectWonSteamKeys(String(request.data?.label ?? ""), this.keyFlowDeps());
+      if (outcome === "pending") await this.showProblemBadge();
+    } else if (request.action === "giftKeysRead") {
+      // The page's address comes from the browser, not the message.
+      const giftUrl = sender?.url;
+      if (!isIndieGalaGiftUrl(giftUrl)) return;
+      if (await handleGiftKeys(giftUrl!, parseGiftKeys(request.data?.keys), this.keyFlowDeps())) await this.showProblemBadge();
+    } else if (request.action === "steamRegisterKey") {
+      const tabId = sender?.tab?.id;
+      if (tabId != null && sender?.url?.startsWith(STEAM_ACTIVATION_PAGE)) return this.steamRegisterKey(tabId);
+    } else if (request.action === "steamKeyResult") {
+      const report = parseSteamKeyReport(request.data);
+      if (report && await recordSteamKeyResult(report) === "pending") await this.showProblemBadge();
     } else if (request.action === "closeTab") {
       const tabId = sender?.tab?.id;
       if (tabId != null) {
@@ -801,6 +844,9 @@ export const background = {
     const lastCheck = await getStorageItem<string>("indieGalaWheelLastCheck");
     if (lastCheck && !areDatesDifferent(lastCheck, today)) return;
 
+    // The gifts there before the spin, so a Steam key it wins can be told
+    // apart afterwards (see collectWonSteamKeys).
+    await snapshotGifts((input, init) => this.fetchStore(input, init));
     // Flag set only after the tab/message actually goes out (mirrors
     // getFreeGamesAndSetOpenedFlag): if this throws, today's attempt never
     // happened, so the next check must still retry rather than silently

@@ -869,6 +869,159 @@ describe('claimGames resilience', () => {
   });
 });
 
+describe('a Steam key won on IndieGala\'s wheel', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  const giftItem = (id: string) => `<div class="profile-private-page-library-gift-item">
+    <div class="profile-private-page-library-gift-title-item"><a href="/gift-bundle/${id}">Gift link</a></div>
+    <div class="profile-private-page-library-gift-title-item"><i class="fa fa-unlock"></i><span>PW${id}</span></div></div>`;
+  const library = (...ids: string[]) =>
+    `<div class="profile-private-page-library-tab-gameplay">${ids.map(giftItem).join('')}</div>`;
+  const giftUrl = (id: string) => `https://www.indiegala.com/gift-bundle/${id}`;
+
+  function recordOpenedTabs(runner: Record<string, unknown>) {
+    const opened: { url: string; action: string; data?: unknown }[] = [];
+    runner.openTabAndSendActionToContent = async (url: string, action: string, data?: unknown) => {
+      opened.push(data === undefined ? { url, action } : { url, action, data });
+    };
+    return opened;
+  }
+
+  it('remembers the gifts already in the library before it spins', async () => {
+    vi.stubGlobal('fetch', respondWith(200, library('old')));
+    const runner = Object.create(background);
+    const opened = recordOpenedTabs(runner);
+
+    await runner.checkIndieGalaWheel(true);
+
+    expect(await getStorageItem('indieGalaKnownGifts')).toEqual([giftUrl('old')]);
+    expect(opened).toEqual([{ url: INDIEGALA_WHEEL_URL, action: 'spinWheel' }]);
+  });
+
+  it('opens a gift that appeared after the spin, to read its key', async () => {
+    await setStorageItem('indieGalaKnownGifts', [giftUrl('old')]);
+    vi.stubGlobal('fetch', respondWith(200, library('new', 'old')));
+    const runner = Object.create(background);
+    runner.wait = async () => {};
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({ target: 'background', action: 'wheelSpun', data: { label: '🤩 ✨ Steam key' } });
+
+    expect(opened).toEqual([{ url: giftUrl('new'), action: 'revealGiftKey', data: { password: 'PWnew' } }]);
+  });
+
+  // The gift may show up a moment after the spin; and if it never does, a
+  // Steam key prize must still not be lost.
+  it('keeps a pointer to the library when a Steam key prize\'s gift never shows up', async () => {
+    await setStorageItem('indieGalaKnownGifts', [giftUrl('old')]);
+    const fetchMock = respondWith(200, library('old'));
+    vi.stubGlobal('fetch', fetchMock);
+    const runner = Object.create(background);
+    runner.wait = async () => {};
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({ target: 'background', action: 'wheelSpun', data: { label: '🤩 ✨ Steam key' } });
+
+    expect(fetchMock.mock.calls.length).toBeGreaterThan(1);
+    expect(opened).toEqual([]);
+    expect(await getStorageItem('pendingRedemptions')).toEqual([
+      expect.objectContaining({ code: '', platform: 'IndieGala', redeemUrl: 'https://www.indiegala.com/library' }),
+    ]);
+  });
+
+  it('does nothing more for any other prize', async () => {
+    await setStorageItem('indieGalaKnownGifts', [giftUrl('old')]);
+    vi.stubGlobal('fetch', respondWith(200, library('old')));
+    const runner = Object.create(background);
+    runner.wait = async () => {};
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({ target: 'background', action: 'wheelSpun', data: { label: '💿 10 GalaSilver' } });
+
+    expect(opened).toEqual([]);
+    expect(await getStorageItem('pendingRedemptions')).toBeNull();
+  });
+
+  it('takes a Steam key read from the gift to Steam\'s activation page', async () => {
+    const runner = Object.create(background);
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({
+      target: 'background', action: 'giftKeysRead',
+      data: { keys: [{ title: 'Some Game', key: 'AAAAA-BBBBB-CCCCC', isSteam: true }] },
+    }, { url: giftUrl('new'), tab: { id: 7 } });
+
+    expect(opened).toEqual([{
+      url: 'https://store.steampowered.com/account/registerkey?key=AAAAA-BBBBB-CCCCC',
+      action: 'activateSteamKey',
+      data: { title: 'Some Game' },
+    }]);
+  });
+
+  it('keeps the gift page when its key couldn\'t be read, or isn\'t for Steam', async () => {
+    const runner = Object.create(background);
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({
+      target: 'background', action: 'giftKeysRead',
+      data: { keys: [{ title: 'Some Game', key: null, isSteam: true }, { title: 'Uplay Game', key: 'K', isSteam: false }] },
+    }, { url: giftUrl('new'), tab: { id: 7 } });
+
+    expect(opened).toEqual([]);
+    const pending = await getStorageItem<{ title: string; redeemUrl: string; platform: string }[]>('pendingRedemptions');
+    expect(pending?.map((p) => [p.title, p.platform, p.redeemUrl])).toEqual([
+      ['Some Game', 'IndieGala', giftUrl('new')],
+      ['Uplay Game', 'IndieGala', giftUrl('new')],
+    ]);
+  });
+
+  // Only an IndieGala gift page may report keys: its address, from the
+  // browser, is what the pending entry links to.
+  it('ignores keys reported from anywhere but an IndieGala gift page', async () => {
+    const runner = Object.create(background);
+    const opened = recordOpenedTabs(runner);
+
+    await runner.handleMessage({
+      target: 'background', action: 'giftKeysRead',
+      data: { keys: [{ title: 'Some Game', key: 'AAAAA-BBBBB-CCCCC', isSteam: true }] },
+    }, { url: 'https://evil.example/gift-bundle/x', tab: { id: 7 } });
+
+    expect(opened).toEqual([]);
+    expect(await getStorageItem('pendingRedemptions')).toBeNull();
+  });
+
+  it('submits a key only on Steam\'s activation page', async () => {
+    const executeScript = vi.spyOn(fakeBrowser.scripting, 'executeScript').mockResolvedValue([{ result: true }] as never);
+    const runner = Object.create(background);
+
+    await runner.handleMessage({ target: 'background', action: 'steamRegisterKey' }, { url: 'https://store.steampowered.com/app/10/', tab: { id: 7 } });
+    expect(executeScript).not.toHaveBeenCalled();
+
+    await runner.handleMessage({ target: 'background', action: 'steamRegisterKey' }, { url: 'https://store.steampowered.com/account/registerkey?key=K', tab: { id: 7 } });
+    expect(executeScript).toHaveBeenCalledTimes(1);
+    executeScript.mockRestore();
+  });
+
+  it('keeps a key Steam didn\'t take in the pending list', async () => {
+    const runner = Object.create(background);
+
+    await runner.handleMessage({
+      target: 'background', action: 'steamKeyResult',
+      data: { key: 'AAAAA-BBBBB-CCCCC', title: 'Some Game', outcome: 'rate-limited', products: [], message: 'Too many' },
+    });
+
+    expect(await getStorageItem('pendingRedemptions')).toEqual([
+      expect.objectContaining({ code: 'AAAAA-BBBBB-CCCCC', platform: 'Steam' }),
+    ]);
+  });
+});
+
 describe('Steam ownership', () => {
   beforeEach(() => {
     fakeBrowser.reset();
@@ -1002,6 +1155,12 @@ describe('waitForTabToLoad', () => {
 describe('checkIndieGalaWheel', () => {
   beforeEach(() => {
     fakeBrowser.reset();
+    // The library snapshot taken before each spin.
+    vi.stubGlobal('fetch', respondWith(200, '<div class="profile-private-page-library-tab-gameplay"></div>'));
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
   });
 
   it('opens the IndieGala homepage to spin when due and enabled', async () => {

@@ -1,11 +1,12 @@
 import Checkbox from "@/entrypoints/components/Checkbox.tsx";
 import LoginStatus from "@/entrypoints/components/LoginStatus.tsx";
 import HealthStatus from "@/entrypoints/components/HealthStatus.tsx";
-import { useStorage } from "@/entrypoints/hooks/useStorage.ts";
+import { useStorage, useStorageValue } from "@/entrypoints/hooks/useStorage.ts";
 import { useOptionalAccess } from "@/entrypoints/hooks/useOptionalAccess.ts";
 import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { StoredWheelPrize } from "@/entrypoints/utils/indieGalaWheel.ts";
+import { LAST_STEAM_KEY_KEY, SteamKeyRecord } from "@/entrypoints/utils/steamKeyFlow.ts";
 
 function IndieGalaSettings() {
     // Off by default (see spec: IndieGala and Prime Gaming both start disabled
@@ -15,6 +16,7 @@ function IndieGalaSettings() {
     // handleIndieGalaCheckChange) — the user can still opt back out afterward.
     const [indieGalaWheelCheck, setIndieGalaWheelCheck] = useStorage<boolean>("indieGalaWheelCheck", false);
     const [indieGalaWheelLastPrize] = useStorage<StoredWheelPrize | null>("indieGalaWheelLastPrize", null);
+    const lastSteamKey = useStorageValue<SteamKeyRecord>(LAST_STEAM_KEY_KEY);
     const [indieGalaLoggedIn] = useStorage<LoginState>(LOGIN_STATE_KEYS[Platforms.IndieGala], null);
     const access = useOptionalAccess();
     const isIndieGalaOn = access.isOn("indieGalaCheck", indieGalaCheck);
@@ -44,6 +46,12 @@ function IndieGalaSettings() {
                         <p className="hint">
                             Last prize: {indieGalaWheelLastPrize.label}
                             {' '}({new Date(indieGalaWheelLastPrize.wonAt).toLocaleDateString()})
+                        </p>
+                    )}
+                    {lastSteamKey && (
+                        <p className="hint">
+                            Steam key {lastSteamKey.outcome === "owned" ? "already owned" : "activated"}: {lastSteamKey.title}
+                            {' '}({new Date(lastSteamKey.at).toLocaleDateString()})
                         </p>
                     )}
                 </div>
