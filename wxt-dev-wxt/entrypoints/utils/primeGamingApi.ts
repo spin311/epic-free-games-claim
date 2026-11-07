@@ -17,7 +17,7 @@ import type { Browser } from "wxt/browser";
 
 export const LUNA_CLAIMS_URL = "https://luna.amazon.com/claims/home";
 export const LUNA_GRAPHQL_URL = "https://luna.amazon.com/graphql";
-const LUNA_ORIGIN = "https://luna.amazon.com";
+export const LUNA_ORIGIN = "https://luna.amazon.com";
 const LUNA_CLAIM_BASE = "https://luna.amazon.com/claims";
 const REQUEST_TIMEOUT_MS = 15_000;
 // Every Luna site a lookup can end up on. A regional one serves the same
@@ -253,15 +253,18 @@ export function updateClaimAttempts(
 
 // Throws on any failure (markup/API change, transport error) so the
 // background can fall back to the old open-the-claims-page check.
-export async function fetchPrimeLookup(fetchImpl: typeof fetch = fetch): Promise<PrimeLookup> {
-  const page = await fetchImpl(LUNA_CLAIMS_URL, { credentials: "include", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
+// `lunaOrigin` is where it starts: the user's own regional site once that's
+// known and granted, since Amazon's redirect to it from luna.amazon.com is
+// inconsistent (the same German IP got .com and .de alternately, Nov 2026).
+export async function fetchPrimeLookup(fetchImpl: typeof fetch = fetch, lunaOrigin: string = LUNA_ORIGIN): Promise<PrimeLookup> {
+  const page = await fetchImpl(`${lunaOrigin}/claims/home`, { credentials: "include", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   assertStoreOk(page, "Luna's claims page");
   // The csrf token only works on the site that issued it.
-  const lunaOrigin = lunaOriginOf(page);
+  const landedOrigin = lunaOriginOf(page);
   const csrfToken = extractCsrfToken(await page.text());
   if (!csrfToken) throw new Error("Luna claims page had no csrf token");
 
-  const response = await fetchImpl(`${lunaOrigin}/graphql`, {
+  const response = await fetchImpl(`${landedOrigin}/graphql`, {
     method: "POST",
     credentials: "include",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -309,6 +312,12 @@ export function lunaRegionalHostOf(url: string | undefined): LunaRegionalHost | 
   } catch {
     return null;
   }
+}
+
+// A luna.amazon.com link moved to the user's own Luna site, where their
+// session is (a .com page can't see a sign-in on amazon.de); others unchanged.
+export function onLunaSite(link: string, lunaOrigin: string): string {
+  return link.startsWith(`${LUNA_ORIGIN}/`) ? lunaOrigin + link.slice(LUNA_ORIGIN.length) : link;
 }
 
 // luna.amazon.com's rule keeps id 1; the regional sites follow it.

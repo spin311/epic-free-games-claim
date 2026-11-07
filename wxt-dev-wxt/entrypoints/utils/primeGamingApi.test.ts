@@ -7,6 +7,7 @@ import {
   fetchPrimeLookup,
   isLunaRedirecting,
   lunaRegionalHostOf,
+  onLunaSite,
   LUNA_CLAIMS_URL,
   LUNA_GRAPHQL_URL,
   LUNA_ORIGIN_RULE_ID,
@@ -293,6 +294,19 @@ describe('fetchPrimeLookup', () => {
     expect(fetchImpl).toHaveBeenNthCalledWith(2, 'https://luna.amazon.fr/graphql', expect.anything());
   });
 
+  // Amazon's redirect from luna.amazon.com isn't consistent (the same German
+  // IP got .com and .de alternately), so a known site is asked directly.
+  it("starts at the user's own Luna site when given one", async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response(200, html, 'https://luna.amazon.de/claims/home'))
+      .mockResolvedValueOnce(response(200, payload([item()])));
+
+    await fetchPrimeLookup(fetchImpl, 'https://luna.amazon.de');
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(1, 'https://luna.amazon.de/claims/home', expect.anything());
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, 'https://luna.amazon.de/graphql', expect.anything());
+  });
+
   it('throws when the claims page ends up outside Luna', async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(response(200, html, 'https://www.amazon.fr/ap/signin?openid.return_to=x'));
@@ -379,6 +393,18 @@ describe('lunaRegionalHostOf', () => {
     for (const url of ['https://luna.amazon.com/claims/home', 'https://www.amazon.fr/ap/signin', 'about:blank', '', undefined]) {
       expect(lunaRegionalHostOf(url)).toBeNull();
     }
+  });
+});
+
+describe('onLunaSite', () => {
+  it("moves a luna.amazon.com claim link to the user's own site", () => {
+    expect(onLunaSite('https://luna.amazon.com/claims/kiborg-aga/dp/amzn1.pg.item.6a6e', 'https://luna.amazon.de'))
+      .toBe('https://luna.amazon.de/claims/kiborg-aga/dp/amzn1.pg.item.6a6e');
+  });
+
+  it('leaves other links, and luna.amazon.com itself, alone', () => {
+    expect(onLunaSite('https://gaming.amazon.com/home', 'https://luna.amazon.de')).toBe('https://gaming.amazon.com/home');
+    expect(onLunaSite('https://luna.amazon.com/claims/x', 'https://luna.amazon.com')).toBe('https://luna.amazon.com/claims/x');
   });
 });
 

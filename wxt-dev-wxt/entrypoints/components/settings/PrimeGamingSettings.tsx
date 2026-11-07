@@ -45,6 +45,11 @@ function PrimeGamingSettings() {
     const regionalHost = isLunaRegionalHost(storedRegionalHost) && !access.hasGroup(storedRegionalHost)
         ? storedRegionalHost
         : null;
+    // Signing in on the user's own Luna site: a .com page can't see a session
+    // on e.g. amazon.de, and Amazon's redirect there isn't consistent.
+    const primeLoginUrl = isLunaRegionalHost(storedRegionalHost)
+        ? `https://${storedRegionalHost}/claims/home`
+        : "https://gaming.amazon.com/home";
     const primeWarning = hasPrime === false
         ? { label: "No Prime", title: "Signed in, but this Amazon account has no Prime membership, so Prime Gaming offers can't be claimed." }
         : null;
@@ -52,7 +57,7 @@ function PrimeGamingSettings() {
     return (
         <div className="platform-group">
             <Checkbox name="Prime Gaming" checked={isPrimeOn} onChange={e => access.setWithAccess("primeGamingCheck", e.target.checked, setPrimeGamingCheck)}
-                      trailing={isPrimeOn && <><HealthStatus platform={Platforms.PrimeGaming}/><LoginStatus state={primeGamingLoggedIn} loginUrl="https://gaming.amazon.com/home" platform={Platforms.PrimeGaming}
+                      trailing={isPrimeOn && <><HealthStatus platform={Platforms.PrimeGaming}/><LoginStatus state={primeGamingLoggedIn} loginUrl={primeLoginUrl} platform={Platforms.PrimeGaming}
                                                    accountWarning={primeWarning}/></>}/>
             {isPrimeOn && regionalHost && (
                 <p className="hint regional-access">
