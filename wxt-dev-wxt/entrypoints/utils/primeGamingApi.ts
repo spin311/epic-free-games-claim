@@ -1,6 +1,6 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { assertStoreOk, StoreChangedError } from "@/entrypoints/utils/network.ts";
-import { LUNA_REGIONAL_HOSTS } from "@/entrypoints/utils/optionalAccess.ts";
+import { isLunaRegionalHost, LUNA_REGIONAL_HOSTS, LunaRegionalHost } from "@/entrypoints/utils/optionalAccess.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import {
   detectExternalPlatform,
@@ -26,9 +26,13 @@ const REQUEST_TIMEOUT_MS = 15_000;
 // luna.amazon.com: Amazon redirects those too, keeping their path.
 const LUNA_HOSTS: readonly string[] = ["luna.amazon.com", ...LUNA_REGIONAL_HOSTS];
 
-// Set while Amazon redirects this user to a regional Luna site the extension
-// has no access to yet; the popup then asks for it (see isLunaRedirecting).
-export const PRIME_REGIONAL_ACCESS_KEY = "primeGamingNeedsRegionalAccess";
+// The regional Luna site Amazon redirects this user to while the extension
+// has no access to it (null otherwise); the popup asks for exactly that site.
+export const PRIME_REGIONAL_HOST_KEY = "primeGamingRegionalHost";
+// When that site was last looked up. A lookup opens a tab, so it runs at most
+// once per interval, whatever it found; in between, its last answer stands.
+export const LUNA_REGION_CHECKED_AT_KEY = "primeGamingRegionCheckedAt";
+export const LUNA_REGION_CHECK_INTERVAL_MS = 24 * 60 * 60 * 1000;
 
 // Confirmed live: these exact selections return per-user eligibility.
 // Trimmed variants (e.g. a literal pageSize, no operation name) came back
@@ -293,6 +297,18 @@ export async function isLunaRedirecting(fetchImpl: typeof fetch = fetch): Promis
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
   });
   return response.type === "opaqueredirect";
+}
+
+// The regional Luna site a page ended up on, read from its URL; null for any
+// other page, including luna.amazon.com itself.
+export function lunaRegionalHostOf(url: string | undefined): LunaRegionalHost | null {
+  if (!url) return null;
+  try {
+    const { host } = new URL(url);
+    return isLunaRegionalHost(host) ? host : null;
+  } catch {
+    return null;
+  }
 }
 
 // luna.amazon.com's rule keeps id 1; the regional sites follow it.

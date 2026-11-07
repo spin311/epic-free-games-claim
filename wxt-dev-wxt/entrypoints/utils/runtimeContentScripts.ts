@@ -2,7 +2,7 @@ import type { Browser } from "wxt/browser";
 // Relative, from a module with no runtime imports of its own: wxt.config.ts
 // imports this one outside Vite (see optionalAccess.ts), so it can't use the
 // `@/` alias or pull in `browser`.
-import { ACCESS_GROUP_ORIGINS, type AccessGroup } from "./optionalAccess.ts";
+import { ACCESS_GROUP_ORIGINS, type AccessGroup, LUNA_REGIONAL_HOSTS } from "./optionalAccess.ts";
 
 // The content scripts for optional hosts are `registration: "runtime"`: a
 // static manifest entry's matches count as install-time host permissions. The
@@ -35,8 +35,9 @@ export const RUNTIME_CONTENT_SCRIPTS: Readonly<Record<RuntimeScriptId, RuntimeCo
   primegaming: {
     group: "primeGaming",
     matches: ["https://gaming.amazon.com/*", "https://luna.amazon.com/*"],
-    // Where both redirect a visitor from a country with its own Luna site.
-    extraMatches: [{ group: "lunaRegional", matches: [...ACCESS_GROUP_ORIGINS.lunaRegional] }],
+    // Where both redirect a visitor from a country with its own Luna site,
+    // each added once the user has granted it.
+    extraMatches: LUNA_REGIONAL_HOSTS.map((host) => ({ group: host, matches: [...ACCESS_GROUP_ORIGINS[host]] })),
     runAt: "document_idle",
     allFrames: false,
   },

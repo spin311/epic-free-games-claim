@@ -84,7 +84,12 @@ a warning annotation. When a store's markup or API changes, update the canary al
   user approves it. Every other host is an optional group in `utils/optionalAccess.ts`
   (`ACCESS_GROUP_ORIGINS`; `TOGGLE_ACCESS_GROUPS` maps each storage toggle to the groups it needs),
   requested from the popup (`hooks/useOptionalAccess.ts`) when the user turns that toggle on — any
-  Prime Gaming toggle requests every Prime-related group in one prompt (`requestOrigins`). A
+  Prime Gaming toggle requests every Prime-related group in one prompt (`requestOrigins`). Amazon
+  geo-redirects `luna.amazon.com` to a country's Luna site (`LUNA_REGIONAL_HOSTS`: fr, de, co.uk, …);
+  each is a group of its own that no toggle needs. A Prime check that is redirected to one without
+  access (`missingLunaRegionalHost`) has a background tab read where it lands (the `tabs` permission;
+  a fetch hides a redirect's target; at most once a day, `primeGamingRegionCheckedAt`), stores it as
+  `primeGamingRegionalHost`, and the popup asks for that one site ("Allow access"). A
   feature is effective only when its flag is on **and** its groups are granted — background and
   popup both apply that rule; never gate on the flag alone. The gog / indiegala / indiegalaWheel /
   primegaming / microsoft / legacygames content scripts are `registration: "runtime"` (options in

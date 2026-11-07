@@ -6,6 +6,7 @@ import {
   extractCsrfToken,
   fetchPrimeLookup,
   isLunaRedirecting,
+  lunaRegionalHostOf,
   LUNA_CLAIMS_URL,
   LUNA_GRAPHQL_URL,
   LUNA_ORIGIN_RULE_ID,
@@ -366,6 +367,18 @@ describe('isLunaRedirecting', () => {
     const fetchImpl = vi.fn().mockResolvedValueOnce({ ...response(200, '<html></html>'), type: 'basic' } as Response);
 
     expect(await isLunaRedirecting(fetchImpl)).toBe(false);
+  });
+});
+
+describe('lunaRegionalHostOf', () => {
+  it("reads the regional Luna site a tab ended up on", () => {
+    expect(lunaRegionalHostOf('https://luna.amazon.fr/claims/home?g=s')).toBe('luna.amazon.fr');
+  });
+
+  it('ignores anything that is not a regional Luna site', () => {
+    for (const url of ['https://luna.amazon.com/claims/home', 'https://www.amazon.fr/ap/signin', 'about:blank', '', undefined]) {
+      expect(lunaRegionalHostOf(url)).toBeNull();
+    }
   });
 });
 

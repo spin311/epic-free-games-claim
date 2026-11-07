@@ -39,8 +39,8 @@ export function useOptionalAccess() {
         // What a checkbox shows: its flag AND its hosts granted.
         isOn: (toggle: AccessToggle, flag: boolean) => flag && hasAccessFor(toggle, granted),
         hasGroup: (group: AccessGroup) => granted.has(group),
-        // For a group no toggle needs (see lunaRegional). Call first thing in
-        // the click handler: Firefox only prompts inside the user gesture.
+        // For a group no toggle needs (a regional Luna site). Call first thing
+        // in the click handler: Firefox only prompts inside the user gesture.
         requestGroup: (group: AccessGroup) => {
             browser.permissions.request({ origins: [...ACCESS_GROUP_ORIGINS[group]] })
                 .catch((e) => console.error(`Requesting ${group} access failed:`, e));

@@ -37,7 +37,11 @@ import {
   excludeRecentlyAttempted,
   fetchPrimeLookup,
   isLunaRedirecting,
-  PRIME_REGIONAL_ACCESS_KEY,
+  LUNA_CLAIMS_URL,
+  LUNA_REGION_CHECK_INTERVAL_MS,
+  LUNA_REGION_CHECKED_AT_KEY,
+  lunaRegionalHostOf,
+  PRIME_REGIONAL_HOST_KEY,
   PrimeLookup,
   PrimeOffer,
   selectClaimableOffers,
@@ -78,6 +82,8 @@ import {
   AccessGroup,
   hasAccessFor,
   PENDING_ACCESS_REQUEST_KEY,
+  isLunaRegionalHost,
+  LunaRegionalHost,
   readGrantedAccessGroups,
   toggleToCompleteAfterGrant,
   TOGGLES_ENABLED_WITH,
@@ -912,17 +918,19 @@ export const background = {
     try {
       lookup = await this.loadPrimeLookup();
       await this.recordStoreOk(Platforms.PrimeGaming);
-      await setStorageItem(PRIME_REGIONAL_ACCESS_KEY, false);
+      await setStorageItem(PRIME_REGIONAL_HOST_KEY, null);
+      await setStorageItem(LUNA_REGION_CHECKED_AT_KEY, null);
     } catch (e) {
       // Not the store failing: the user's own access is missing, and the
       // claims page would land on that same regional site, where no script
-      // of ours runs. The popup asks for the access instead.
-      if (await this.needsRegionalLunaAccess(e)) {
-        console.warn("Prime Gaming: Amazon redirects to a regional Luna site this extension has no access to");
+      // of ours runs. The popup asks for that site instead.
+      const regionalHost = await this.missingLunaRegionalHost(e);
+      if (regionalHost) {
+        console.warn(`Prime Gaming: Amazon redirects to ${regionalHost}, which this extension has no access to`);
         // Amazon answered (with the redirect), which is all health tracks; it
         // also clears an older "can't reach" that would contradict the notice.
         await this.recordStoreOk(Platforms.PrimeGaming);
-        await setStorageItem(PRIME_REGIONAL_ACCESS_KEY, true);
+        await setStorageItem(PRIME_REGIONAL_HOST_KEY, regionalHost);
         this.storeFailedThisRun = true;
         return;
       }
@@ -964,16 +972,48 @@ export const background = {
     await setStorageItem("primeGamingLastCheck", now.toISOString());
   },
 
-  // A redirect to an ungranted regional Luna site fails the lookup like a
-  // dropped connection, so only that kind of failure is worth the extra request.
-  async needsRegionalLunaAccess(error: unknown): Promise<boolean> {
-    if (classifyFailure(error) !== "network") return false;
-    if ((await this.readGrantedAccess()).has("lunaRegional")) return false;
+  // The regional Luna site a failed lookup was redirected to, while the
+  // extension has no access to it (null otherwise). Such a redirect fails like
+  // a dropped connection, so only that kind of failure is worth checking.
+  // Never throws: it only decides what the popup offers.
+  async missingLunaRegionalHost(error: unknown): Promise<LunaRegionalHost | null> {
+    if (classifyFailure(error) !== "network") return null;
     try {
-      return await this.isRedirectedToRegionalLuna();
+      if (!(await this.isRedirectedToRegionalLuna())) {
+        // No longer redirected: whatever site was found before is moot.
+        await setStorageItem(PRIME_REGIONAL_HOST_KEY, null);
+        return null;
+      }
+      const granted = await this.readGrantedAccess();
+      const checkedAt = await getStorageItem<string>(LUNA_REGION_CHECKED_AT_KEY);
+      const isRecent = checkedAt !== null && Date.now() - new Date(checkedAt).getTime() < LUNA_REGION_CHECK_INTERVAL_MS;
+      let host: string | null;
+      if (isRecent) {
+        host = await getStorageItem<string>(PRIME_REGIONAL_HOST_KEY);
+      } else {
+        // Stamped first, so a lookup that fails doesn't retry every run either.
+        await setStorageItem(LUNA_REGION_CHECKED_AT_KEY, new Date().toISOString());
+        host = await this.findLunaRedirectHost();
+      }
+      return isLunaRegionalHost(host) && !granted.has(host) ? host : null;
     } catch (e) {
-      console.warn("Prime Gaming: checking for a regional Luna redirect failed:", e);
-      return false;
+      console.warn("Prime Gaming: finding the regional Luna site failed:", e);
+      return null;
+    }
+  },
+
+  // Where luna.amazon.com sends this user. Only a page shows it: a fetch hides
+  // a redirect's target, while the `tabs` permission reads a tab's URL on any
+  // site. The tab is closed again; our Prime Gaming script, if it runs there,
+  // only acts on a message, and none is sent.
+  async findLunaRedirectHost(): Promise<LunaRegionalHost | null> {
+    const tab = await browser.tabs.create({ url: LUNA_CLAIMS_URL, active: false });
+    if (!tab?.id) return null;
+    try {
+      await this.waitForTabToLoad(tab.id);
+      return lunaRegionalHostOf((await browser.tabs.get(tab.id)).url);
+    } finally {
+      await browser.tabs.remove(tab.id).catch(() => undefined);
     }
   },
 

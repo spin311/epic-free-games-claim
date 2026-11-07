@@ -5,6 +5,7 @@ import {
   accessOrigins,
   requestOrigins,
   hasAccessFor,
+  isLunaRegionalHost,
   OPTIONAL_ORIGINS,
   readGrantedAccessGroups,
   PendingAccessRequest,
@@ -70,7 +71,6 @@ describe('requestOrigins', () => {
     'https://www.microsoft.com/store/purchase/buynowui/*',
     'https://legacygames.com/*',
     'https://promo.legacygames.com/*',
-    ...ACCESS_GROUP_ORIGINS.lunaRegional,
   ];
 
   // One prompt for Prime Gaming rather than one per store it can redeem on.
@@ -80,11 +80,19 @@ describe('requestOrigins', () => {
     }
   });
 
-  // Amazon sends a French IP from luna.amazon.com to luna.amazon.fr (3.3.0
-  // report), so a new Prime Gaming user is asked for the regional sites too.
-  it("asks for Amazon's regional Luna sites with Prime Gaming, without needing them", () => {
-    expect(requestOrigins('primeGamingCheck')).toContain('https://luna.amazon.fr/*');
+  // Only a user Amazon redirects needs a regional Luna site, and only their
+  // own one; the popup asks for it once a check has found it.
+  it('asks for no regional Luna site with Prime Gaming', () => {
+    expect(requestOrigins('primeGamingCheck').some((origin) => /luna\.amazon\.(?!com\/)/.test(origin))).toBe(false);
     expect(hasAccessFor('primeGamingCheck', new Set<AccessGroup>(['primeGaming']))).toBe(true);
+  });
+
+  it('gives each regional Luna site a group of its own', () => {
+    expect(ACCESS_GROUP_ORIGINS['luna.amazon.fr']).toEqual(['https://luna.amazon.fr/*']);
+    expect(OPTIONAL_ORIGINS).toContain('https://luna.amazon.de/*');
+    expect(isLunaRegionalHost('luna.amazon.de')).toBe(true);
+    expect(isLunaRegionalHost('luna.amazon.com')).toBe(false);
+    expect(isLunaRegionalHost('www.amazon.fr')).toBe(false);
   });
 
   it('asks only for its own hosts outside Prime Gaming', () => {

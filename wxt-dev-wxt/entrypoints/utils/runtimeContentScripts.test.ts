@@ -83,19 +83,20 @@ describe('planContentScriptSync', () => {
   const idsOf = (scripts: { id: string }[]) => scripts.map((script) => script.id).sort();
 
   // The claims tab of a French user lands on luna.amazon.fr (3.3.0 report).
-  it("adds Amazon's regional Luna sites to the Prime Gaming script once they're granted", () => {
+  it('adds a regional Luna site to the Prime Gaming script once it is granted, and only that one', () => {
     const without = planContentScriptSync(new Set<AccessGroup>(['primeGaming']), []);
-    const withRegional = planContentScriptSync(new Set<AccessGroup>(['primeGaming', 'lunaRegional']), []);
+    const withFrance = planContentScriptSync(new Set<AccessGroup>(['primeGaming', 'luna.amazon.fr']), []);
 
     expect(without.register[0].matches).not.toContain('https://luna.amazon.fr/*');
-    expect(withRegional.register[0].matches).toContain('https://luna.amazon.fr/*');
-    expect(withRegional.register[0].matches).toContain('https://luna.amazon.com/*');
+    expect(withFrance.register[0].matches).toContain('https://luna.amazon.fr/*');
+    expect(withFrance.register[0].matches).toContain('https://luna.amazon.com/*');
+    expect(withFrance.register[0].matches).not.toContain('https://luna.amazon.de/*');
   });
 
-  it('re-registers the Prime Gaming script when regional access is granted later', () => {
+  it('re-registers the Prime Gaming script when a regional site is granted later', () => {
     const registered = [contentScriptRegistration('primegaming')];
 
-    const plan = planContentScriptSync(new Set<AccessGroup>(['primeGaming', 'lunaRegional']), registered);
+    const plan = planContentScriptSync(new Set<AccessGroup>(['primeGaming', 'luna.amazon.fr']), registered);
 
     expect(plan.unregister).toEqual(['primegaming']);
     expect(idsOf(plan.register)).toEqual(['primegaming']);
