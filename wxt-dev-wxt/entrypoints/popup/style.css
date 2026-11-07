@@ -613,6 +613,98 @@ a.health-status:hover {
   }
 }
 
+/* Review prompt card: same surface as the sponsor promo, which it replaces
+   while visible. Light-scheme overrides follow the base rules. */
+.review-prompt {
+  align-self: stretch;
+  margin: 0.75em 1em 0;
+  padding: 0.6em 0.8em;
+  background-color: rgba(255, 255, 255, 0.05);
+  border-radius: 8px;
+  text-align: left;
+}
+
+.review-prompt p {
+  margin: 0;
+  text-align: left;
+}
+
+.review-prompt-title {
+  font-size: 0.95em;
+  font-weight: 600;
+  color: #f0f0f0;
+}
+
+.review-prompt-text {
+  margin-top: 0.2em !important;
+  font-size: 0.85em;
+  line-height: 1.35;
+  color: #c0bbbb;
+}
+
+.review-prompt-actions {
+  display: flex;
+  gap: 0.5em;
+  margin-top: 0.5em;
+}
+
+.review-prompt-actions button {
+  padding: 0.3em 0.9em;
+  font-size: 0.9em;
+  border-radius: 6px;
+  cursor: pointer;
+}
+
+.review-prompt-primary {
+  background-color: #646cff;
+  border: 1px solid #646cff;
+  color: #ffffff;
+}
+
+.review-prompt-secondary {
+  background-color: transparent;
+  border: 1px solid #3d444d;
+  color: inherit;
+}
+
+.review-prompt-report {
+  display: inline-block;
+  margin-top: 0.5em;
+  font-size: 0.75em;
+  color: #8b949e;
+  text-decoration: underline;
+}
+
+.cross-promo {
+  margin: 0 1em 0.6em;
+  font-size: 0.75em;
+  line-height: 1.4;
+  text-align: center;
+  color: #8b949e;
+}
+
+.cross-promo a {
+  color: inherit;
+  text-decoration: underline;
+}
+
+@media (prefers-color-scheme: light) {
+  .review-prompt {
+    background-color: #f6f8fa;
+  }
+  .review-prompt-title,
+  .review-prompt-text {
+    color: #213547;
+  }
+  .review-prompt-secondary {
+    border-color: #d0d7de;
+  }
+  .review-prompt-report,
+  .cross-promo {
+    color: #57606a;
+  }
+}
+
 .footer {
   width: 100%;
   display: flex;
