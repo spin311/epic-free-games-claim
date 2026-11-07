@@ -1,8 +1,9 @@
-import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {setStorageItems} from "@/entrypoints/hooks/useStorage.ts";
 
 export type ReviewPromptAnswer = 'rated' | 'dismissed';
 
 export const REVIEW_PROMPT_KEY = 'reviewPrompt';
+export const REVIEW_PROMPT_ANSWERED_AT_KEY = 'reviewPromptAnsweredAt';
 export const REVIEW_PROMPT_MIN_CLAIMED = 3;
 
 const CHROME_STORE_ID = 'mndghaafpgiinfecbbbcppppiblmjepk';
@@ -42,8 +43,9 @@ export function getCrossPromoUrl(isFirefox: boolean): string {
     return (isFirefox ? PROLIFIC_FIREFOX_URL : PROLIFIC_CHROME_URL) + CROSS_PROMO_UTM;
 }
 
-export async function saveReviewAnswer(answer: ReviewPromptAnswer): Promise<void> {
-    await setStorageItem(REVIEW_PROMPT_KEY, answer);
+// The timestamp (ms) feeds the sponsor milestone's gap after the review ask.
+export async function saveReviewAnswer(answer: ReviewPromptAnswer, now: number = Date.now()): Promise<void> {
+    await setStorageItems({[REVIEW_PROMPT_KEY]: answer, [REVIEW_PROMPT_ANSWERED_AT_KEY]: now});
 }
 
 /**

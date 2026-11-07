@@ -1,50 +1,27 @@
-import {useEffect, useState} from "react";
 import {browser} from '#imports';
-import {getStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {
     getReviewUrl,
-    isReviewPromptAnswer,
     rateAndOpenReviewPage,
-    REVIEW_PROMPT_KEY,
     saveReviewAnswer,
-    shouldShowReviewPrompt,
-    type ReviewPromptAnswer,
 } from "@/entrypoints/utils/reviewPrompt.ts";
 
 const ISSUES_URL = "https://github.com/spin311/epic-free-games-claim/issues/new";
 
 interface Props {
     claimedCount: number;
-    // Lets the parent hide other promos while this card is up.
-    onVisibleChange?: (isVisible: boolean) => void;
+    onAnswered: () => void;
 }
 
-function ReviewPrompt({claimedCount, onVisibleChange}: Props) {
-    // undefined = still reading storage, so an answered card never flashes.
-    const [answer, setAnswer] = useState<ReviewPromptAnswer | null | undefined>(undefined);
-    const env = {isFirefox: import.meta.env.FIREFOX === true, extensionId: browser.runtime.id};
-
-    useEffect(() => {
-        void getStorageItem<unknown>(REVIEW_PROMPT_KEY).then((stored) =>
-            setAnswer(isReviewPromptAnswer(stored) ? stored : null));
-    }, []);
-
-    const isVisible = answer !== undefined && shouldShowReviewPrompt(claimedCount, answer, env);
-
-    useEffect(() => {
-        onVisibleChange?.(isVisible);
-    }, [isVisible, onVisibleChange]);
-
-    if (!isVisible) return null;
-
+// Rendered only when usePromptChoice picked 'review'.
+function ReviewPrompt({claimedCount, onAnswered}: Props) {
     const dismiss = () => {
-        setAnswer('dismissed');
+        onAnswered();
         void saveReviewAnswer('dismissed');
     };
 
     const rate = () => {
-        const url = getReviewUrl(env);
-        setAnswer('rated');
+        const url = getReviewUrl({isFirefox: import.meta.env.FIREFOX === true, extensionId: browser.runtime.id});
+        onAnswered();
         if (url) void rateAndOpenReviewPage(url, (target) => browser.tabs.create({url: target}));
         else void saveReviewAnswer('rated');
     };
