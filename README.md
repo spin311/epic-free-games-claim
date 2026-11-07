@@ -85,7 +85,7 @@ Please follow conventional code styles and test new version before submitting pu
 
 ## License
 
-MIT
+GPL-3.0
 
 
 
