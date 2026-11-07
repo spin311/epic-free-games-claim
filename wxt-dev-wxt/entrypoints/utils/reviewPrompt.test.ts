@@ -1,8 +1,13 @@
-import { describe, it, expect } from 'vitest';
+// @vitest-environment node
+import { describe, it, expect, beforeEach } from 'vitest';
+import { fakeBrowser } from 'wxt/testing';
+import { getStorageItem } from '@/entrypoints/hooks/useStorage';
 import {
   getCrossPromoUrl,
   getReviewUrl,
   shouldShowReviewPrompt,
+  rateAndOpenReviewPage,
+  saveReviewAnswer,
   REVIEW_PROMPT_MIN_CLAIMED,
 } from './reviewPrompt';
 
@@ -63,5 +68,37 @@ describe('getCrossPromoUrl', () => {
     expect(getCrossPromoUrl(false)).toBe(
       'https://chromewebstore.google.com/detail/prolific-studies-notifier/mlicfddkgjkeajfgkihplfbgpmbonbao?utm_source=epic-free-games-claim-popup&utm_medium=cross-promo',
     );
+  });
+});
+
+describe('review answer persistence', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  it('has stored "rated" by the time the review tab opens', async () => {
+    let storedWhenOpened: unknown = 'never opened';
+
+    await rateAndOpenReviewPage('https://example.test/reviews', async () => {
+      storedWhenOpened = await getStorageItem('reviewPrompt');
+    });
+
+    expect(storedWhenOpened).toBe('rated');
+  });
+
+  it('still opens the tab when saving fails', async () => {
+    let opened = false;
+    const original = fakeBrowser.storage.local.set;
+    fakeBrowser.storage.local.set = () => Promise.reject(new Error('quota'));
+
+    await rateAndOpenReviewPage('https://example.test', async () => { opened = true; });
+
+    fakeBrowser.storage.local.set = original;
+    expect(opened).toBe(true);
+  });
+
+  it('stores "dismissed"', async () => {
+    await saveReviewAnswer('dismissed');
+    expect(await getStorageItem('reviewPrompt')).toBe('dismissed');
   });
 });

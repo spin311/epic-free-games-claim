@@ -1,3 +1,5 @@
+import {setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+
 export type ReviewPromptAnswer = 'rated' | 'dismissed';
 
 export const REVIEW_PROMPT_KEY = 'reviewPrompt';
@@ -38,4 +40,22 @@ export function shouldShowReviewPrompt(claimedCount: number, answer: unknown, en
 
 export function getCrossPromoUrl(isFirefox: boolean): string {
     return (isFirefox ? PROLIFIC_FIREFOX_URL : PROLIFIC_CHROME_URL) + CROSS_PROMO_UTM;
+}
+
+export async function saveReviewAnswer(answer: ReviewPromptAnswer): Promise<void> {
+    await setStorageItem(REVIEW_PROMPT_KEY, answer);
+}
+
+/**
+ * Stores 'rated' BEFORE opening the review tab: the popup can close the moment
+ * the tab takes focus, which would drop a write issued after it.
+ */
+export async function rateAndOpenReviewPage(url: string, openTab: (url: string) => Promise<unknown>): Promise<void> {
+    try {
+        await saveReviewAnswer('rated');
+    } catch (error) {
+        // A failed write must not eat the click; the card may just ask again.
+        console.error('Could not store the review answer', error);
+    }
+    await openTab(url);
 }

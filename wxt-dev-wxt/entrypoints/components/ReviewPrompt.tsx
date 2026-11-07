@@ -1,10 +1,12 @@
 import {useEffect, useState} from "react";
 import {browser} from '#imports';
-import {getStorageItem, setStorageItem} from "@/entrypoints/hooks/useStorage.ts";
+import {getStorageItem} from "@/entrypoints/hooks/useStorage.ts";
 import {
     getReviewUrl,
     isReviewPromptAnswer,
+    rateAndOpenReviewPage,
     REVIEW_PROMPT_KEY,
+    saveReviewAnswer,
     shouldShowReviewPrompt,
     type ReviewPromptAnswer,
 } from "@/entrypoints/utils/reviewPrompt.ts";
@@ -35,15 +37,16 @@ function ReviewPrompt({claimedCount, onVisibleChange}: Props) {
 
     if (!isVisible) return null;
 
-    const answerWith = (next: ReviewPromptAnswer) => {
-        setAnswer(next);
-        void setStorageItem(REVIEW_PROMPT_KEY, next);
+    const dismiss = () => {
+        setAnswer('dismissed');
+        void saveReviewAnswer('dismissed');
     };
 
     const rate = () => {
         const url = getReviewUrl(env);
-        if (url) void browser.tabs.create({url});
-        answerWith('rated');
+        setAnswer('rated');
+        if (url) void rateAndOpenReviewPage(url, (target) => browser.tabs.create({url: target}));
+        else void saveReviewAnswer('rated');
     };
 
     return <div className="review-prompt">
@@ -53,7 +56,7 @@ function ReviewPrompt({claimedCount, onVisibleChange}: Props) {
         </p>
         <div className="review-prompt-actions">
             <button className="review-prompt-primary" onClick={rate}>Rate it</button>
-            <button className="review-prompt-secondary" onClick={() => answerWith('dismissed')}>Not now</button>
+            <button className="review-prompt-secondary" onClick={dismiss}>Not now</button>
         </div>
         <a href={ISSUES_URL} className="review-prompt-report" target="_blank" rel="noopener noreferrer">
             Something not working? Report it
