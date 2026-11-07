@@ -47,9 +47,10 @@ export default defineConfig({
       await rm(join(wxt.config.root, 'LICENSE'), { force: true });
     },
     'build:done': async (wxt) => {
-      // From the sources zip (reviewers rebuild there) LICENSE sits in the root.
-      const repoLicense = join(wxt.config.root, '..', 'LICENSE');
-      const license = existsSync(repoLicense) ? repoLicense : join(wxt.config.root, 'LICENSE');
+      // In the sources zip (where reviewers rebuild) LICENSE sits in the root;
+      // in the repo it is one level up.
+      const ownLicense = join(wxt.config.root, 'LICENSE');
+      const license = existsSync(ownLicense) ? ownLicense : join(wxt.config.root, '..', 'LICENSE');
       await copyFile(license, join(wxt.config.outDir, 'LICENSE'));
     },
     // WXT adds every runtime content script's matches to host_permissions;
