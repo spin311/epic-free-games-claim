@@ -675,19 +675,6 @@ a.health-status:hover {
   text-decoration: underline;
 }
 
-.cross-promo {
-  margin: 0 1em 0.6em;
-  font-size: 0.75em;
-  line-height: 1.4;
-  text-align: center;
-  color: #8b949e;
-}
-
-.cross-promo a {
-  color: inherit;
-  text-decoration: underline;
-}
-
 @media (prefers-color-scheme: light) {
   .review-prompt {
     background-color: #f6f8fa;
@@ -699,8 +686,7 @@ a.health-status:hover {
   .review-prompt-secondary {
     border-color: #d0d7de;
   }
-  .review-prompt-report,
-  .cross-promo {
+  .review-prompt-report {
     color: #57606a;
   }
 }

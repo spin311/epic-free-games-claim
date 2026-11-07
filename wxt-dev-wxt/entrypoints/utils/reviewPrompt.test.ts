@@ -3,7 +3,6 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { fakeBrowser } from 'wxt/testing';
 import { getStorageItem } from '@/entrypoints/hooks/useStorage';
 import {
-  getCrossPromoUrl,
   getReviewUrl,
   shouldShowReviewPrompt,
   rateAndOpenReviewPage,
@@ -54,20 +53,6 @@ describe('shouldShowReviewPrompt', () => {
   it('ignores unknown stored values and non-numeric counts', () => {
     expect(shouldShowReviewPrompt(5, 'garbage', chrome)).toBe(true);
     expect(shouldShowReviewPrompt(NaN, null, chrome)).toBe(false);
-  });
-});
-
-describe('getCrossPromoUrl', () => {
-  it('links the AMO listing on Firefox with UTM tags', () => {
-    expect(getCrossPromoUrl(true)).toBe(
-      'https://addons.mozilla.org/firefox/addon/prolific-studies-notifier/?utm_source=epic-free-games-claim-popup&utm_medium=cross-promo',
-    );
-  });
-
-  it('links the Chrome Web Store listing otherwise with UTM tags', () => {
-    expect(getCrossPromoUrl(false)).toBe(
-      'https://chromewebstore.google.com/detail/prolific-studies-notifier/mlicfddkgjkeajfgkihplfbgpmbonbao?utm_source=epic-free-games-claim-popup&utm_medium=cross-promo',
-    );
   });
 });
 

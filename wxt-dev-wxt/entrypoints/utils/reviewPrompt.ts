@@ -10,10 +10,6 @@ const CHROME_STORE_ID = 'mndghaafpgiinfecbbbcppppiblmjepk';
 const FIREFOX_REVIEW_URL = 'https://addons.mozilla.org/firefox/addon/free-game-claime-steam-epic/reviews/';
 const CHROME_REVIEW_URL = `https://chromewebstore.google.com/detail/free-game-claimer-for-ste/${CHROME_STORE_ID}/reviews`;
 
-const PROLIFIC_FIREFOX_URL = 'https://addons.mozilla.org/firefox/addon/prolific-studies-notifier/';
-const PROLIFIC_CHROME_URL = 'https://chromewebstore.google.com/detail/prolific-studies-notifier/mlicfddkgjkeajfgkihplfbgpmbonbao';
-const CROSS_PROMO_UTM = '?utm_source=epic-free-games-claim-popup&utm_medium=cross-promo';
-
 export interface ReviewEnv {
     isFirefox: boolean;
     extensionId: string;
@@ -37,10 +33,6 @@ export function shouldShowReviewPrompt(claimedCount: number, answer: unknown, en
     if (isReviewPromptAnswer(answer)) return false;
     if (!Number.isFinite(claimedCount) || claimedCount < REVIEW_PROMPT_MIN_CLAIMED) return false;
     return getReviewUrl(env) !== null;
-}
-
-export function getCrossPromoUrl(isFirefox: boolean): string {
-    return (isFirefox ? PROLIFIC_FIREFOX_URL : PROLIFIC_CHROME_URL) + CROSS_PROMO_UTM;
 }
 
 // The timestamp (ms) feeds the sponsor milestone's gap after the review ask.
