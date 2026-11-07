@@ -5,6 +5,7 @@ import {
   excludeRecentlyAttempted,
   extractCsrfToken,
   fetchPrimeLookup,
+  isLunaRedirecting,
   LUNA_CLAIMS_URL,
   LUNA_GRAPHQL_URL,
   LUNA_ORIGIN_RULE_ID,
@@ -15,6 +16,7 @@ import {
   updateClaimAttempts,
 } from './primeGamingApi';
 import { Platforms } from '@/entrypoints/enums/platforms.ts';
+import { StoreChangedError } from '@/entrypoints/utils/network.ts';
 
 // Shapes below mirror a live OffersContext response (Oct 2026), trimmed.
 function item(overrides: { title?: string; slug?: string; id?: string; eligibility?: unknown[]; endTime?: string } = {}) {
@@ -45,10 +47,12 @@ function payload(items: unknown[], currentUser: unknown = PRIME_MEMBER) {
   return { data: { currentUser, games: { items } } };
 }
 
-function response(status: number, body: unknown) {
+// `url` is where the request ended up after redirects ('' when it wasn't redirected).
+function response(status: number, body: unknown, url = '') {
   return {
     ok: status >= 200 && status < 300,
     status,
+    url,
     text: () => Promise.resolve(typeof body === 'string' ? body : JSON.stringify(body)),
   } as Response;
 }
@@ -276,6 +280,26 @@ describe('fetchPrimeLookup', () => {
     }));
   });
 
+  // Confirmed live through a French VPN (Nov 2026): luna.amazon.com redirects
+  // to luna.amazon.fr, whose GraphQL answers the same query.
+  it('queries GraphQL on the regional Luna site Amazon redirected to', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response(200, html, 'https://luna.amazon.fr/claims/home?g=s'))
+      .mockResolvedValueOnce(response(200, payload([item()])));
+
+    await fetchPrimeLookup(fetchImpl);
+
+    expect(fetchImpl).toHaveBeenNthCalledWith(2, 'https://luna.amazon.fr/graphql', expect.anything());
+  });
+
+  it('throws when the claims page ends up outside Luna', async () => {
+    const fetchImpl = vi.fn()
+      .mockResolvedValueOnce(response(200, html, 'https://www.amazon.fr/ap/signin?openid.return_to=x'));
+
+    await expect(fetchPrimeLookup(fetchImpl)).rejects.toBeInstanceOf(StoreChangedError);
+    expect(fetchImpl).toHaveBeenCalledTimes(1);
+  });
+
   it('bounds both requests with a timeout', async () => {
     const fetchImpl = vi.fn()
       .mockResolvedValueOnce(response(200, html))
@@ -328,6 +352,23 @@ describe('fetchPrimeLookup', () => {
   });
 });
 
+describe('isLunaRedirecting', () => {
+  // Without access to the regional site, following the redirect fails like a
+  // dropped connection; not following it shows the redirect itself.
+  it('asks without following redirects and reports one', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({ type: 'opaqueredirect', status: 0, ok: false } as Response);
+
+    expect(await isLunaRedirecting(fetchImpl)).toBe(true);
+    expect(fetchImpl).toHaveBeenCalledWith(LUNA_CLAIMS_URL, expect.objectContaining({ redirect: 'manual', credentials: 'include' }));
+  });
+
+  it('reports no redirect when the claims page answers itself', async () => {
+    const fetchImpl = vi.fn().mockResolvedValueOnce({ ...response(200, '<html></html>'), type: 'basic' } as Response);
+
+    expect(await isLunaRedirecting(fetchImpl)).toBe(false);
+  });
+});
+
 describe('ensureLunaOriginRule', () => {
   it("(re)installs a session rule that sets Luna's Origin on this extension's GraphQL requests only", async () => {
     const updateSessionRules = vi.fn().mockResolvedValue(undefined);
@@ -335,8 +376,8 @@ describe('ensureLunaOriginRule', () => {
     await ensureLunaOriginRule({ updateSessionRules }, 'abcdefghijklmnop');
 
     expect(updateSessionRules).toHaveBeenCalledWith({
-      removeRuleIds: [LUNA_ORIGIN_RULE_ID],
-      addRules: [expect.objectContaining({
+      removeRuleIds: expect.arrayContaining([LUNA_ORIGIN_RULE_ID]),
+      addRules: expect.arrayContaining([expect.objectContaining({
         id: LUNA_ORIGIN_RULE_ID,
         action: {
           type: 'modifyHeaders',
@@ -346,8 +387,23 @@ describe('ensureLunaOriginRule', () => {
           urlFilter: `|${LUNA_GRAPHQL_URL}|`,
           initiatorDomains: ['abcdefghijklmnop'],
         }),
-      })],
+      })]),
     });
+  });
+
+  // Each regional site's GraphQL only accepts its own Origin.
+  it('sets each regional Luna site its own Origin', async () => {
+    const updateSessionRules = vi.fn().mockResolvedValue(undefined);
+
+    await ensureLunaOriginRule({ updateSessionRules }, 'abcdefghijklmnop');
+
+    const { removeRuleIds, addRules } = updateSessionRules.mock.calls[0][0];
+    const frRule = addRules.find((rule: { condition: { urlFilter: string } }) =>
+        rule.condition.urlFilter === '|https://luna.amazon.fr/graphql|');
+    expect(frRule.action.requestHeaders).toEqual([{ header: 'origin', operation: 'set', value: 'https://luna.amazon.fr' }]);
+    expect(frRule.condition.initiatorDomains).toEqual(['abcdefghijklmnop']);
+    expect(new Set(addRules.map((rule: { id: number }) => rule.id)).size).toBe(addRules.length);
+    expect([...removeRuleIds].sort()).toEqual(addRules.map((rule: { id: number }) => rule.id).sort());
   });
 
   it('throws when the browser has no declarativeNetRequest support', async () => {

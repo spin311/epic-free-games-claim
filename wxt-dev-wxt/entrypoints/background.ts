@@ -36,6 +36,8 @@ import {
   ensureLunaOriginRule,
   excludeRecentlyAttempted,
   fetchPrimeLookup,
+  isLunaRedirecting,
+  PRIME_REGIONAL_ACCESS_KEY,
   PrimeLookup,
   PrimeOffer,
   selectClaimableOffers,
@@ -910,7 +912,20 @@ export const background = {
     try {
       lookup = await this.loadPrimeLookup();
       await this.recordStoreOk(Platforms.PrimeGaming);
+      await setStorageItem(PRIME_REGIONAL_ACCESS_KEY, false);
     } catch (e) {
+      // Not the store failing: the user's own access is missing, and the
+      // claims page would land on that same regional site, where no script
+      // of ours runs. The popup asks for the access instead.
+      if (await this.needsRegionalLunaAccess(e)) {
+        console.warn("Prime Gaming: Amazon redirects to a regional Luna site this extension has no access to");
+        // Amazon answered (with the redirect), which is all health tracks; it
+        // also clears an older "can't reach" that would contradict the notice.
+        await this.recordStoreOk(Platforms.PrimeGaming);
+        await setStorageItem(PRIME_REGIONAL_ACCESS_KEY, true);
+        this.storeFailedThisRun = true;
+        return;
+      }
       // Recorded even though the claims page below may still work: the
       // lookup is what the extension relies on, so its breaking is news.
       console.warn("Prime Gaming background lookup failed; falling back to the claims page");
@@ -947,6 +962,24 @@ export const background = {
     // the next due check must still retry rather than silently skipping ahead.
     await this.openTabAndSendActionToContent(PRIME_GAMING_HOME_URL, "getFreeGames");
     await setStorageItem("primeGamingLastCheck", now.toISOString());
+  },
+
+  // A redirect to an ungranted regional Luna site fails the lookup like a
+  // dropped connection, so only that kind of failure is worth the extra request.
+  async needsRegionalLunaAccess(error: unknown): Promise<boolean> {
+    if (classifyFailure(error) !== "network") return false;
+    if ((await this.readGrantedAccess()).has("lunaRegional")) return false;
+    try {
+      return await this.isRedirectedToRegionalLuna();
+    } catch (e) {
+      console.warn("Prime Gaming: checking for a regional Luna redirect failed:", e);
+      return false;
+    }
+  },
+
+  // Separate so tests can stand in for the network.
+  isRedirectedToRegionalLuna(): Promise<boolean> {
+    return isLunaRedirecting((input, init) => this.fetchStore(input, init));
   },
 
   // Separate from claimPrimeOffers so tests can stand in for the network +

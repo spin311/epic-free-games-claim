@@ -8,12 +8,23 @@
 // must stay free of runtime imports (no `browser`, no `@/` alias): the browser
 // APIs are passed in by the caller instead.
 
-export type AccessGroup = "gog" | "indieGala" | "primeGaming" | "microsoft" | "legacyGames";
+export type AccessGroup = "gog" | "indieGala" | "primeGaming" | "lunaRegional" | "microsoft" | "legacyGames";
+
+// Amazon sends a visitor from luna.amazon.com to their country's Luna site,
+// by IP (a French one lands on luna.amazon.fr; confirmed Nov 2026). These are
+// the sites that answered a foreign IP with that geo redirect (`?g=s`).
+export const LUNA_REGIONAL_HOSTS: readonly string[] = [
+  "luna.amazon.fr", "luna.amazon.de", "luna.amazon.co.uk", "luna.amazon.it", "luna.amazon.es",
+  "luna.amazon.ca", "luna.amazon.nl", "luna.amazon.com.be", "luna.amazon.pl", "luna.amazon.se",
+];
 
 export const ACCESS_GROUP_ORIGINS: Readonly<Record<AccessGroup, readonly string[]>> = {
   gog: ["https://www.gog.com/*"],
   indieGala: ["https://freebies.indiegala.com/*", "https://www.indiegala.com/*"],
   primeGaming: ["https://gaming.amazon.com/*", "https://luna.amazon.com/*"],
+  // Requested along with Prime Gaming but never required by it: most users
+  // are never redirected (see LUNA_REGIONAL_HOSTS).
+  lunaRegional: LUNA_REGIONAL_HOSTS.map((host) => `https://${host}/*`),
   // The account.microsoft.com redeem page embeds the actual redeem form as a
   // cross-origin iframe on this separate host — confirmed live.
   microsoft: ["https://account.microsoft.com/*", "https://www.microsoft.com/store/purchase/buynowui/*"],
@@ -66,12 +77,13 @@ const PRIME_GAMING_GROUPS: readonly AccessGroup[] = [...new Set(
 
 // What turning a toggle on asks for. Any Prime Gaming toggle asks for every
 // Prime Gaming store at once, so enabling it is one prompt rather than one per
-// store option. What each toggle *needs* stays per store (hasAccessFor), so a
-// site removed later in the browser's settings switches off only the options
-// that depend on it.
+// store option, and it includes Amazon's regional Luna sites, which no toggle
+// needs. What each toggle *needs* stays per store (hasAccessFor), so a site
+// removed later in the browser's settings switches off only the options that
+// depend on it.
 export function requestOrigins(toggle: AccessToggle): string[] {
   const groups: readonly AccessGroup[] = TOGGLE_ACCESS_GROUPS[toggle];
-  return originsOf(groups.includes("primeGaming") ? PRIME_GAMING_GROUPS : groups);
+  return originsOf(groups.includes("primeGaming") ? [...PRIME_GAMING_GROUPS, "lunaRegional"] : groups);
 }
 
 type OriginPermissions = { origins?: string[] };

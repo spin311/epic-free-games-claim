@@ -1,5 +1,6 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
-import { assertStoreOk } from "@/entrypoints/utils/network.ts";
+import { assertStoreOk, StoreChangedError } from "@/entrypoints/utils/network.ts";
+import { LUNA_REGIONAL_HOSTS } from "@/entrypoints/utils/optionalAccess.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import {
   detectExternalPlatform,
@@ -19,6 +20,15 @@ export const LUNA_GRAPHQL_URL = "https://luna.amazon.com/graphql";
 const LUNA_ORIGIN = "https://luna.amazon.com";
 const LUNA_CLAIM_BASE = "https://luna.amazon.com/claims";
 const REQUEST_TIMEOUT_MS = 15_000;
+// Every Luna site a lookup can end up on. A regional one serves the same
+// claims page and GraphQL query as luna.amazon.com (confirmed on
+// luna.amazon.fr through a French VPN, Nov 2026). Claim links stay on
+// luna.amazon.com: Amazon redirects those too, keeping their path.
+const LUNA_HOSTS: readonly string[] = ["luna.amazon.com", ...LUNA_REGIONAL_HOSTS];
+
+// Set while Amazon redirects this user to a regional Luna site the extension
+// has no access to yet; the popup then asks for it (see isLunaRedirecting).
+export const PRIME_REGIONAL_ACCESS_KEY = "primeGamingNeedsRegionalAccess";
 
 // Confirmed live: these exact selections return per-user eligibility.
 // Trimmed variants (e.g. a literal pageSize, no operation name) came back
@@ -242,10 +252,12 @@ export function updateClaimAttempts(
 export async function fetchPrimeLookup(fetchImpl: typeof fetch = fetch): Promise<PrimeLookup> {
   const page = await fetchImpl(LUNA_CLAIMS_URL, { credentials: "include", signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS) });
   assertStoreOk(page, "Luna's claims page");
+  // The csrf token only works on the site that issued it.
+  const lunaOrigin = lunaOriginOf(page);
   const csrfToken = extractCsrfToken(await page.text());
   if (!csrfToken) throw new Error("Luna claims page had no csrf token");
 
-  const response = await fetchImpl(LUNA_GRAPHQL_URL, {
+  const response = await fetchImpl(`${lunaOrigin}/graphql`, {
     method: "POST",
     credentials: "include",
     signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
@@ -261,6 +273,29 @@ export async function fetchPrimeLookup(fetchImpl: typeof fetch = fetch): Promise
   return parsePrimeLookup(JSON.parse(await response.text()));
 }
 
+// The Luna site the claims page request ended up on. An empty url means the
+// response wasn't redirected (it's empty only on a constructed Response).
+function lunaOriginOf(page: Response): string {
+  if (!page.url) return LUNA_ORIGIN;
+  const { host } = new URL(page.url);
+  if (!LUNA_HOSTS.includes(host)) throw new StoreChangedError(`Luna's claims page ended up on ${host}`);
+  return `https://${host}`;
+}
+
+// Whether luna.amazon.com sends this user to another site. Asked without
+// following the redirect: following it to a regional site the extension has
+// no access to fails like a dropped connection, while this shows the redirect
+// itself (an "opaqueredirect" response, whose target stays hidden).
+export async function isLunaRedirecting(fetchImpl: typeof fetch = fetch): Promise<boolean> {
+  const response = await fetchImpl(LUNA_CLAIMS_URL, {
+    credentials: "include",
+    redirect: "manual",
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS),
+  });
+  return response.type === "opaqueredirect";
+}
+
+// luna.amazon.com's rule keeps id 1; the regional sites follow it.
 export const LUNA_ORIGIN_RULE_ID = 1;
 
 type SessionRulesApi = {
@@ -272,7 +307,7 @@ type SessionRulesApi = {
 // this extension's own requests only (initiatorDomains), never for any
 // website's, so it can't widen what other pages can do against Luna. Session
 // rules don't survive a browser restart, so this is (re)installed before
-// every lookup; replacing the rule by id keeps that idempotent.
+// every lookup; replacing the rules by id keeps that idempotent.
 export async function ensureLunaOriginRule(
     dnr: SessionRulesApi | undefined,
     extensionHost: string
@@ -280,19 +315,21 @@ export async function ensureLunaOriginRule(
   if (!dnr?.updateSessionRules) throw new Error("declarativeNetRequest is unavailable in this browser");
   // The values are the spec's wire strings; WXT's generated typings model
   // them as ambient enums that can't be referenced as values, hence the cast.
-  const rule = {
-    id: LUNA_ORIGIN_RULE_ID,
+  // A rule only applies on a site the extension has access to, so the
+  // regional ones lie idle until they're granted.
+  const rules = LUNA_HOSTS.map((host, index) => ({
+    id: LUNA_ORIGIN_RULE_ID + index,
     priority: 1,
     action: {
       type: "modifyHeaders",
-      requestHeaders: [{ header: "origin", operation: "set", value: LUNA_ORIGIN }],
+      requestHeaders: [{ header: "origin", operation: "set", value: `https://${host}` }],
     },
     condition: {
-      urlFilter: `|${LUNA_GRAPHQL_URL}|`,
+      urlFilter: `|https://${host}/graphql|`,
       initiatorDomains: [extensionHost],
       resourceTypes: ["xmlhttprequest"],
       requestMethods: ["post"],
     },
-  } as unknown as Browser.declarativeNetRequest.Rule;
-  await dnr.updateSessionRules({ removeRuleIds: [LUNA_ORIGIN_RULE_ID], addRules: [rule] });
+  })) as unknown as Browser.declarativeNetRequest.Rule[];
+  await dnr.updateSessionRules({ removeRuleIds: rules.map((rule) => rule.id), addRules: rules });
 }

@@ -15,6 +15,7 @@ import { AccessGroup } from '../utils/optionalAccess';
 import { fetchWithRetry } from '../utils/network';
 import { activeProblem, HEALTH_KEYS, healthKey, PlatformHealth, recordHealthError } from '../utils/health';
 import { NetworkError, StoreChangedError } from '../utils/network';
+import { PRIME_REGIONAL_ACCESS_KEY } from '../utils/primeGamingApi';
 
 // fake-browser implements neither `permissions` nor `scripting`. Every optional
 // host reads as granted by default, so the suites below run with the full
@@ -485,6 +486,61 @@ describe('claimPrimeOffers', () => {
 describe('checkPrimeGaming fallback (API lookup failed)', () => {
   beforeEach(() => {
     fakeBrowser.reset();
+  });
+
+  // Regression (3.3.0 report, France): luna.amazon.com redirected to
+  // luna.amazon.fr, outside the granted hosts, so every lookup failed as
+  // "Can't reach store" and the claims tab landed where no script runs.
+  describe('when Amazon redirects to a regional Luna site that is not granted', () => {
+    function regionalRunner(isRedirecting: boolean) {
+      const opened: string[] = [];
+      const runner = Object.create(background);
+      withAccess(runner, ['primeGaming']);
+      runner.loadPrimeLookup = async () => { throw new NetworkError('Failed to fetch'); };
+      runner.isRedirectedToRegionalLuna = async () => isRedirecting;
+      runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+      return { runner, opened };
+    }
+
+    it('asks for access instead of reporting the store unreachable or opening a dead tab', async () => {
+      // What 3.3.0 left behind for these users: it would show next to the notice.
+      await recordHealthError(Platforms.PrimeGaming, 'network', 'signal timed out', new Date(Date.now() - 60_000));
+      const { runner, opened } = regionalRunner(true);
+
+      await runner.checkPrimeGaming(true);
+
+      expect(opened).toEqual([]);
+      expect(await getStorageItem(PRIME_REGIONAL_ACCESS_KEY)).toBe(true);
+      expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.PrimeGaming]))).toBeNull();
+    });
+
+    it('keeps the usual fallback when Amazon is not redirecting', async () => {
+      const { runner, opened } = regionalRunner(false);
+
+      await runner.checkPrimeGaming(true);
+
+      expect(opened).toEqual([PRIME_GAMING_HOME_URL]);
+      expect(await getStorageItem(PRIME_REGIONAL_ACCESS_KEY)).not.toBe(true);
+    });
+
+    it('does not check for a redirect once the regional sites are granted', async () => {
+      const { runner } = regionalRunner(true);
+      withAccess(runner, ['primeGaming', 'lunaRegional']);
+
+      await runner.checkPrimeGaming(true);
+
+      expect(await getStorageItem(PRIME_REGIONAL_ACCESS_KEY)).not.toBe(true);
+    });
+
+    it('clears the request once a lookup gets through', async () => {
+      await setStorageItem(PRIME_REGIONAL_ACCESS_KEY, true);
+      const runner = Object.create(background);
+      runner.loadPrimeLookup = async () => ({ status: 'signed-out' });
+
+      await runner.checkPrimeGaming(true);
+
+      expect(await getStorageItem(PRIME_REGIONAL_ACCESS_KEY)).toBe(false);
+    });
   });
 
   it('does nothing when disabled', async () => {

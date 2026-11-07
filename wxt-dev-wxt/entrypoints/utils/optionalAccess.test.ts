@@ -70,6 +70,7 @@ describe('requestOrigins', () => {
     'https://www.microsoft.com/store/purchase/buynowui/*',
     'https://legacygames.com/*',
     'https://promo.legacygames.com/*',
+    ...ACCESS_GROUP_ORIGINS.lunaRegional,
   ];
 
   // One prompt for Prime Gaming rather than one per store it can redeem on.
@@ -77,6 +78,13 @@ describe('requestOrigins', () => {
     for (const toggle of ['primeGamingCheck', 'primeGamingClaimEpic', 'primeGamingClaimGog', 'primeGamingClaimLegacy'] as const) {
       expect([...requestOrigins(toggle)].sort()).toEqual([...PRIME_BUNDLE].sort());
     }
+  });
+
+  // Amazon sends a French IP from luna.amazon.com to luna.amazon.fr (3.3.0
+  // report), so a new Prime Gaming user is asked for the regional sites too.
+  it("asks for Amazon's regional Luna sites with Prime Gaming, without needing them", () => {
+    expect(requestOrigins('primeGamingCheck')).toContain('https://luna.amazon.fr/*');
+    expect(hasAccessFor('primeGamingCheck', new Set<AccessGroup>(['primeGaming']))).toBe(true);
   });
 
   it('asks only for its own hosts outside Prime Gaming', () => {

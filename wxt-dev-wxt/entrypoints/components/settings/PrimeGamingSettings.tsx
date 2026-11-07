@@ -6,6 +6,7 @@ import { useOptionalAccess } from "@/entrypoints/hooks/useOptionalAccess.ts";
 import { LOGIN_STATE_KEYS, LoginState, PRIME_MEMBERSHIP_KEY } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { EXTERNAL_PLATFORM_DEFAULTS, EXTERNAL_PLATFORM_STORAGE_KEYS } from "@/entrypoints/utils/primeGamingGiveaway.ts";
+import { PRIME_REGIONAL_ACCESS_KEY } from "@/entrypoints/utils/primeGamingApi.ts";
 import { LEGACY_EMAIL_STORAGE_KEY, normalizeEmail } from "@/entrypoints/utils/legacyGamesRedeem.ts";
 
 function PrimeGamingSettings() {
@@ -37,6 +38,10 @@ function PrimeGamingSettings() {
     // Live and read-only: a store visit can record it while the popup is open.
     const primeGamingLoggedIn = useStorageValue<LoginState>(LOGIN_STATE_KEYS[Platforms.PrimeGaming]);
     const [hasPrime] = useStorage<boolean | null>(PRIME_MEMBERSHIP_KEY, null);
+    // Amazon sends this user to their country's Luna site (e.g. luna.amazon.fr),
+    // which Prime Gaming was turned on without: shown until it's granted.
+    const isRegionalAccessNeeded = useStorageValue<boolean>(PRIME_REGIONAL_ACCESS_KEY) === true
+        && !access.hasGroup("lunaRegional");
     const primeWarning = hasPrime === false
         ? { label: "No Prime", title: "Signed in, but this Amazon account has no Prime membership, so Prime Gaming offers can't be claimed." }
         : null;
@@ -46,6 +51,15 @@ function PrimeGamingSettings() {
             <Checkbox name="Prime Gaming" checked={isPrimeOn} onChange={e => access.setWithAccess("primeGamingCheck", e.target.checked, setPrimeGamingCheck)}
                       trailing={isPrimeOn && <><HealthStatus platform={Platforms.PrimeGaming}/><LoginStatus state={primeGamingLoggedIn} loginUrl="https://gaming.amazon.com/home" platform={Platforms.PrimeGaming}
                                                    accountWarning={primeWarning}/></>}/>
+            {isPrimeOn && isRegionalAccessNeeded && (
+                <p className="hint regional-access">
+                    Amazon sends you to your country's Luna site.{" "}
+                    <button type="button" className="link-button" onClick={() => access.requestGroup("lunaRegional")}>
+                        Allow access
+                    </button>{" "}
+                    so Prime Gaming games can be claimed there.
+                </p>
+            )}
             {isPrimeOn && (
                 <div className="sub-options">
                     <p className="hint">Claim offers that go to:</p>

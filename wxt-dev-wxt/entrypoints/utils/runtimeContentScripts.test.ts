@@ -38,12 +38,19 @@ describe('RUNTIME_CONTENT_SCRIPTS', () => {
         const isCovered = origins.some((origin) => match.startsWith(origin.replace(/\*$/, '')));
         expect(isCovered, `${match} is outside the ${script.group} group`).toBe(true);
       }
+      for (const extra of script.extraMatches ?? []) {
+        for (const match of extra.matches) {
+          const isCovered = ACCESS_GROUP_ORIGINS[extra.group].some((origin) => match.startsWith(origin.replace(/\*$/, '')));
+          expect(isCovered, `${match} is outside the ${extra.group} group`).toBe(true);
+        }
+      }
     }
   });
 
   it('lists every runtime match pattern for the manifest hook', () => {
     expect(RUNTIME_CONTENT_SCRIPT_MATCHES).toContain('https://account.microsoft.com/billing/redeem*');
     expect(RUNTIME_CONTENT_SCRIPT_MATCHES).toContain('https://www.gog.com/*');
+    expect(RUNTIME_CONTENT_SCRIPT_MATCHES).toContain('https://luna.amazon.fr/*');
   });
 });
 
@@ -74,6 +81,25 @@ describe('contentScriptRegistration', () => {
 
 describe('planContentScriptSync', () => {
   const idsOf = (scripts: { id: string }[]) => scripts.map((script) => script.id).sort();
+
+  // The claims tab of a French user lands on luna.amazon.fr (3.3.0 report).
+  it("adds Amazon's regional Luna sites to the Prime Gaming script once they're granted", () => {
+    const without = planContentScriptSync(new Set<AccessGroup>(['primeGaming']), []);
+    const withRegional = planContentScriptSync(new Set<AccessGroup>(['primeGaming', 'lunaRegional']), []);
+
+    expect(without.register[0].matches).not.toContain('https://luna.amazon.fr/*');
+    expect(withRegional.register[0].matches).toContain('https://luna.amazon.fr/*');
+    expect(withRegional.register[0].matches).toContain('https://luna.amazon.com/*');
+  });
+
+  it('re-registers the Prime Gaming script when regional access is granted later', () => {
+    const registered = [contentScriptRegistration('primegaming')];
+
+    const plan = planContentScriptSync(new Set<AccessGroup>(['primeGaming', 'lunaRegional']), registered);
+
+    expect(plan.unregister).toEqual(['primegaming']);
+    expect(idsOf(plan.register)).toEqual(['primegaming']);
+  });
 
   it('registers the scripts of newly granted groups', () => {
     const plan = planContentScriptSync(new Set<AccessGroup>(['indieGala', 'microsoft']), []);
