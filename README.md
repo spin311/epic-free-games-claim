@@ -5,6 +5,11 @@
 Automatically claim free games from Steam, the Epic Games Store, GOG, IndieGala, and Prime Gaming giveaways with a browser extension.  
 This project helps users discover and claim free games with minimal effort.
 
+## Download
+
+- [Chrome Web Store](https://chromewebstore.google.com/detail/free-game-claimer-for-ste/mndghaafpgiinfecbbbcppppiblmjepk?utm_source=epic-free-games-claim-readme)
+- [Firefox Add-ons](https://addons.mozilla.org/firefox/addon/free-game-claime-steam-epic/?utm_source=epic-free-games-claim-readme)
+
 ## Features
 
 - **Automatic Claiming:** Configurable frequency options - claim games every hour, 6 hours, 12 hours, daily, or only on browser start.
@@ -80,7 +85,7 @@ Please follow conventional code styles and test new version before submitting pu
 
 ## License
 
-MIT
+GPL-3.0
 
 
 

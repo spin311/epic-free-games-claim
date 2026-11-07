@@ -7,9 +7,13 @@ import {ActiveTabs} from "@/entrypoints/enums/activeTabs.ts";
 import Settings from "@/entrypoints/components/Settings.tsx";
 import Footer from "@/entrypoints/components/Footer.tsx";
 import SponsorPromo from "@/entrypoints/components/SponsorPromo.tsx";
+import ReviewPrompt from "@/entrypoints/components/ReviewPrompt.tsx";
+import SponsorMilestonePrompt from "@/entrypoints/components/SponsorMilestonePrompt.tsx";
+import {usePromptChoice} from "@/entrypoints/hooks/usePromptChoice.ts";
 
 function App() {
     const [activeTab, setActiveTab] = useStorage<ActiveTabs>("activeTab", ActiveTabs.MAIN);
+    const {choice, claimedCount, answered} = usePromptChoice();
 
     // In an effect, not the render body: a throw here used to take the whole
     // popup down with it, and clearing the badge is a side effect either way.
@@ -36,7 +40,10 @@ function App() {
                     <GamesList/>
                 </div>
             )}
-            <SponsorPromo/>
+            {choice === 'review' && <ReviewPrompt claimedCount={claimedCount} onAnswered={answered}/>}
+            {choice === 'sponsor' && <SponsorMilestonePrompt claimedCount={claimedCount} onAnswered={answered}/>}
+            {/* One ask at a time; nothing until the choice is known. */}
+            {choice === null && <SponsorPromo/>}
             <Footer/>
         </div>
     );

@@ -1,4 +1,7 @@
 import { defineConfig } from 'wxt';
+import { copyFile, rm } from 'node:fs/promises';
+import { existsSync } from 'node:fs';
+import { join } from 'node:path';
 // Relative imports: the config loads outside Vite, so the `@/` alias isn't set up yet.
 import { withOptionalHostAccess } from './entrypoints/utils/optionalAccess.ts';
 import { RUNTIME_CONTENT_SCRIPT_MATCHES } from './entrypoints/utils/runtimeContentScripts.ts';
@@ -6,6 +9,13 @@ import { RUNTIME_CONTENT_SCRIPT_MATCHES } from './entrypoints/utils/runtimeConte
 export default defineConfig({
   outDir: "dist",
   modules: ['@wxt-dev/module-react'],
+  // GPL-3.0 requires the license text to travel with every copy. The repo-root
+  // LICENSE is the only one in git: the hooks below copy it into the extension
+  // output, and briefly into this folder so the sources zip stores it as
+  // LICENSE (a '../LICENSE' entry would climb out of the archive).
+  zip: {
+    includeSources: ['LICENSE'],
+  },
   alias: {
     '@': '.',
   },
@@ -30,6 +40,19 @@ export default defineConfig({
     },
   },
   hooks: {
+    'zip:sources:start': async (wxt) => {
+      await copyFile(join(wxt.config.root, '..', 'LICENSE'), join(wxt.config.root, 'LICENSE'));
+    },
+    'zip:sources:done': async (wxt) => {
+      await rm(join(wxt.config.root, 'LICENSE'), { force: true });
+    },
+    'build:done': async (wxt) => {
+      // In the sources zip (where reviewers rebuild) LICENSE sits in the root;
+      // in the repo it is one level up.
+      const ownLicense = join(wxt.config.root, 'LICENSE');
+      const license = existsSync(ownLicense) ? ownLicense : join(wxt.config.root, '..', 'LICENSE');
+      await copyFile(license, join(wxt.config.outDir, 'LICENSE'));
+    },
     // WXT adds every runtime content script's matches to host_permissions;
     // those and the optional groups' origins move to the optional list. The
     // hook's contract is to edit the manifest it's handed, hence the assign.
