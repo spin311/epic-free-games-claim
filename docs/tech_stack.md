@@ -11,7 +11,7 @@
 | UI | React | ^19.1.0 | Popup only, via `@wxt-dev/module-react`. |
 | HTML parsing | node-html-parser | ^7.0.1 | Server-side Steam HTML scraping in the background worker. |
 | Build / dev | WXT CLI (`wxt`) | | `dev`, `build`, `zip`, per-browser (`-b firefox`). |
-| Package manager | npm (README) | | ⚠️ Both `package-lock.json` **and** `pnpm-lock.yaml` are committed — see tech debt. |
+| Package manager | npm | | `wxt-dev-wxt/package-lock.json` is the only lockfile; CI runs `npm ci`. |
 
 ## Build & tooling
 

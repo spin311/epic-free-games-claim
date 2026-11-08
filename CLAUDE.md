@@ -48,8 +48,8 @@ daily in `.github/workflows/canary.yml` (headed Chromium under `xvfb-run`: Epic 
 browsers with 403). A failure means a store changed; a check a store blocks from CI is skipped with
 a warning annotation. When a store's markup or API changes, update the canary along with the code.
 
-> Note: both `package-lock.json` and `pnpm-lock.yaml` are present. The README documents
-> npm; prefer `npm` unless told otherwise, and don't add a second lockfile's worth of churn.
+> Note: npm is the package manager. `wxt-dev-wxt/package-lock.json` is the only lockfile
+> (CI runs `npm ci` against it); don't add a pnpm or yarn lockfile alongside it.
 
 ## Project structure (`wxt-dev-wxt/entrypoints/`)
 
