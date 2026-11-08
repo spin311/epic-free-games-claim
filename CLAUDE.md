@@ -17,7 +17,7 @@ Run all commands from there:
 cd wxt-dev-wxt
 ```
 
-The repo root only holds the README, images, a stub `package.json`, and `store-assets/` (the
+The repo root only holds the README, images, and `store-assets/` (the
 Chrome Web Store and Firefox Add-ons listing images and the scripts that build them; see its README).
 
 ## Commands (run inside `wxt-dev-wxt/`)
