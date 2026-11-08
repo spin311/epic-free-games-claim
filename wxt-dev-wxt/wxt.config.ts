@@ -19,6 +19,11 @@ export default defineConfig({
   alias: {
     '@': '.',
   },
+  // Vite 7.2+ drops license comments when it minifies; keep them inline (as
+  // earlier builds did) so the bundles still carry React's MIT notices.
+  vite: () => ({
+    esbuild: { legalComments: 'inline' },
+  }),
   manifest: {
     // addons.mozilla.org rejects names over 45 characters.
     name: "Free Game Claimer: Epic, Steam, GOG, Prime",

@@ -33,8 +33,8 @@
   refactor (extract pure helpers like `formatEpicFreeGame`, `areDatesDifferent`).
 
 ### MEDIUM
-5. **Two lockfiles committed** (`package-lock.json` + `pnpm-lock.yaml`). Ambiguous package
-   manager → drift risk. Pick one, delete the other.
+5. ✅ **Two lockfiles committed** (`package-lock.json` + `pnpm-lock.yaml`) — the stale
+   `pnpm-lock.yaml` was deleted; npm and `package-lock.json` are the package manager.
 5. **`console.log` in production** (`steam.content.ts:53`) — violates the no-console rule and
    leaks scrape data to the page console.
 6. **Duplicated logic across content scripts.** Epic and Steam scripts share near-identical
