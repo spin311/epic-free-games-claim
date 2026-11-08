@@ -1,5 +1,5 @@
-// Captures the real popup at 2x with today's giveaways (demoData.json) for the store
-// images, plus where the elements the callouts point at are (raw-ui/rects.js).
+// Captures the real popup at 2x with the showcase games (showcaseGames.mjs) for the
+// store images, plus where the elements the callouts point at are (raw-ui/rects.js).
 // Run from wxt-dev-wxt/ after `npm run build`: node ../store-assets/tools/capture.mjs
 // The extension is loaded from a copy without its background (nothing is checked or
 // claimed) and with its optional hosts granted, as a user who turned every store on.
@@ -17,20 +17,14 @@ const DIST_DIR = path.resolve("dist/chrome-mv3");
 const POPUP_WIDTH = 360;
 const POPUP_MAX_HEIGHT = 600;
 const SCALE = 2;
-const demo = JSON.parse(fs.readFileSync(path.join(TOOLS_DIR, "demoData.json"), "utf8"));
-
-const byTitle = (games, ...titles) => titles.map((title) => {
-    const game = games.find((g) => g.title === title);
-    if (!game) throw new Error(`demoData.json has no "${title}"; pick games from the current data`);
-    return game;
-});
+const showcase = await import("./showcaseGames.mjs");
 
 const GAMES = {
-    epicGames: demo.epicGames,
-    futureGames: demo.futureGames,
-    primeGamingGames: byTitle(demo.primeGamingGames, "Squirrel with a Gun", "WRC Generations", "Conarium"),
-    indieGalaGames: byTitle(demo.indieGalaGames, "My Darkest Witch", "Last Room"),
-    steamGames: demo.steamGames,
+    epicGames: showcase.epicGames,
+    futureGames: showcase.futureGames,
+    primeGamingGames: showcase.primeGamingGames,
+    steamGames: showcase.steamGames,
+    indieGalaGames: showcase.indieGalaGames,
     gogGames: [],
 };
 
@@ -47,7 +41,6 @@ const BASE = {
     steamLoggedIn: true, epicLoggedIn: true, gogLoggedIn: true, indieGalaLoggedIn: true, primeGamingLoggedIn: true,
     primeGamingHasPrime: true,
     steamMinPositivePercent: 70,
-    epicClaimed: ["p/flotsam-266287"],
     showFutureGames: true,
     reviewPrompt: "rated", reviewPromptAnsweredAt: 1, sponsorPrompt: "dismissed",
 };
@@ -59,7 +52,7 @@ const VIEWS = {
         targets: { filter: ".filter-bar", store: ".game-card:nth-child(3) .game-meta" },
     },
     "popup-library": {
-        data: { activeTab: "free-games", visiblePlatforms: ["Epic Games"] },
+        data: { activeTab: "free-games", visiblePlatforms: ["Epic Games"], epicClaimed: ["p/death-stranding"] },
         targets: { until: ".game-meta", upcoming: ".game-upcoming", library: ".game-claimed" },
     },
     "popup-settings": {
@@ -76,10 +69,7 @@ const VIEWS = {
     "popup-pending": {
         data: {
             activeTab: "free-games",
-            pendingRedemptions: [{
-                title: "Conarium", platform: "GOG", code: "7K2Q-MX4D-PN8R-W3ZT",
-                redeemUrl: "https://www.gog.com/redeem/7K2QMX4DPN8RW3ZT",
-            }],
+            pendingRedemptions: [showcase.pendingRedemption],
         },
         targets: { actions: ".pending-redemption-actions" },
     },

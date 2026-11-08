@@ -11,17 +11,16 @@ window on a flat background, with one headline and one line each.
 Run everything from `wxt-dev-wxt/` (Playwright comes from its `node_modules`):
 
 ```bash
-npm run build                                            # the popup the images show
-npx vite-node --config vitest.canary.config.ts ../store-assets/tools/fetchDemoData.ts   # optional: today's giveaways
-node ../store-assets/tools/capture.mjs                   # popup captures -> store-assets/raw-ui/
-node ../store-assets/tools/render.mjs                    # compositions -> store-assets/chrome/
+npm run build                            # the popup the images show
+node ../store-assets/tools/capture.mjs   # popup captures -> store-assets/raw-ui/
+node ../store-assets/tools/render.mjs    # compositions -> store-assets/chrome/
 ```
 
-- `tools/fetchDemoData.ts` reads today's giveaways, signed out, with the extension's own
-  parsers (Epic, Steam, IndieGala, and Prime Gaming from a Luna page; it opens a browser
-  window) and saves `tools/demoData.json`. Skip it to keep the current data. When the
-  games change, `capture.mjs` names the Prime Gaming and IndieGala titles it shows: pick
-  ones from the new data.
+- `tools/showcaseGames.mjs` is the games the popup shows: well-known titles that really
+  were given away through the store each card names (GTA V, Death Stranding and
+  Civilization VI on Epic; Fallout 3, Fallout: New Vegas and XCOM 2 as Prime Gaming GOG
+  codes; Total War: SHOGUN 2 on Steam), with when, in comments. Their dates are
+  illustrative. Keep it to games that were really free there.
 - `tools/capture.mjs` loads a copy of `dist/chrome-mv3` with no background (nothing is
   checked or claimed) and the optional hosts granted, seeds storage for each view, and
   saves the popup at 2x plus the positions the callouts point at (`raw-ui/rects.js`).
