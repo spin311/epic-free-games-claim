@@ -39,6 +39,19 @@ describe('formatEpicFreeGame', () => {
     expect(formatEpicFreeGame(el, false).link).toContain('/bundle/');
   });
 
+  // The popup's game cards are landscape; Epic's Thumbnail is portrait key art.
+  it('prefers the wide offer image over the portrait thumbnail', () => {
+    const el = {
+      title: 'W',
+      productSlug: 'w',
+      keyImages: [
+        { type: 'Thumbnail', url: 'https://img/thumb.jpg' },
+        { type: 'OfferImageWide', url: 'https://img/wide.jpg' },
+      ],
+    } as any;
+    expect(formatEpicFreeGame(el, false).img).toBe('https://img/wide.jpg');
+  });
+
   it('falls back to the default icon when no image is present', () => {
     const el = { title: 'X', productSlug: 'x' } as any;
     expect(formatEpicFreeGame(el, false).img).toBe('/icon/128.png');
