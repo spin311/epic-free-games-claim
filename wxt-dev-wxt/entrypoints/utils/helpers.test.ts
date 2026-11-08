@@ -176,10 +176,11 @@ describe('sameOriginFrameDocuments', () => {
 
   // Epic's checkout now lives in an iframe inside a dialog, with no
   // #webPurchaseContainer around it, so every reachable frame is searched.
+  // srcdoc gives the frame a same-origin document at once; happy-dom 21 no
+  // longer loads a document into an iframe without one.
   it('returns the documents of iframes the page can reach, wherever they sit', () => {
-    document.body.innerHTML = '<section role="dialog"><div><iframe></iframe></div></section>';
-    const frame = document.querySelector('iframe')!;
-    frame.contentDocument!.body.innerHTML = '<button>Add to library</button>';
+    document.body.innerHTML =
+      '<section role="dialog"><div><iframe srcdoc="<button>Add to library</button>"></iframe></div></section>';
 
     const docs = sameOriginFrameDocuments(document);
 
