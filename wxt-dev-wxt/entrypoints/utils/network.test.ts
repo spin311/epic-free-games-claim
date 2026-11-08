@@ -73,6 +73,92 @@ describe('fetchWithRetry', () => {
 
     expect(response.status).toBe(503);
   });
+
+  describe('when the caller\'s own time limit ends the retries', () => {
+    // What AbortSignal.timeout's signal carries in Chrome.
+    const timeout = () => new DOMException('signal timed out', 'TimeoutError');
+
+    // Like the real fetch: an aborted signal fails the request at once.
+    function stubFetchHonouringSignal(outcome: () => number | Error) {
+      const mock = vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        if (init?.signal?.aborted) throw init.signal.reason;
+        const next = outcome();
+        if (next instanceof Error) throw next;
+        return new Response('body', { status: next });
+      });
+      vi.stubGlobal('fetch', mock);
+      return mock;
+    }
+
+    // The time limit runs out during the first retry wait.
+    function abortDuringWait(controller: AbortController) {
+      return async () => { controller.abort(timeout()); };
+    }
+
+    // Regression (3.3.0 report: "Can't reach store (signal timed out)"):
+    // Prime Gaming's 15s limit is shorter than the retry waits (2+5+10s), so
+    // any failure that kept repeating was reported as the timeout itself.
+    it('reports the failure that kept it retrying, not the timeout', async () => {
+      const fetchMock = stubFetchHonouringSignal(() => new TypeError('Failed to fetch'));
+      const controller = new AbortController();
+
+      const error = await fetchWithRetry(
+          'https://luna.amazon.com/claims/home', { signal: controller.signal }, [10, 20], abortDuringWait(controller)
+      ).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(NetworkError);
+      expect((error as Error).message).toContain('Failed to fetch');
+      expect((error as Error).message).not.toContain('signal timed out');
+      // No request is sent once the time limit is gone: it could only fail.
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it('reports the earlier failure when a retry runs out of time mid-request', async () => {
+      const controller = new AbortController();
+      const outcomes: (() => Error)[] = [
+        () => new TypeError('Failed to fetch'),
+        () => { controller.abort(timeout()); return timeout(); },
+      ];
+      const fetchMock = stubFetchHonouringSignal(() => outcomes.shift()!());
+
+      const error = await fetchWithRetry(
+          'https://luna.amazon.com/claims/home', { signal: controller.signal }, [10, 20], async () => {}
+      ).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(NetworkError);
+      expect((error as Error).message).toBe('Failed to fetch (retried until the time limit)');
+      expect(fetchMock).toHaveBeenCalledTimes(2);
+    });
+
+    it('names an overloaded store\'s answer', async () => {
+      stubFetchHonouringSignal(() => 503);
+      const controller = new AbortController();
+
+      const error = await fetchWithRetry(
+          'https://luna.amazon.com/claims/home', { signal: controller.signal }, [10, 20], abortDuringWait(controller)
+      ).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(NetworkError);
+      expect((error as Error).message).toContain('luna.amazon.com/claims/home answered 503');
+    });
+
+    // Nothing failed before, so the timeout is the real story: the store
+    // never answered.
+    it('reports the timeout when the first request ran out of time', async () => {
+      const controller = new AbortController();
+      stubFetchHonouringSignal(() => {
+        controller.abort(timeout());
+        return timeout();
+      });
+
+      const error = await fetchWithRetry(
+          'https://luna.amazon.com/claims/home', { signal: controller.signal }, [10, 20], async () => {}
+      ).catch((e: unknown) => e);
+
+      expect(error).toBeInstanceOf(NetworkError);
+      expect((error as Error).message).toBe('signal timed out');
+    });
+  });
 });
 
 describe('assertStoreOk', () => {

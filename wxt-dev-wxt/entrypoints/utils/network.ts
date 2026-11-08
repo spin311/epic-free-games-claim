@@ -47,20 +47,47 @@ export async function fetchWithRetry(
     delays: readonly number[] = RETRY_DELAYS_MS,
     waitFn: (ms: number) => Promise<void> = wait,
 ): Promise<Response> {
+    // Why the last attempt failed. A caller's time limit (one signal for all
+    // attempts) can run out mid-retry, and its timeout error says nothing
+    // about why the retries were needed: this does.
+    let lastFailure: string | null = null;
     for (let attempt = 0; ; attempt++) {
         try {
             const response = await fetch(input, init);
             if (!isRetryableStatus(response.status) || attempt >= delays.length) return response;
             // Unread, it would hold its connection until garbage collection.
             await response.body?.cancel().catch(() => undefined);
+            lastFailure = `${describeUrl(input)} answered ${response.status}`;
         } catch (error: unknown) {
-            // A caller's own timeout has fired: retrying with the same signal
-            // would only fail again.
-            if (init?.signal?.aborted || attempt >= delays.length) {
-                throw new NetworkError(error instanceof Error ? error.message : String(error), { cause: error });
-            }
+            // Retrying with the same, already aborted signal would only fail again.
+            if (init?.signal?.aborted) throw stoppedByCaller(error, lastFailure);
+            if (attempt >= delays.length) throw new NetworkError(messageOf(error), { cause: error });
+            lastFailure = messageOf(error);
         }
         await waitFn(delays[attempt]);
+        if (init?.signal?.aborted) throw stoppedByCaller(init.signal.reason, lastFailure);
+    }
+}
+
+function stoppedByCaller(abortError: unknown, lastFailure: string | null): NetworkError {
+    // Nothing failed before: the store never answered in time, and the
+    // timeout is the whole story.
+    const message = lastFailure ? `${lastFailure} (retried until the time limit)` : messageOf(abortError);
+    return new NetworkError(message, { cause: abortError });
+}
+
+function messageOf(error: unknown): string {
+    return error instanceof Error ? error.message : String(error);
+}
+
+// Host and path only: a query string can be long and say little.
+function describeUrl(input: RequestInfo | URL): string {
+    const href = typeof input === "string" ? input : input instanceof URL ? input.href : input.url;
+    try {
+        const url = new URL(href);
+        return `${url.host}${url.pathname}`;
+    } catch {
+        return href;
     }
 }
 
