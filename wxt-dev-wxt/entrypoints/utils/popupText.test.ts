@@ -3,7 +3,13 @@ import { claimedCountLabel, gameDateLabel, platformLabel } from './popupText';
 import { Platforms } from '../enums/platforms';
 import { FreeGame } from '../types/freeGame';
 
-const NOW = new Date('2026-11-08T12:00:00Z');
+// Local noon: the labels are in the browser's own time zone, so UTC instants
+// would land on another day east of about UTC+8.
+function localNoon(year: number, month: number, day: number): string {
+  return new Date(year, month - 1, day, 12).toISOString();
+}
+
+const NOW = new Date(localNoon(2026, 11, 8));
 
 function game(overrides: Partial<FreeGame> = {}): FreeGame {
   return { title: 'T', platform: Platforms.Epic, link: 'https://x', img: '', ...overrides };
@@ -32,20 +38,20 @@ describe('platformLabel', () => {
 
 describe('gameDateLabel', () => {
   it('says until when a current giveaway is free', () => {
-    expect(gameDateLabel(game({ endDate: '2026-11-13T16:00:00Z' }), NOW, 'en-US')).toBe('Free until Nov 13');
+    expect(gameDateLabel(game({ endDate: localNoon(2026, 11, 13) }), NOW, 'en-US')).toBe('Free until Nov 13');
   });
 
   it('gives an upcoming giveaway its date range', () => {
-    const upcoming = game({ future: true, startDate: '2026-11-13T16:00:00Z', endDate: '2026-11-20T16:00:00Z' });
+    const upcoming = game({ future: true, startDate: localNoon(2026, 11, 13), endDate: localNoon(2026, 11, 20) });
     expect(gameDateLabel(upcoming, NOW, 'en-US')).toBe('Nov 13 – Nov 20');
   });
 
   it('gives an upcoming giveaway without an end its start', () => {
-    expect(gameDateLabel(game({ future: true, startDate: '2026-11-13T16:00:00Z' }), NOW, 'en-US')).toBe('From Nov 13');
+    expect(gameDateLabel(game({ future: true, startDate: localNoon(2026, 11, 13) }), NOW, 'en-US')).toBe('From Nov 13');
   });
 
   it('adds the year when a date falls in another year', () => {
-    expect(gameDateLabel(game({ endDate: '2027-01-02T16:00:00Z' }), NOW, 'en-US')).toBe('Free until Jan 2, 2027');
+    expect(gameDateLabel(game({ endDate: localNoon(2027, 1, 2) }), NOW, 'en-US')).toBe('Free until Jan 2, 2027');
   });
 
   it('has no label without dates', () => {

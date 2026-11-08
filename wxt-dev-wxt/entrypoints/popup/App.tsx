@@ -23,8 +23,9 @@ function App() {
 
     return (
         <div className="App">
-            {/* One ask at a time; no Sponsor pill until the choice is known. */}
-            <PopupHeader showSponsor={choice === null}/>
+            {/* choice is undefined until storage is read. One ask at a time: no
+                Sponsor pill while a card shows or before the choice is known. */}
+            <PopupHeader isReady={choice !== undefined} showSponsor={choice === null}/>
             {choice === 'review' && <ReviewPrompt claimedCount={claimedCount} onAnswered={answered}/>}
             {choice === 'sponsor' && <SponsorMilestonePrompt claimedCount={claimedCount} onAnswered={answered}/>}
             <nav className="tabs" aria-label="Sections">

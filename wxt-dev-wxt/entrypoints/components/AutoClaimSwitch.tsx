@@ -25,14 +25,15 @@ function AutoClaimSwitch() {
 
     return (
         <div className="setting-row">
-            <label className="switch-label">
-                <input type="checkbox" role="switch" className="switch" checked={active}
-                       onChange={e => void toggleActive(e.target.checked)}/>
-                <span className="setting-label">
+            <div className="switch-label">
+                <label className="setting-label">
+                    <input type="checkbox" role="switch" className="switch" checked={active}
+                           onChange={e => void toggleActive(e.target.checked)}/>
                     Auto-claim
-                    {!active && <span className="setting-note"> · paused</span>}
-                </span>
-            </label>
+                </label>
+                {/* Outside the label: the switch's own off state already says it. */}
+                {!active && <span className="setting-note" aria-hidden="true">· paused</span>}
+            </div>
             <ManualClaimBtn/>
         </div>
     );

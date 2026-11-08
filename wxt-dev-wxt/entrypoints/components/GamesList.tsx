@@ -50,7 +50,7 @@ function GamesList() {
                     ) : (
                         <div className="game-list">
                             {filteredGames.map((game) => (
-                                <GameCard game={game} key={`${game.platform}|${game.link}|${game.title}`}/>
+                                <GameCard game={game} key={`${game.platform}|${game.store ?? ''}|${game.link}|${game.title}`}/>
                             ))}
                         </div>
                     )}
