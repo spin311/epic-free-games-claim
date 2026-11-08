@@ -1,0 +1,160 @@
+{
+  "fetchedAt": "2026-11-08T10:01:16.337Z",
+  "epicGames": [
+    {
+      "title": "Idle Champions of the Forgotten Realms",
+      "platform": "Epic Games",
+      "link": "https://store.epicgames.com/en-US/p/idle-champions-of-the-forgotten-realms",
+      "img": "https://cdn1.epicgames.com/spt-assets/a53f91e55c6840018cb5de0b204f1ad9/idle-champions-of-the-forgotten-realms-1cv5z.jpg",
+      "description": "Idle Champions of the Forgotten Realms is a Dungeons & Dragons strategy management game uniting characters from throughout the D&D multiverse into a grand adventure.",
+      "startDate": "2026-11-05T16:00:00.000Z",
+      "endDate": "2026-11-12T16:00:00.000Z",
+      "future": false
+    },
+    {
+      "title": "Flotsam",
+      "platform": "Epic Games",
+      "link": "https://store.epicgames.com/en-US/p/flotsam-266287",
+      "img": "https://cdn1.epicgames.com/spt-assets/5c36b876e80d4285b9993947efeeaf2b/flotsam-1yczl.jpg",
+      "description": "The floating garbage town survival game! Scavenge what precious garbage you can from the ocean's surface and grow your city while doing your best to survive in this colorful post-apocalyptic world.",
+      "startDate": "2026-11-05T16:00:00.000Z",
+      "endDate": "2026-11-12T16:00:00.000Z",
+      "future": false
+    }
+  ],
+  "futureGames": [
+    {
+      "title": "Knightica",
+      "platform": "Epic Games",
+      "link": "https://store.epicgames.com/en-US/p/knightica-3be45c",
+      "img": "https://cdn1.epicgames.com/spt-assets/357100ca5613420e98208c5f14585e9d/knightica-1nuxm.png",
+      "description": "Recruit units, place them strategically, and find the synergies in this Roguelike AutoBattler!\nKnightica lets you guide a warband through challenges to free the Kingdoms.\nDiscover combinations, weave powerful enchants, face dangerous monsters, and lead your army to victory!",
+      "startDate": "2026-11-12T16:00:00.000Z",
+      "endDate": "2026-11-19T16:00:00.000Z",
+      "future": true
+    }
+  ],
+  "steamGames": [],
+  "indieGalaGames": [
+    {
+      "title": "My Darkest Witch",
+      "platform": "IndieGala",
+      "link": "https://freebies.indiegala.com/my-darkest-witch",
+      "img": "https://www.indiegalacdn.com/imgs/devs/freebies/products/9303ce41-bad2-40e2-8b3f-728d85fcb2dc/prodmain/1761983673.png"
+    },
+    {
+      "title": "ANCIENT EVIL",
+      "platform": "IndieGala",
+      "link": "https://freebies.indiegala.com/ancient-evil",
+      "img": "https://www.indiegalacdn.com/imgs/devs/freebies/products/a095a1a9-53c9-45f7-b9f0-8031ed3287f8/prodmain/1761757241.png"
+    },
+    {
+      "title": "Last Room",
+      "platform": "IndieGala",
+      "link": "https://freebies.indiegala.com/last-room",
+      "img": "https://www.indiegalacdn.com/imgs/devs/freebies/products/f48e776f-acb0-4e07-b6f7-a3a43cc6c8a8/prodmain/1761152904.png"
+    },
+    {
+      "title": "Best Plumber",
+      "platform": "IndieGala",
+      "link": "https://freebies.indiegala.com/best-plumber",
+      "img": "https://www.indiegalacdn.com/imgs/devs/freebies/products/a6a962b2-96af-4696-9a44-fdb596d1eeb4/prodmain/1760792376.png"
+    },
+    {
+      "title": "Battle Ram",
+      "platform": "IndieGala",
+      "link": "https://freebies.indiegala.com/battle-ram",
+      "img": "https://www.indiegalacdn.com/imgs/devs/freebies/products/25bb9ba0-56e4-4c68-92b1-55bf43db7a52/prodmain/1760533443.png"
+    },
+    {
+      "title": "Sausage Hunter",
+      "platform": "IndieGala",
+      "link": "https://freebies.indiegala.com/sausage-hunter",
+      "img": "https://www.indiegalacdn.com/imgs/devs/freebies/products/e2e061d5-7344-4c7d-b5d4-1f0261a70619/prodmain/1760155959.png"
+    },
+    {
+      "title": "Leaper",
+      "platform": "IndieGala",
+      "link": "https://freebies.indiegala.com/leaper",
+      "img": "https://www.indiegalacdn.com/imgs/devs/freebies/products/a1db8f5b-f9c3-4004-84fc-ce90d0bb5872/prodmain/1759920499.png"
+    },
+    {
+      "title": "Die Young: Prologue",
+      "platform": "IndieGala",
+      "link": "https://freebies.indiegala.com/die-young-prologue",
+      "img": "https://www.indiegalacdn.com/imgs/devs/freebies/products/6ba4b90d-ec12-4343-bd6f-415f0881ebae/prodmain/1574430858.png"
+    }
+  ],
+  "primeGamingGames": [
+    {
+      "title": "Squirrel with a Gun",
+      "platform": "Prime Gaming",
+      "link": "https://luna.amazon.com/claims/squirrel-with-a-gun-aga/dp/amzn1.pg.item.70eff815-88f4-47f9-83e0-8a8d2837c7ad",
+      "img": "https://m.media-amazon.com/images/I/61QjFNhMqwL._SX256_._AGmerlin_._FMwebp_.jpg",
+      "store": "Amazon Games App"
+    },
+    {
+      "title": "WRC Generations",
+      "platform": "Prime Gaming",
+      "link": "https://luna.amazon.com/claims/wrc-generations-epic/dp/amzn1.pg.item.59a0703f-be28-476e-9160-8e56e257dee5",
+      "img": "https://m.media-amazon.com/images/I/61bWyXTbwQL._SX256_._AGmerlin_._FMwebp_.jpg",
+      "store": "Epic Games Store"
+    },
+    {
+      "title": "Kiborg",
+      "platform": "Prime Gaming",
+      "link": "https://luna.amazon.com/claims/kiborg-aga/dp/amzn1.pg.item.6a6eac09-8806-4c39-95a2-c7cf131f89fc",
+      "img": "https://m.media-amazon.com/images/I/61iIzNs8oiL._SX256_._AGmerlin_._FMwebp_.jpg",
+      "store": "Amazon Games App"
+    },
+    {
+      "title": "Trash Goblin",
+      "platform": "Prime Gaming",
+      "link": "https://luna.amazon.com/claims/trash-goblin-epic/dp/amzn1.pg.item.1892b601-09dc-470b-9d62-7feac63376a3",
+      "img": "https://m.media-amazon.com/images/I/61ltwQb4mLL._SX256_._AGmerlin_._FMwebp_.jpg",
+      "store": "Epic Games Store"
+    },
+    {
+      "title": "Time Travel: Escape Room Game",
+      "platform": "Prime Gaming",
+      "link": "https://luna.amazon.com/claims/time-travel-escape-room-game-legacy/dp/amzn1.pg.item.c3af790f-8ce0-42b2-8c16-ebecb97303f5",
+      "img": "https://m.media-amazon.com/images/I/61MzWa7HYbL._SX256_._AGmerlin_._FMwebp_.jpg",
+      "store": "Legacy Games"
+    },
+    {
+      "title": "Ad Infinitum",
+      "platform": "Prime Gaming",
+      "link": "https://luna.amazon.com/claims/ad-infinitum-epic/dp/amzn1.pg.item.69de011b-6575-41ab-9964-971e59cf7457",
+      "img": "https://m.media-amazon.com/images/I/61oHRL5seYL._SX256_._AGmerlin_._FMwebp_.jpg",
+      "store": "Epic Games Store"
+    },
+    {
+      "title": "Caravan SandWitch",
+      "platform": "Prime Gaming",
+      "link": "https://luna.amazon.com/claims/caravan-sandwitch-aga/dp/amzn1.pg.item.98d2b591-efd2-420f-928c-e7a9b409f67a",
+      "img": "https://m.media-amazon.com/images/I/61uVCnb+LJL._SX256_._AGmerlin_._FMwebp_.jpg",
+      "store": "Amazon Games App"
+    },
+    {
+      "title": "Vampire: The Masquerade - Swansong",
+      "platform": "Prime Gaming",
+      "link": "https://luna.amazon.com/claims/vampire-the-masquerade-swansong-epic/dp/amzn1.pg.item.7885fee3-7dda-40c5-8642-596bb1f4a9b3",
+      "img": "https://m.media-amazon.com/images/I/51ROEzV9RpL._SX256_._AGmerlin_._FMwebp_.jpg",
+      "store": "Epic Games Store"
+    },
+    {
+      "title": "WarBreeds",
+      "platform": "Prime Gaming",
+      "link": "https://luna.amazon.com/claims/warbreeds-gog/dp/amzn1.pg.item.886d058d-6e68-4f53-8e58-3044de3e6bb4",
+      "img": "https://m.media-amazon.com/images/I/71iiIFosTLL._SX256_._AGmerlin_._FMwebp_.jpg",
+      "store": "GOG"
+    },
+    {
+      "title": "Conarium",
+      "platform": "Prime Gaming",
+      "link": "https://luna.amazon.com/claims/conarium-gog/dp/amzn1.pg.item.82e258e7-827e-46e0-8228-25e9720b48b4",
+      "img": "https://m.media-amazon.com/images/I/518dyr4AllL._SX256_._AGmerlin_._FMwebp_.jpg",
+      "store": "GOG"
+    }
+  ]
+}
