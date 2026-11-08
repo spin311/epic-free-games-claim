@@ -11,15 +11,18 @@
   --line: #3a3b40;
   --text: #ececec;
   --muted: #a4a6ab;
-  --faint: #7c7e84;
+  --faint: #96989e;
   --brand: #60ea67;
   --brand-hover: #7ef084;
   --on-brand: #0d2a10;
   --warn: #f0ad4e;
   --danger: #ef6b65;
   --upcoming: #f0a868;
-  --sponsor: #db61a2;
-  --sponsor-dark: #c24d8d;
+  /* Contrast (WCAG AA, 4.5:1): white on --sponsor 5.1, --sponsor-text on the
+     sponsor card's tint 4.9, --faint on --surface 4.9. */
+  --sponsor: #bf3989;
+  --sponsor-dark: #a62d73;
+  --sponsor-text: #ec8bc0;
   --sponsor-soft: rgba(219, 97, 162, 0.16);
   --sponsor-line: rgba(219, 97, 162, 0.45);
   --radius: 8px;
@@ -144,7 +147,7 @@ select {
 }
 
 .sponsor-pill span {
-  color: var(--sponsor);
+  color: var(--sponsor-text);
 }
 
 .sponsor-pill:hover {
@@ -561,7 +564,7 @@ a.health-status:hover {
 }
 
 .prompt-count {
-  color: var(--sponsor);
+  color: var(--sponsor-text);
   font-weight: 700;
 }
 

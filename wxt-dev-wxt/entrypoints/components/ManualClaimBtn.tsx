@@ -1,10 +1,11 @@
-import {useStorage} from "@/entrypoints/hooks/useStorage.ts";
+import {useStorageValue} from "@/entrypoints/hooks/useStorage.ts";
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
 
 export function ManualClaimBtn() {
-    // Shared with background.ts's getFreeGamesList, so this also reflects an
-    // automatic (alarm-triggered) run, not just one started from this button.
-    const [isClaiming] = useStorage<boolean>("isClaiming", false);
+    // Live and read-only: only background.ts writes it, for automatic
+    // (alarm-triggered) runs too. useStorage never saw the run start while the
+    // popup was open, so the button stayed clickable during it.
+    const isClaiming = useStorageValue<boolean>("isClaiming") === true;
 
     return (
         <button type="button" className="btn btn-secondary claim-now" onClick={claimGames} disabled={isClaiming}>
