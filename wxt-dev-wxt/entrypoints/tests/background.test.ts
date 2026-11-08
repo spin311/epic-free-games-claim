@@ -15,6 +15,7 @@ import { AccessGroup } from '../utils/optionalAccess';
 import { fetchWithRetry } from '../utils/network';
 import { activeProblem, HEALTH_KEYS, healthKey, PlatformHealth, recordHealthError } from '../utils/health';
 import { NetworkError, StoreChangedError } from '../utils/network';
+import { LUNA_REGION_CHECKED_AT_KEY, PRIME_REGIONAL_HOST_KEY } from '../utils/primeGamingApi';
 
 // fake-browser implements neither `permissions` nor `scripting`. Every optional
 // host reads as granted by default, so the suites below run with the full
@@ -482,9 +483,280 @@ describe('claimPrimeOffers', () => {
   });
 });
 
+describe('findLunaRedirectHost', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  function tabRunner(landedOn: string, loads = true) {
+    const runner = Object.create(background);
+    const created: unknown[] = [];
+    const removed: number[] = [];
+    vi.spyOn(fakeBrowser.tabs, 'create').mockImplementation(async (props: unknown) => { created.push(props); return { id: 7 } as never; });
+    vi.spyOn(fakeBrowser.tabs, 'get').mockResolvedValue({ id: 7, url: landedOn } as never);
+    vi.spyOn(fakeBrowser.tabs, 'remove').mockImplementation(async (id: unknown) => { removed.push(id as number); });
+    runner.waitForTabToLoad = async () => { if (!loads) throw new Error("tab 7 didn't load its page within 60s"); };
+    return { runner, created, removed };
+  }
+
+  it('reads the regional site an inactive tab lands on, then closes it', async () => {
+    const { runner, created, removed } = tabRunner('https://luna.amazon.fr/claims/home?g=s');
+
+    expect(await runner.findLunaRedirectHost()).toBe('luna.amazon.fr');
+    expect(created).toEqual([{ url: 'https://luna.amazon.com/claims/home', active: false }]);
+    expect(removed).toEqual([7]);
+  });
+
+  // Claims tabs Amazon redirected show the user's site for free.
+  it("remembers a regional Luna site any of its tabs lands on, and nothing else", async () => {
+    for (const [landedOn, expected] of [
+      ['https://luna.amazon.de/claims/home?g=s', 'luna.amazon.de'],
+      ['https://store.epicgames.com/en-US/p/flotsam', null],
+    ] as const) {
+      fakeBrowser.reset();
+      const { runner } = tabRunner(landedOn);
+
+      await runner.noteLunaSite(7);
+
+      expect(await getStorageItem(PRIME_REGIONAL_HOST_KEY)).toBe(expected);
+    }
+  });
+
+  it('closes the tab when it never loads', async () => {
+    const { runner, removed } = tabRunner('about:blank', false);
+
+    await expect(runner.findLunaRedirectHost()).rejects.toThrow(/didn't load/);
+    expect(removed).toEqual([7]);
+  });
+});
+
 describe('checkPrimeGaming fallback (API lookup failed)', () => {
   beforeEach(() => {
     fakeBrowser.reset();
+  });
+
+  // Regression (3.3.0 report, France): luna.amazon.com redirected to
+  // luna.amazon.fr, outside the granted hosts, so every lookup failed as
+  // "Can't reach store" and the claims tab landed where no script runs.
+  describe('when Amazon redirects to a regional Luna site that is not granted', () => {
+    function regionalRunner(opts: { isRedirecting?: boolean; target?: string | null; granted?: AccessGroup[] } = {}) {
+      const opened: string[] = [];
+      const detections: number[] = [];
+      const runner = Object.create(background);
+      withAccess(runner, opts.granted ?? ['primeGaming']);
+      runner.loadPrimeLookup = async () => { throw new NetworkError('Failed to fetch'); };
+      runner.isRedirectedToRegionalLuna = async () => opts.isRedirecting ?? true;
+      runner.findLunaRedirectHost = async () => { detections.push(1); return opts.target === undefined ? 'luna.amazon.fr' : opts.target; };
+      runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+      return { runner, opened, detections };
+    }
+
+    it('asks for that one site instead of reporting the store unreachable or opening a dead tab', async () => {
+      // What 3.3.0 left behind for these users: it would show next to the notice.
+      await recordHealthError(Platforms.PrimeGaming, 'network', 'signal timed out', new Date(Date.now() - 60_000));
+      const { runner, opened } = regionalRunner();
+
+      await runner.checkPrimeGaming(true);
+
+      expect(opened).toEqual([]);
+      expect(await getStorageItem(PRIME_REGIONAL_HOST_KEY)).toBe('luna.amazon.fr');
+      expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.PrimeGaming]))).toBeNull();
+    });
+
+    const hoursAgo = (hours: number) => new Date(Date.now() - hours * 60 * 60 * 1000).toISOString();
+
+    // Finding the site opens a tab; every run until the user answers must not.
+    it('reuses the site it already found while the user has not granted it', async () => {
+      await setStorageItem(PRIME_REGIONAL_HOST_KEY, 'luna.amazon.fr');
+      await setStorageItem(LUNA_REGION_CHECKED_AT_KEY, hoursAgo(2));
+      const { runner, detections } = regionalRunner();
+
+      await runner.checkPrimeGaming(true);
+
+      expect(detections).toHaveLength(0);
+      expect(await getStorageItem(PRIME_REGIONAL_HOST_KEY)).toBe('luna.amazon.fr');
+    });
+
+    // Granted, yet failing again with a redirect: Amazon now sends the user to
+    // another site (moved, or a VPN). Looked up again, at most once a day.
+    it('looks the site up again when the granted one fails, at most once a day', async () => {
+      await setStorageItem(PRIME_REGIONAL_HOST_KEY, 'luna.amazon.fr');
+      await setStorageItem(LUNA_REGION_CHECKED_AT_KEY, hoursAgo(25));
+      const { runner, detections } = regionalRunner({ target: 'luna.amazon.de', granted: ['primeGaming', 'luna.amazon.fr'] });
+
+      await runner.checkPrimeGaming(true);
+      await runner.checkPrimeGaming(true);
+
+      expect(detections).toHaveLength(1);
+      expect(await getStorageItem(PRIME_REGIONAL_HOST_KEY)).toBe('luna.amazon.de');
+    });
+
+    // The redirect is inconsistent: a lookup that happens to get luna.amazon.com
+    // proves nothing, so a known site still waiting for its grant is offered
+    // without another check or tab.
+    it('offers the known site without checking again, even when the redirect check says no', async () => {
+      await setStorageItem(PRIME_REGIONAL_HOST_KEY, 'luna.amazon.fr');
+      const { runner, detections } = regionalRunner({ isRedirecting: false });
+
+      await runner.checkPrimeGaming(true);
+
+      expect(detections).toHaveLength(0);
+      expect(await getStorageItem(PRIME_REGIONAL_HOST_KEY)).toBe('luna.amazon.fr');
+    });
+
+    // Review finding: a redirect that leads nowhere the popup can offer (an
+    // unknown site, or one already granted that still fails) opened a tab on
+    // every scheduled run.
+    it('opens at most one detection tab a day, whatever it found', async () => {
+      for (const opts of [{ target: null }, { target: 'luna.amazon.fr', granted: ['primeGaming', 'luna.amazon.fr'] as AccessGroup[] }]) {
+        fakeBrowser.reset();
+        const { runner, detections } = regionalRunner(opts);
+
+        await runner.checkPrimeGaming(true);
+        await runner.checkPrimeGaming(true);
+
+        expect(detections).toHaveLength(1);
+      }
+    });
+
+    it('treats a failed detection as no site found', async () => {
+      const { runner } = regionalRunner();
+      runner.findLunaRedirectHost = async () => { throw new Error("tab didn't load"); };
+
+      await runner.checkPrimeGaming(true);
+
+      expect(await getStorageItem(PRIME_REGIONAL_HOST_KEY)).toBeFalsy();
+      expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.PrimeGaming]))?.problem).toBe('network');
+    });
+
+    it('keeps the usual fallback when Amazon is not redirecting', async () => {
+      const { runner, opened, detections } = regionalRunner({ isRedirecting: false });
+
+      await runner.checkPrimeGaming(true);
+
+      expect(detections).toHaveLength(0);
+      expect(opened).toEqual([PRIME_GAMING_HOME_URL]);
+      expect(await getStorageItem(PRIME_REGIONAL_HOST_KEY)).toBeFalsy();
+    });
+
+    // A site the extension can't ask for (not in the manifest) or one it
+    // already has: nothing the popup could offer.
+    it('reports the failure as usual when the redirect leads nowhere it can ask for', async () => {
+      for (const opts of [{ target: null }, { target: 'luna.amazon.fr', granted: ['primeGaming', 'luna.amazon.fr'] as AccessGroup[] }]) {
+        fakeBrowser.reset();
+        const { runner } = regionalRunner(opts);
+
+        await runner.checkPrimeGaming(true);
+
+        expect(await getStorageItem(PRIME_REGIONAL_HOST_KEY)).toBeFalsy();
+        expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.PrimeGaming]))?.problem).toBe('network');
+      }
+    });
+
+    // Review finding: offline, with a known site, read as "Amazon answered".
+    it('reports being offline as unreachable, known site or not', async () => {
+      await setStorageItem(PRIME_REGIONAL_HOST_KEY, 'luna.amazon.fr');
+      const { runner } = regionalRunner();
+      runner.isRedirectedToRegionalLuna = async () => { throw new NetworkError('Failed to fetch'); };
+
+      await runner.checkPrimeGaming(true);
+
+      expect(activeProblem(await getStorageItem<PlatformHealth>(HEALTH_KEYS[Platforms.PrimeGaming]))?.problem).toBe('network');
+    });
+
+    // luna.amazon.com can't see a session on amazon.fr, and answers this user
+    // about half the time: its "signed out" is no verdict while their own
+    // site still waits for the grant.
+    it("ignores luna.amazon.com's signed-out answer while the user's site is not granted", async () => {
+      await setStorageItem(PRIME_REGIONAL_HOST_KEY, 'luna.amazon.fr');
+      await setStorageItem('primeGamingLoggedIn', true);
+      await setStorageItem('primeGamingHasPrime', true);
+      const runner = Object.create(background);
+      withAccess(runner, ['primeGaming']);
+      runner.loadPrimeLookup = async () => ({ status: 'signed-out' });
+      const opened: string[] = [];
+      runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+
+      await runner.checkPrimeGaming(true, true);
+
+      expect(await getStorageItem('primeGamingLoggedIn')).toBe(true);
+      expect(await getStorageItem('primeGamingHasPrime')).toBe(true);
+      expect(opened).toEqual([]);
+    });
+
+    // A signed-in answer from luna.amazon.com shows the session works there
+    // (back home from a VPN, or moved): the stored site, and its notice, go.
+    it("forgets the stored site once luna.amazon.com answers signed in", async () => {
+      await setStorageItem(PRIME_REGIONAL_HOST_KEY, 'luna.amazon.fr');
+      const runner = Object.create(background);
+      withAccess(runner, ['primeGaming']);
+      runner.loadPrimeLookup = async () => ({ status: 'no-prime' });
+
+      await runner.checkPrimeGaming(true);
+
+      expect(await getStorageItem(PRIME_REGIONAL_HOST_KEY)).toBeNull();
+    });
+
+    it('keeps luna.amazon.com claim links when no regional site is known', async () => {
+      const offer = primeOffer('Hue', false, 'AmazonGames');
+      const claimed: string[][] = [];
+      const runner = Object.create(background);
+      withAccess(runner, ['primeGaming']);
+      runner.loadPrimeLookup = async () => ({ status: 'ok', offers: [offer] });
+      runner.claimGames = async (games: { link: string }[]) => { claimed.push(games.map((g) => g.link)); };
+
+      await runner.checkPrimeGaming(true);
+
+      expect(claimed).toEqual([[offer.game.link]]);
+    });
+
+    it("keeps the user's site once a lookup gets through", async () => {
+      await setStorageItem(PRIME_REGIONAL_HOST_KEY, 'luna.amazon.fr');
+      const runner = Object.create(background);
+      runner.loadPrimeLookup = async () => ({ status: 'signed-out' });
+
+      await runner.checkPrimeGaming(true);
+
+      expect(await getStorageItem(PRIME_REGIONAL_HOST_KEY)).toBe('luna.amazon.fr');
+    });
+
+  // Once granted, the user's site is used directly: luna.amazon.com's redirect
+  // to it is inconsistent, and a .com answer can't see a session on amazon.de.
+  describe("when the user's regional Luna site is known and granted", () => {
+    function grantedRunner(lookup: () => Promise<unknown>) {
+      const sites: string[] = [];
+      const opened: string[] = [];
+      const claimed: string[][] = [];
+      const runner = Object.create(background);
+      withAccess(runner, ['primeGaming', 'luna.amazon.de']);
+      runner.loadPrimeLookup = async (site: string) => { sites.push(site); return lookup(); };
+      runner.openTabAndSendActionToContent = async (url: string) => { opened.push(url); };
+      runner.claimGames = async (games: { link: string }[]) => { claimed.push(games.map((g) => g.link)); };
+      return { runner, sites, opened, claimed };
+    }
+
+    beforeEach(async () => {
+      await setStorageItem(PRIME_REGIONAL_HOST_KEY, 'luna.amazon.de');
+    });
+
+    it('looks offers up on that site and opens their claim pages there', async () => {
+      const offer = primeOffer('Kiborg', false, 'AmazonGames');
+      const { runner, sites, claimed } = grantedRunner(async () => ({ status: 'ok', offers: [offer] }));
+
+      await runner.checkPrimeGaming(true);
+
+      expect(sites).toEqual(['https://luna.amazon.de']);
+      expect(claimed).toEqual([[offer.game.link.replace('https://luna.amazon.com', 'https://luna.amazon.de')]]);
+    });
+
+    it('opens the fallback claims page on that site', async () => {
+      const { runner, opened } = grantedRunner(async () => { throw new StoreChangedError('Luna changed'); });
+
+      await runner.checkPrimeGaming(true, true);
+
+      expect(opened).toEqual(['https://luna.amazon.de/claims/home']);
+    });
+  });
   });
 
   it('does nothing when disabled', async () => {

@@ -193,6 +193,44 @@ button:focus-visible {
   color: #8a8585;
 }
 
+/* Prime Gaming's request for the user's regional Luna site: a notice, so it
+   reads warmer than a hint, with its action styled like the popup's links. */
+.hint.regional-access {
+  margin: 0.25em 0 0.5em;
+  /* Lined up with the sub-options below (.sub-options' padding plus their
+     0.8em text's own indent). */
+  padding-left: 1.35em;
+  text-align: left;
+  font-size: 0.8em;
+  color: #f0ad4e;
+}
+
+.link-button {
+  padding: 0;
+  border: none;
+  background: none;
+  font: inherit;
+  font-weight: 500;
+  color: #60ea67;
+  cursor: pointer;
+}
+.link-button:hover {
+  border: none;
+  color: #a3ed72;
+}
+
+@media (prefers-color-scheme: light) {
+  .hint.regional-access {
+    color: #b06d00;
+  }
+  .link-button {
+    background: none;
+  }
+  .link-button:hover {
+    color: #747bff;
+  }
+}
+
 /* Steam-only review gate. */
 .review-threshold {
   display: flex;

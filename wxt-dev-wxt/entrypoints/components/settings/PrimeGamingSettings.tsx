@@ -6,6 +6,8 @@ import { useOptionalAccess } from "@/entrypoints/hooks/useOptionalAccess.ts";
 import { LOGIN_STATE_KEYS, LoginState, PRIME_MEMBERSHIP_KEY } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { EXTERNAL_PLATFORM_DEFAULTS, EXTERNAL_PLATFORM_STORAGE_KEYS } from "@/entrypoints/utils/primeGamingGiveaway.ts";
+import { PRIME_REGIONAL_HOST_KEY } from "@/entrypoints/utils/primeGamingApi.ts";
+import { isLunaRegionalHost } from "@/entrypoints/utils/optionalAccess.ts";
 import { LEGACY_EMAIL_STORAGE_KEY, normalizeEmail } from "@/entrypoints/utils/legacyGamesRedeem.ts";
 
 function PrimeGamingSettings() {
@@ -37,6 +39,17 @@ function PrimeGamingSettings() {
     // Live and read-only: a store visit can record it while the popup is open.
     const primeGamingLoggedIn = useStorageValue<LoginState>(LOGIN_STATE_KEYS[Platforms.PrimeGaming]);
     const [hasPrime] = useStorage<boolean | null>(PRIME_MEMBERSHIP_KEY, null);
+    // The country's Luna site Amazon sends this user to (e.g. luna.amazon.fr),
+    // as a check found it: shown until it's granted.
+    const storedRegionalHost = useStorageValue<string>(PRIME_REGIONAL_HOST_KEY);
+    const regionalHost = isLunaRegionalHost(storedRegionalHost) && !access.hasGroup(storedRegionalHost)
+        ? storedRegionalHost
+        : null;
+    // Signing in on the user's own Luna site: a .com page can't see a session
+    // on e.g. amazon.de, and Amazon's redirect there isn't consistent.
+    const primeLoginUrl = isLunaRegionalHost(storedRegionalHost)
+        ? `https://${storedRegionalHost}/claims/home`
+        : "https://gaming.amazon.com/home";
     const primeWarning = hasPrime === false
         ? { label: "No Prime", title: "Signed in, but this Amazon account has no Prime membership, so Prime Gaming offers can't be claimed." }
         : null;
@@ -44,8 +57,17 @@ function PrimeGamingSettings() {
     return (
         <div className="platform-group">
             <Checkbox name="Prime Gaming" checked={isPrimeOn} onChange={e => access.setWithAccess("primeGamingCheck", e.target.checked, setPrimeGamingCheck)}
-                      trailing={isPrimeOn && <><HealthStatus platform={Platforms.PrimeGaming}/><LoginStatus state={primeGamingLoggedIn} loginUrl="https://gaming.amazon.com/home" platform={Platforms.PrimeGaming}
+                      trailing={isPrimeOn && <><HealthStatus platform={Platforms.PrimeGaming}/><LoginStatus state={primeGamingLoggedIn} loginUrl={primeLoginUrl} platform={Platforms.PrimeGaming}
                                                    accountWarning={primeWarning}/></>}/>
+            {isPrimeOn && regionalHost && (
+                <p className="hint regional-access">
+                    Amazon sends you to {regionalHost}.{" "}
+                    <button type="button" className="link-button" onClick={() => access.requestGroup(regionalHost)}>
+                        Allow access
+                    </button>{" "}
+                    so Prime Gaming games can be claimed there.
+                </p>
+            )}
             {isPrimeOn && (
                 <div className="sub-options">
                     <p className="hint">Claim offers that go to:</p>

@@ -1,7 +1,8 @@
 import type { Browser } from "wxt/browser";
-// Relative and type-only: wxt.config.ts imports this module outside Vite (see
-// optionalAccess.ts), so it can't use the `@/` alias or pull in `browser`.
-import type { AccessGroup } from "./optionalAccess.ts";
+// Relative, from a module with no runtime imports of its own: wxt.config.ts
+// imports this one outside Vite (see optionalAccess.ts), so it can't use the
+// `@/` alias or pull in `browser`.
+import { ACCESS_GROUP_ORIGINS, type AccessGroup, LUNA_REGIONAL_HOSTS } from "./optionalAccess.ts";
 
 // The content scripts for optional hosts are `registration: "runtime"`: a
 // static manifest entry's matches count as install-time host permissions. The
@@ -16,6 +17,8 @@ export type RuntimeScriptId = "gog" | "indiegala" | "indiegalaWheel" | "primegam
 export type RuntimeContentScript = {
   group: AccessGroup;
   matches: string[];
+  // Pages added to the script while another, optional group is granted too.
+  extraMatches?: readonly { group: AccessGroup; matches: string[] }[];
   runAt: Browser.extensionTypes.RunAt;
   allFrames: boolean;
 };
@@ -32,6 +35,9 @@ export const RUNTIME_CONTENT_SCRIPTS: Readonly<Record<RuntimeScriptId, RuntimeCo
   primegaming: {
     group: "primeGaming",
     matches: ["https://gaming.amazon.com/*", "https://luna.amazon.com/*"],
+    // Where both redirect a visitor from a country with its own Luna site,
+    // each added once the user has granted it.
+    extraMatches: LUNA_REGIONAL_HOSTS.map((host) => ({ group: host, matches: [...ACCESS_GROUP_ORIGINS[host]] })),
     runAt: "document_idle",
     allFrames: false,
   },
@@ -55,8 +61,19 @@ export const RUNTIME_CONTENT_SCRIPTS: Readonly<Record<RuntimeScriptId, RuntimeCo
 
 const RUNTIME_SCRIPT_IDS = Object.keys(RUNTIME_CONTENT_SCRIPTS) as RuntimeScriptId[];
 
-export const RUNTIME_CONTENT_SCRIPT_MATCHES: readonly string[] =
-    RUNTIME_SCRIPT_IDS.flatMap((id) => RUNTIME_CONTENT_SCRIPTS[id].matches);
+// Every page a script can run on, whichever groups are granted.
+function allMatches(id: RuntimeScriptId): string[] {
+  const { matches, extraMatches = [] } = RUNTIME_CONTENT_SCRIPTS[id];
+  return [...matches, ...extraMatches.flatMap((extra) => extra.matches)];
+}
+
+// The pages a script runs on with these groups granted.
+function grantedMatches(id: RuntimeScriptId, granted: ReadonlySet<AccessGroup>): string[] {
+  const { matches, extraMatches = [] } = RUNTIME_CONTENT_SCRIPTS[id];
+  return [...matches, ...extraMatches.filter((extra) => granted.has(extra.group)).flatMap((extra) => extra.matches)];
+}
+
+export const RUNTIME_CONTENT_SCRIPT_MATCHES: readonly string[] = RUNTIME_SCRIPT_IDS.flatMap(allMatches);
 
 export type RuntimeContentScriptOptions = {
   matches: string[];
@@ -69,14 +86,18 @@ export type RuntimeContentScriptOptions = {
 // there rather than spread: WXT's build-time option reader expects every
 // option to be a named property and crashes on a spread element.
 export function runtimeContentScriptOptions(id: RuntimeScriptId): RuntimeContentScriptOptions {
-  const { matches, runAt, allFrames } = RUNTIME_CONTENT_SCRIPTS[id];
-  return { matches, runAt, allFrames, registration: "runtime" };
+  const { runAt, allFrames } = RUNTIME_CONTENT_SCRIPTS[id];
+  return { matches: allMatches(id), runAt, allFrames, registration: "runtime" };
 }
 
 // persistAcrossSessions: false because Firefox before 128 rejects true; the
 // background re-syncs on every start, which covers browser restarts.
-export function contentScriptRegistration(id: RuntimeScriptId): RegisteredContentScript {
-  const { matches, runAt, allFrames } = RUNTIME_CONTENT_SCRIPTS[id];
+export function contentScriptRegistration(
+    id: RuntimeScriptId,
+    granted: ReadonlySet<AccessGroup> = new Set()
+): RegisteredContentScript {
+  const { runAt, allFrames } = RUNTIME_CONTENT_SCRIPTS[id];
+  const matches = grantedMatches(id, granted);
   return { id, js: [`content-scripts/${id}.js`], matches, runAt, allFrames, persistAcrossSessions: false };
 }
 
@@ -108,7 +129,7 @@ export function planContentScriptSync(
 
   for (const id of RUNTIME_SCRIPT_IDS) {
     const current = registeredById.get(id);
-    const desired = granted.has(RUNTIME_CONTENT_SCRIPTS[id].group) ? contentScriptRegistration(id) : null;
+    const desired = granted.has(RUNTIME_CONTENT_SCRIPTS[id].group) ? contentScriptRegistration(id, granted) : null;
     const isUpToDate = current && desired && registrationKey(current) === registrationKey(desired);
     if (isUpToDate) continue;
     if (current) unregister.push(id);

@@ -36,6 +36,14 @@ import {
   ensureLunaOriginRule,
   excludeRecentlyAttempted,
   fetchPrimeLookup,
+  isLunaRedirecting,
+  LUNA_CLAIMS_URL,
+  LUNA_ORIGIN,
+  onLunaSite,
+  LUNA_REGION_CHECK_INTERVAL_MS,
+  LUNA_REGION_CHECKED_AT_KEY,
+  lunaRegionalHostOf,
+  PRIME_REGIONAL_HOST_KEY,
   PrimeLookup,
   PrimeOffer,
   selectClaimableOffers,
@@ -76,6 +84,8 @@ import {
   AccessGroup,
   hasAccessFor,
   PENDING_ACCESS_REQUEST_KEY,
+  isLunaRegionalHost,
+  LunaRegionalHost,
   readGrantedAccessGroups,
   toggleToCompleteAfterGrant,
   TOGGLES_ENABLED_WITH,
@@ -510,12 +520,24 @@ export const background = {
     if (!tab || !tab.id) return;
     try {
       await this.waitForTabToLoad(tab.id);
+      if (url.includes("amazon.")) await this.noteLunaSite(tab.id);
       await this.sendMessageWithRetry(tab.id, data === undefined ? { target: "content", action } : { target: "content", action, data });
     } catch (e) {
       await browser.tabs.remove(tab.id).catch(() => {
         // Already closed (e.g. by the user).
       });
       throw e;
+    }
+  },
+
+  // Any tab that lands on a regional Luna site (a claims page Amazon
+  // redirected) tells which site is the user's, for free. Never throws.
+  async noteLunaSite(tabId: number) {
+    try {
+      const host = lunaRegionalHostOf((await browser.tabs.get(tabId)).url);
+      if (host) await setStorageItem(PRIME_REGIONAL_HOST_KEY, host);
+    } catch (e) {
+      console.warn("Reading a tab's Luna site failed:", e);
     }
   },
 
@@ -906,16 +928,40 @@ export const background = {
   async checkPrimeGaming(shouldCheck: boolean, force: boolean = false) {
     if (!shouldCheck) return;
 
+    const lunaOrigin = await this.lunaSiteOrigin();
     let lookup: PrimeLookup | null = null;
     try {
-      lookup = await this.loadPrimeLookup();
+      lookup = await this.loadPrimeLookup(lunaOrigin);
       await this.recordStoreOk(Platforms.PrimeGaming);
     } catch (e) {
+      // Not the store failing: the user's own access is missing, and the
+      // claims page would land on that same regional site, where no script
+      // of ours runs. The popup asks for that site instead.
+      const regionalHost = await this.missingLunaRegionalHost(e);
+      if (regionalHost) {
+        console.warn(`Prime Gaming: Amazon redirects to ${regionalHost}, which this extension has no access to`);
+        // Amazon answered (with the redirect), which is all health tracks; it
+        // also clears an older "can't reach" that would contradict the notice.
+        await this.recordStoreOk(Platforms.PrimeGaming);
+        await setStorageItem(PRIME_REGIONAL_HOST_KEY, regionalHost);
+        this.storeFailedThisRun = true;
+        return;
+      }
       // Recorded even though the claims page below may still work: the
       // lookup is what the extension relies on, so its breaking is news.
       console.warn("Prime Gaming background lookup failed; falling back to the claims page");
       await this.recordStoreFailure(Platforms.PrimeGaming, e);
     }
+    // Answered by luna.amazon.com while the user's own site is known but not
+    // granted. Signed out is .com not seeing a session on e.g. amazon.de
+    // (Amazon's redirect is inconsistent), so it's no verdict; signed in shows
+    // the session works here (e.g. back from a VPN), so that site isn't needed.
+    const ungrantedSite = lookup && lunaOrigin === LUNA_ORIGIN ? await this.ungrantedLunaSite() : null;
+    if (ungrantedSite && lookup?.status === "signed-out") {
+      this.storeFailedThisRun = true;
+      return;
+    }
+    if (ungrantedSite) await setStorageItem(PRIME_REGIONAL_HOST_KEY, null);
     if (lookup?.status === "signed-out") {
       await recordLoginState(Platforms.PrimeGaming, false);
       // Whoever signs in next may be a different account.
@@ -934,7 +980,7 @@ export const background = {
     // Outside the try on purpose: a failure here may come after claim tabs
     // already opened, and must not also open the claims page.
     if (lookup?.status === "ok") {
-      await this.claimPrimeOffers(lookup.offers, force);
+      await this.claimPrimeOffers(lookup.offers, force, lunaOrigin);
       return;
     }
 
@@ -945,22 +991,89 @@ export const background = {
     // Flag set only after the tab/message actually goes out (mirrors
     // checkIndieGalaWheel): if this throws, today's attempt never happened, so
     // the next due check must still retry rather than silently skipping ahead.
-    await this.openTabAndSendActionToContent(PRIME_GAMING_HOME_URL, "getFreeGames");
+    const claimsPage = lunaOrigin === LUNA_ORIGIN ? PRIME_GAMING_HOME_URL : `${lunaOrigin}/claims/home`;
+    await this.openTabAndSendActionToContent(claimsPage, "getFreeGames");
     await setStorageItem("primeGamingLastCheck", now.toISOString());
+  },
+
+  // The user's own regional Luna site once it's known and granted, else
+  // luna.amazon.com. Amazon's redirect from .com to it is inconsistent, and a
+  // .com answer can't see a session on e.g. amazon.de, so a known site is
+  // used directly for the lookup, the claim pages and the claims tab.
+  async ungrantedLunaSite(): Promise<LunaRegionalHost | null> {
+    const host = await getStorageItem<string>(PRIME_REGIONAL_HOST_KEY);
+    return isLunaRegionalHost(host) && !(await this.readGrantedAccess()).has(host) ? host : null;
+  },
+
+  async lunaSiteOrigin(): Promise<string> {
+    const host = await getStorageItem<string>(PRIME_REGIONAL_HOST_KEY);
+    return isLunaRegionalHost(host) && (await this.readGrantedAccess()).has(host) ? `https://${host}` : LUNA_ORIGIN;
+  },
+
+  // The regional Luna site a failed lookup was redirected to, while the
+  // extension has no access to it (null otherwise). Such a redirect fails like
+  // a dropped connection, so only that kind of failure is worth checking.
+  // Never throws: it only decides what the popup offers.
+  async missingLunaRegionalHost(error: unknown): Promise<LunaRegionalHost | null> {
+    if (classifyFailure(error) !== "network") return null;
+    try {
+      const granted = await this.readGrantedAccess();
+      const isMissing = (host: unknown): host is LunaRegionalHost => isLunaRegionalHost(host) && !granted.has(host);
+      const known = await getStorageItem<string>(PRIME_REGIONAL_HOST_KEY);
+      // Throws when Amazon can't be reached at all: a real network failure,
+      // which no known site explains.
+      const isRedirecting = await this.isRedirectedToRegionalLuna();
+      // Already found and waiting for the user's grant. Amazon's redirect is
+      // inconsistent, so a check that happens to see none proves nothing.
+      if (isMissing(known)) return known;
+      if (!isRedirecting) return null;
+      const checkedAt = await getStorageItem<string>(LUNA_REGION_CHECKED_AT_KEY);
+      if (checkedAt !== null && Date.now() - new Date(checkedAt).getTime() < LUNA_REGION_CHECK_INTERVAL_MS) return null;
+      // Stamped first, so a lookup that fails doesn't retry every run either.
+      await setStorageItem(LUNA_REGION_CHECKED_AT_KEY, new Date().toISOString());
+      const found = await this.findLunaRedirectHost();
+      return isMissing(found) ? found : null;
+    } catch (e) {
+      console.warn("Prime Gaming: finding the regional Luna site failed:", e);
+      return null;
+    }
+  },
+
+  // Where luna.amazon.com sends this user. Only a page shows it: a fetch hides
+  // a redirect's target, while the `tabs` permission reads a tab's URL on any
+  // site. The tab is closed again; our Prime Gaming script, if it runs there,
+  // only acts on a message, and none is sent.
+  async findLunaRedirectHost(): Promise<LunaRegionalHost | null> {
+    const tab = await browser.tabs.create({ url: LUNA_CLAIMS_URL, active: false });
+    if (!tab?.id) return null;
+    try {
+      await this.waitForTabToLoad(tab.id);
+      return lunaRegionalHostOf((await browser.tabs.get(tab.id)).url);
+    } finally {
+      await browser.tabs.remove(tab.id).catch(() => undefined);
+    }
+  },
+
+  // Separate so tests can stand in for the network.
+  isRedirectedToRegionalLuna(): Promise<boolean> {
+    return isLunaRedirecting((input, init) => this.fetchStore(input, init));
   },
 
   // Separate from claimPrimeOffers so tests can stand in for the network +
   // declarativeNetRequest side. Throws when the answer can't be trusted (see
   // fetchPrimeLookup).
-  async loadPrimeLookup(): Promise<PrimeLookup> {
+  async loadPrimeLookup(lunaOrigin: string = LUNA_ORIGIN): Promise<PrimeLookup> {
     // The extension's own request origin as the browser reports it (the
     // extension id on Chrome, an internal UUID on Firefox).
     const extensionHost = new URL(browser.runtime.getURL("/")).host;
     await ensureLunaOriginRule(browser.declarativeNetRequest, extensionHost);
-    return fetchPrimeLookup((input, init) => this.fetchStore(input, init));
+    return fetchPrimeLookup((input, init) => this.fetchStore(input, init), lunaOrigin);
   },
 
-  async claimPrimeOffers(offers: PrimeOffer[], force: boolean = false) {
+  async claimPrimeOffers(offerList: PrimeOffer[], force: boolean = false, lunaOrigin: string = LUNA_ORIGIN) {
+    // Claim pages (and the popup's links) on the user's own site, where their
+    // session is.
+    const offers = offerList.map((offer) => ({ ...offer, game: { ...offer.game, link: onLunaSite(offer.game.link, lunaOrigin) } }));
     const listed = offers.map((offer) => offer.game);
     // Same as Epic/Steam: persisted regardless, so the popup lists what's live.
     await setStorageItem("primeGamingGames", listed);

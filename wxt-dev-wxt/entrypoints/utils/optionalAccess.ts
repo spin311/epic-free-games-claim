@@ -8,7 +8,29 @@
 // must stay free of runtime imports (no `browser`, no `@/` alias): the browser
 // APIs are passed in by the caller instead.
 
-export type AccessGroup = "gog" | "indieGala" | "primeGaming" | "microsoft" | "legacyGames";
+// Amazon sends a visitor from luna.amazon.com to their country's Luna site,
+// by IP (a French one lands on luna.amazon.fr; confirmed Nov 2026). These are
+// the sites that answered a foreign IP with that geo redirect (`?g=s`).
+export const LUNA_REGIONAL_HOSTS = [
+  "luna.amazon.fr", "luna.amazon.de", "luna.amazon.co.uk", "luna.amazon.it", "luna.amazon.es",
+  "luna.amazon.ca", "luna.amazon.nl", "luna.amazon.com.be", "luna.amazon.pl", "luna.amazon.se",
+] as const;
+
+export type LunaRegionalHost = typeof LUNA_REGIONAL_HOSTS[number];
+
+// Each regional Luna site is a group of its own, named by its host: a user
+// only ever needs the one Amazon sends them to, so that's all they're asked
+// for (from the popup, once a check has found it). No toggle requires one.
+export type AccessGroup = "gog" | "indieGala" | "primeGaming" | "microsoft" | "legacyGames" | LunaRegionalHost;
+
+export function isLunaRegionalHost(host: unknown): host is LunaRegionalHost {
+  return typeof host === "string" && (LUNA_REGIONAL_HOSTS as readonly string[]).includes(host);
+}
+
+const LUNA_REGIONAL_ORIGINS = LUNA_REGIONAL_HOSTS.reduce(
+    (origins, host) => ({ ...origins, [host]: [`https://${host}/*`] }),
+    {} as Record<LunaRegionalHost, readonly string[]>
+);
 
 export const ACCESS_GROUP_ORIGINS: Readonly<Record<AccessGroup, readonly string[]>> = {
   gog: ["https://www.gog.com/*"],
@@ -18,6 +40,7 @@ export const ACCESS_GROUP_ORIGINS: Readonly<Record<AccessGroup, readonly string[
   // cross-origin iframe on this separate host — confirmed live.
   microsoft: ["https://account.microsoft.com/*", "https://www.microsoft.com/store/purchase/buynowui/*"],
   legacyGames: ["https://legacygames.com/*", "https://promo.legacygames.com/*"],
+  ...LUNA_REGIONAL_ORIGINS,
 };
 
 export const OPTIONAL_ORIGINS: readonly string[] = [...new Set(Object.values(ACCESS_GROUP_ORIGINS).flat())];

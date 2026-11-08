@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { browser } from "wxt/browser";
 import {
+    ACCESS_GROUP_ORIGINS,
     AccessGroup,
     AccessToggle,
     hasAccessFor,
@@ -37,6 +38,13 @@ export function useOptionalAccess() {
     return {
         // What a checkbox shows: its flag AND its hosts granted.
         isOn: (toggle: AccessToggle, flag: boolean) => flag && hasAccessFor(toggle, granted),
+        hasGroup: (group: AccessGroup) => granted.has(group),
+        // For a group no toggle needs (a regional Luna site). Call first thing
+        // in the click handler: Firefox only prompts inside the user gesture.
+        requestGroup: (group: AccessGroup) => {
+            browser.permissions.request({ origins: [...ACCESS_GROUP_ORIGINS[group]] })
+                .catch((e) => console.error(`Requesting ${group} access failed:`, e));
+        },
         // Call first thing in the change handler — see toggleWithAccess.
         setWithAccess: (toggle: AccessToggle, checked: boolean, setFlag: (value: boolean) => void) =>
             toggleWithAccess(toggle, checked, setFlag, browser.permissions,
