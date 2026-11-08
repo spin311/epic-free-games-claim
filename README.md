@@ -13,7 +13,7 @@ This project helps users discover and claim free games with minimal effort.
 ## Features
 
 - **Automatic Claiming:** Configurable frequency options - claim games every hour, 6 hours, 12 hours, daily, or only on browser start.
-- **Manual Claim:** Instantly claim available free games with a button.
+- **Claim now:** Instantly claim available free games with a button.
 - **Platform Selection:** Enable/disable Steam, Epic Games, GOG, IndieGala, or Prime Gaming checks.
 - **Games List:** View all currently available free games.
 - **Counter:** Track the number of games claimed.
@@ -60,12 +60,13 @@ git clone https://github.com/spin311/epic-free-games-claim.git cd epic-free-game
 
 - Open the extension popup.
 - Configure your preferred platforms and claim frequency:
-  - **On Browser Start Only:** Only checks when the browser is fully restarted
-  - **Every Hour:** Checks for new games every hour
-  - **Every 6 Hours:** Checks every 6 hours
-  - **Every 12 Hours:** Checks every 12 hours
-  - **Once Daily:** Checks once per day (default)
-- Click "Manually claim" to fetch and claim free games instantly.
+  - **On browser start:** Only checks when the browser is fully restarted
+  - **Every hour:** Checks for new games every hour
+  - **Every 6 hours:** Checks every 6 hours
+  - **Every 12 hours:** Checks every 12 hours
+  - **Once a day:** Checks once per day, at the hour you pick or any time (default)
+- Turn **Auto-claim** off to pause the scheduled checks.
+- Click "Claim now" to fetch and claim free games instantly.
 - Switch to the "Free Games" tab to view all available free games.
 
 ## Support
