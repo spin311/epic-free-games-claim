@@ -1,5 +1,5 @@
-// Captures the real popup at 2x with the showcase games (showcaseGames.mjs) for the
-// store images, plus where the elements the callouts point at are (raw-ui/rects.js).
+// Captures the real Chrome popup at 2x in each view of views.mjs for the store images,
+// plus where the elements the callouts point at are (raw-ui/chrome/rects.js).
 // Run from wxt-dev-wxt/ after `npm run build`: node ../store-assets/tools/capture.mjs
 // The extension is loaded from a copy without its background (nothing is checked or
 // claimed) and with its optional hosts granted, as a user who turned every store on.
@@ -12,68 +12,12 @@ import path from "node:path";
 // Playwright comes from wxt-dev-wxt/node_modules (the working directory), not from here.
 const { chromium } = createRequire(path.resolve("package.json"))("playwright");
 const TOOLS_DIR = import.meta.dirname;
-const OUT_DIR = path.join(TOOLS_DIR, "..", "raw-ui");
+const OUT_DIR = path.join(TOOLS_DIR, "..", "raw-ui", "chrome");
 const DIST_DIR = path.resolve("dist/chrome-mv3");
 const POPUP_WIDTH = 360;
 const POPUP_MAX_HEIGHT = 600;
 const SCALE = 2;
-const showcase = await import("./showcaseGames.mjs");
-
-const GAMES = {
-    epicGames: showcase.epicGames,
-    futureGames: showcase.futureGames,
-    primeGamingGames: showcase.primeGamingGames,
-    steamGames: showcase.steamGames,
-    indieGalaGames: showcase.indieGalaGames,
-    gogGames: [],
-};
-
-// A long-time user: every store on and signed in, the prompts already answered.
-const BASE = {
-    ...GAMES,
-    active: true,
-    counter: 128,
-    claimFrequency: "daily",
-    claimHour: 18,
-    steamCheck: true, epicCheck: true, gogCheck: true,
-    indieGalaCheck: true, indieGalaWheelCheck: true,
-    primeGamingCheck: true, primeGamingClaimAmazonGames: true, primeGamingClaimEpic: true, primeGamingClaimGog: true,
-    steamLoggedIn: true, epicLoggedIn: true, gogLoggedIn: true, indieGalaLoggedIn: true, primeGamingLoggedIn: true,
-    primeGamingHasPrime: true,
-    steamMinPositivePercent: 70,
-    showFutureGames: true,
-    reviewPrompt: "rated", reviewPromptAnsweredAt: 1, sponsorPrompt: "dismissed",
-};
-
-// name -> storage on top of BASE, and the elements the callouts point at.
-const VIEWS = {
-    "popup-games": {
-        data: { activeTab: "free-games" },
-        targets: { filter: ".filter-bar", store: ".game-card:nth-child(3) .game-meta" },
-    },
-    "popup-library": {
-        data: { activeTab: "free-games", visiblePlatforms: ["Epic Games"], epicClaimed: ["p/death-stranding"] },
-        targets: { until: ".game-meta", upcoming: ".game-upcoming", library: ".game-claimed" },
-    },
-    "popup-settings": {
-        data: { activeTab: "main", primeGamingCheck: false, indieGalaLoggedIn: false },
-        targets: {
-            switch: ".switch", schedule: ".schedule-row", rating: "#steam-review-threshold",
-            login: ".login-status.logged-out",
-        },
-    },
-    "popup-prime": {
-        data: { activeTab: "main", steamCheck: false, indieGalaCheck: false },
-        targets: { grid: ".option-grid", prime: ".platform-group:last-child .login-status" },
-    },
-    "popup-pending": {
-        data: {
-            activeTab: "free-games",
-            pendingRedemptions: [showcase.pendingRedemption],
-        },
-        targets: { actions: ".pending-redemption-actions" },
-    },
-};
+const { VIEWS, viewStorage } = await import("./views.mjs");
 
 // An unpacked extension's id: sha256 of its absolute path, hex digits mapped to a-p.
 function unpackedId(dir) {
@@ -120,7 +64,7 @@ try {
         await page.evaluate(async (data) => {
             await chrome.storage.local.clear();
             await chrome.storage.local.set(data);
-        }, { ...BASE, ...view.data });
+        }, viewStorage(view));
         await page.setViewportSize({ width: POPUP_WIDTH, height: POPUP_MAX_HEIGHT });
         await page.goto(popupUrl);
         await page.waitForLoadState("networkidle");

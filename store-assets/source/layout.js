@@ -1,6 +1,7 @@
 // Lays out one store image: builds the browser window, sizes the popup captures at
 // UI_SCALE, places the popup under the toolbar button, and draws callouts to the
-// elements recorded in ../raw-ui/rects.js. Sets body[data-ready] to "1" when done,
+// elements recorded in ../raw-ui/<browser>/rects.js (?browser=firefox picks Firefox's
+// captures; Chrome's otherwise). Sets body[data-ready] to "1" when done,
 // or to an error message (tools/render.mjs fails on that).
 (() => {
     const UI_SCALE = 1.05;        // popup CSS px -> image px
@@ -9,7 +10,8 @@
     const LABEL_SPACING = 16;     // minimum gap between two labels
     const POPUP_INSET = 12;       // popup right edge past the toolbar button's right edge
     const ANCHOR_X = 6;           // leaders end in the popup's left margin (popup CSS px), crossing no text
-    const UI_DIR = "../raw-ui/";
+    const BROWSER = new URLSearchParams(location.search).get("browser") === "firefox" ? "firefox" : "chrome";
+    const UI_DIR = `../raw-ui/${BROWSER}/`;
 
     const ICONS = {
         back: '<path d="M15 5l-7 7 7 7"/>',
@@ -91,7 +93,7 @@
         images.forEach((img) => { img.src = UI_DIR + img.dataset.ui; });
         const script = document.createElement("script");
         script.src = `${UI_DIR}rects.js`;
-        script.onerror = () => fail("rects.js missing: run tools/capture.mjs first");
+        script.onerror = () => fail(`${UI_DIR}rects.js missing: run the ${BROWSER} capture first`);
         script.onload = () => Promise.all([...[...document.images].map((img) => img.decode()), document.fonts.ready])
             .then(() => {
                 if (!document.fonts.check('700 46px "Mona Sans"')) throw new Error("Mona Sans not loaded");
