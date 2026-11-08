@@ -57,14 +57,6 @@ export function parseSteamAppId(url: string): number | null {
     return match ? Number(match[1]) : null;
 }
 
-// A blank or unparseable field means "no threshold" — the gate stays off.
-export function parseThresholdInput(raw: string): number | null {
-    if (raw.trim() === '') return null;
-    const parsed = Number(raw);
-    if (!Number.isFinite(parsed)) return null;
-    return Math.min(MAX_PERCENT, Math.max(MIN_PERCENT, parsed));
-}
-
 // `null` means "no percentage exists" (a reviewless game), which is NOT 0%.
 export function calculatePositivePercent(summary: SteamReviewSummary): number | null {
     const total = summary?.total_reviews ?? 0;

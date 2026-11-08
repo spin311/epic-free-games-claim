@@ -1,356 +1,479 @@
+/* Free Game Claimer popup. Dark in every OS theme: one bold element (the
+   header with the Sponsor pill), then quiet, left-aligned groups. Chrome caps a
+   popup at 600 px, so the Settings tab with a prompt card has to fit in that. */
+
 :root {
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
+  --bg: #1f2023;
+  --header: #18191b;
+  --surface: #2a2b2f;
+  --surface-hover: #323338;
+  --field: #18191b;
+  --line: #3a3b40;
+  --text: #ececec;
+  --muted: #a4a6ab;
+  --faint: #7c7e84;
+  --brand: #60ea67;
+  --brand-hover: #7ef084;
+  --on-brand: #0d2a10;
+  --warn: #f0ad4e;
+  --danger: #ef6b65;
+  --upcoming: #f0a868;
+  --sponsor: #db61a2;
+  --sponsor-dark: #c24d8d;
+  --sponsor-soft: rgba(219, 97, 162, 0.16);
+  --sponsor-line: rgba(219, 97, 162, 0.45);
+  --radius: 8px;
 
-  color-scheme: light dark;
-  color: rgba(255, 255, 255, 0.87);
-  background-color: #242424;
+  color-scheme: dark;
+  background: var(--bg);
+}
 
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
+* {
+  box-sizing: border-box;
+}
+
+/* On body, not :root: Chrome gives extension pages its own body font (75%, system-ui). */
+body {
+  width: 360px;
+  margin: 0;
+  overflow-x: hidden;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--text);
+  background: var(--bg);
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
-  -webkit-text-size-adjust: 100%;
+}
+
+h1,
+h2,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--brand);
+  text-decoration: none;
+}
+
+a:hover {
+  color: var(--brand-hover);
+}
+
+button,
+select,
+input {
+  font: inherit;
+  color: inherit;
+}
+
+:focus-visible {
+  outline: 2px solid var(--brand);
+  outline-offset: 2px;
+}
+
+select,
+input[type="email"] {
+  min-width: 0;
+  height: 28px;
+  padding: 0 8px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
+  background: var(--field);
+}
+
+select {
+  cursor: pointer;
 }
 
 .App {
   display: flex;
   flex-direction: column;
-  justify-content: center;
+}
+
+/* ---------- Header ---------- */
+
+.app-header {
+  display: flex;
   align-items: center;
+  gap: 10px;
+  padding: 8px 12px;
+  background: var(--header);
+  border-bottom: 1px solid var(--line);
 }
 
+.app-logo {
+  flex: none;
+  width: 32px;
+  height: 32px;
+}
 
-a {
+.app-title {
+  flex: 1;
+  min-width: 0;
+}
+
+.app-title h1 {
+  font-size: 14px;
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.app-title p {
+  min-height: 1.4em;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.app-claiming {
+  color: var(--warn);
+}
+
+.sponsor-pill {
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 5px 11px;
+  border: 1px solid var(--sponsor-line);
+  border-radius: 999px;
+  color: var(--text);
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.sponsor-pill span {
+  color: var(--sponsor);
+}
+
+.sponsor-pill:hover {
+  color: var(--text);
+  background: var(--sponsor-soft);
+}
+
+/* ---------- Tabs ---------- */
+
+.tabs {
+  display: flex;
+  border-bottom: 1px solid var(--line);
+}
+
+.tabs button {
+  flex: 1;
+  padding: 9px 0 7px;
+  border: none;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--muted);
   font-weight: 500;
-  color: #60ea67;
-  text-decoration: inherit;
-}
-a:hover {
-  color: #a3ed72;
-}
-
-body {
-  margin: 0;
-  min-width: 350px;
-  min-height: 80vh;
-}
-
-p {
-  margin: 0.5em 0 1em 0;
-  text-align: center;
-  font-size: 1em;
-  color: #c0bbbb;
-}
-
-.claiming-status {
-  color: #f0ad4e;
-  font-weight: 500;
-}
-
-button {
-  border-radius: 8px;
-  border: 1px solid transparent;
-  padding: 0.6em 1.2em;
-  font-size: 1em;
-  font-weight: 500;
-  font-family: inherit;
-  background-color: #1a1a1a;
-  cursor: pointer;
-  transition: border-color 0.25s;
-}
-button:hover {
-  border-color: #646cff;
-}
-button:focus,
-button:focus-visible {
-  outline: 4px auto -webkit-focus-ring-color;
-}
-
-@media (prefers-color-scheme: light) {
-  :root {
-    color: #213547;
-    background-color: #ffffff;
-  }
-  a:hover {
-    color: #747bff;
-  }
-  button {
-    background-color: #f9f9f9;
-  }
-}
-
-.on-button {
-  width: 70px;
-  height: 70px;
-}
-
-.on-button.active  {
-  color: #60ea67;
-}
-
-.on-button:not(.active) {
-  color: #c0bbbb;
-}
-
-.on-button:hover {
   cursor: pointer;
 }
 
-.inputs {
+.tabs button:hover {
+  color: var(--text);
+}
+
+.tabs button.active {
+  color: var(--brand);
+  border-bottom-color: var(--brand);
+  font-weight: 600;
+}
+
+.tab-content {
   display: flex;
   flex-direction: column;
-  align-items: center;
-  gap: 1.5em;
-  width: 100%;
+  gap: 10px;
+  padding: 10px 12px;
 }
 
-.manual-btn {
-  align-self: center;
-  width: 10em;
+/* ---------- Buttons ---------- */
+
+.btn {
+  height: 30px;
+  padding: 0 12px;
+  border: 1px solid transparent;
+  border-radius: 6px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
 }
 
-.manual-btn:disabled {
+.btn:disabled {
   opacity: 0.6;
   cursor: default;
 }
 
-.checkboxes {
+.btn-primary {
+  background: var(--brand);
+  color: var(--on-brand);
+}
+
+.btn-primary:hover {
+  background: var(--brand-hover);
+}
+
+.btn-secondary {
+  background: var(--surface-hover);
+  border-color: var(--line);
+}
+
+.btn-secondary:not(:disabled):hover {
+  border-color: var(--brand);
+}
+
+.btn-quiet {
+  background: none;
+  border-color: var(--line);
+  color: var(--muted);
+  font-weight: 500;
+}
+
+.btn-quiet:hover {
+  color: var(--text);
+}
+
+/* ---------- Settings groups ---------- */
+
+.group {
   display: flex;
   flex-direction: column;
-  gap: 0.25em;
-  width: 100%;
+  gap: 8px;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
 }
 
-.checkboxes-row {
-  flex-direction: row;
-}
-
-/* One block per platform. A hairline divider between blocks (not after the
-   last) reads as separate sections without needing boxed/bordered cards. */
-.platform-group {
-  display: flex;
-  flex-direction: column;
-  gap: 0.5em;
-  padding: 0.5em 0;
-}
-
-.platform-group:not(:last-child) {
-  border-bottom: 1px solid rgba(255, 255, 255, 0.08);
-}
-
-/* The main checkbox row for a platform, and the two toggles above the free
-   games list (Future Games / Descriptions) — pill-styled either way. */
-.checkboxes > span,
-.platform-group > span {
+.setting-row {
   display: flex;
   align-items: center;
-  gap: 0.5em;
-  padding: 0.4em 0.75em;
-  border-radius: 6px;
-  background-color: rgba(255, 255, 255, 0.05);
-  flex-grow: 1;
+  gap: 10px;
 }
 
-.checkboxes label {
+.switch-label {
   flex: 1;
-  font-weight: 500;
-  color: #c0bbbb;
+  display: flex;
+  align-items: center;
+  gap: 6px;
 }
 
-.checkboxes input[type="checkbox"] {
-  accent-color: #60ea67;
-  width: 1.2em;
-  height: 1.2em;
+.setting-label {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  font-weight: 600;
   cursor: pointer;
 }
 
-/* A platform's sub-options, shown only while its main checkbox is checked —
-   indented to read as belonging to the row above. Shared by Steam's review
-   threshold, IndieGala's wheel toggle, and Prime Gaming's external-platform
-   toggles, so all three line up the same way instead of three near-duplicate
-   indentation rules. */
+.setting-note {
+  color: var(--warn);
+  font-weight: 500;
+}
+
+.schedule-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  color: var(--muted);
+}
+
+.schedule-row select {
+  flex: 1;
+}
+
+.claim-now {
+  flex: none;
+  height: 28px;
+}
+
+/* A switch drawn on the native checkbox, so it keeps its keyboard and form behaviour. */
+.switch {
+  flex: none;
+  position: relative;
+  width: 34px;
+  height: 20px;
+  margin: 0;
+  border-radius: 999px;
+  background: var(--line);
+  appearance: none;
+  cursor: pointer;
+  transition: background-color 0.15s;
+}
+
+.switch::after {
+  content: "";
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: #fff;
+  transition: transform 0.15s;
+}
+
+.switch:checked {
+  background: var(--brand);
+}
+
+.switch:checked::after {
+  transform: translateX(14px);
+}
+
+/* ---------- Store rows ---------- */
+
+.platform-group {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.platform-group + .platform-group {
+  padding-top: 8px;
+  border-top: 1px solid var(--line);
+}
+
+.check-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-height: 22px;
+}
+
+.check-row input[type="checkbox"] {
+  flex: none;
+  width: 15px;
+  height: 15px;
+  margin: 0;
+  accent-color: var(--brand);
+  cursor: pointer;
+}
+
+.check-row label {
+  flex: 1;
+  min-width: 0;
+  cursor: pointer;
+}
+
+.platform-group > .check-row label {
+  font-weight: 600;
+}
+
+/* A store's own options, shown while it is on: indented under its name. */
 .sub-options {
   display: flex;
   flex-direction: column;
-  gap: 0.4em;
-  padding-left: 1.35em;
+  gap: 6px;
+  padding-left: 23px;
 }
 
-/* Plain rather than pill-styled, unlike a platform's own main checkbox row —
-   keeps sub-options visually lighter-weight than the row they belong to. */
-.sub-options span {
+.option-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 4px 10px;
+}
+
+.sub-row {
   display: flex;
   align-items: center;
-  gap: 0.5em;
+  gap: 8px;
+  color: var(--muted);
 }
 
-.sub-options .hint {
-  margin: 0;
-  text-align: left;
-  font-size: 0.8em;
-  color: #8a8585;
+.sub-row select {
+  flex: 1;
 }
 
-/* Prime Gaming's request for the user's regional Luna site: a notice, so it
-   reads warmer than a hint, with its action styled like the popup's links. */
+.hint {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.hint-warn {
+  color: var(--warn);
+}
+
+/* Prime Gaming's request for the user's regional Luna site. */
 .hint.regional-access {
-  margin: 0.25em 0 0.5em;
-  /* Lined up with the sub-options below (.sub-options' padding plus their
-     0.8em text's own indent). */
-  padding-left: 1.35em;
-  text-align: left;
-  font-size: 0.8em;
-  color: #f0ad4e;
+  padding-left: 23px;
+  color: var(--warn);
 }
 
 .link-button {
   padding: 0;
   border: none;
   background: none;
-  font: inherit;
-  font-weight: 500;
-  color: #60ea67;
+  color: var(--brand);
+  font-weight: 600;
   cursor: pointer;
 }
+
 .link-button:hover {
-  border: none;
-  color: #a3ed72;
+  color: var(--brand-hover);
 }
 
-@media (prefers-color-scheme: light) {
-  .hint.regional-access {
-    color: #b06d00;
-  }
-  .link-button {
-    background: none;
-  }
-  .link-button:hover {
-    color: #747bff;
-  }
-}
-
-/* Steam-only review gate. */
-.review-threshold {
-  display: flex;
-  flex-direction: column;
-  gap: 0.4em;
-  font-size: 0.85em;
-}
-
-.review-threshold .threshold-row {
-  display: flex;
-  align-items: center;
-  gap: 0.5em;
-}
-
-.review-threshold input[type="number"] {
-  width: 4em;
-  padding: 0.25em 0.4em;
-  border-radius: 4px;
-  border: none;
-  background-color: #1a1a1a;
-  color: #ffffff;
-  font-family: inherit;
-  font-size: inherit;
-}
-
-.review-threshold .tier-select {
-  width: 100%;
-  padding: 0.3em 0.4em;
-  border-radius: 4px;
-  border: none;
-  background-color: #1a1a1a;
-  color: #ffffff;
-  font-family: inherit;
-  font-size: inherit;
-}
-
-/* Prime Gaming's Legacy Games redeem email, under its toggle. */
 .legacy-email {
   display: flex;
   flex-direction: column;
-  gap: 0.3em;
-  padding-left: 1.35em;
-  font-size: 0.85em;
+  gap: 4px;
+  font-size: 12px;
 }
 
-.legacy-email input[type="email"] {
-  padding: 0.3em 0.4em;
-  border-radius: 4px;
-  border: 1px solid transparent;
-  background-color: #1a1a1a;
-  color: #ffffff;
-  font-family: inherit;
-  font-size: inherit;
+.legacy-email label {
+  color: var(--muted);
 }
 
 .legacy-email input[aria-invalid="true"] {
-  border-color: #c0392b;
+  border-color: var(--danger);
 }
 
-/* Sits after the row label (which is flex: 1), so it hugs the right edge. */
+/* Login and health status, flush to the row's right edge. */
 .login-status {
   display: flex;
   align-items: center;
-  gap: 0.4em;
-  font-size: 0.8em;
+  gap: 5px;
+  font-size: 12px;
   white-space: nowrap;
 }
 
 .login-dot {
-  width: 0.55em;
-  height: 0.55em;
+  flex: none;
+  width: 6px;
+  height: 6px;
   border-radius: 50%;
-  flex-shrink: 0;
+  background: currentColor;
 }
 
 .login-status.logged-in {
-  color: #60ea67;
+  color: var(--muted);
 }
 
 .login-status.logged-in .login-dot {
-  background-color: #60ea67;
+  background: var(--brand);
 }
 
-/* Doubles as a link straight to that platform's login page — amber to read
-   as "action needed", matching the claiming-in-progress indicator's color. */
-.login-status.logged-out {
-  color: #f0ad4e;
+.login-status.logged-out,
+.login-status.account-warning {
+  color: var(--warn);
   font-weight: 600;
-  text-decoration: none;
 }
 
 .login-status.logged-out:hover {
+  color: var(--warn);
   text-decoration: underline;
 }
 
-.login-status.logged-out .login-dot {
-  background-color: #f0ad4e;
-}
-
-/* Signed in, but the account can't claim (e.g. no Prime): amber like
-   logged-out, since it needs the user's attention, but not a link. */
 .login-status.account-warning {
-  color: #f0ad4e;
-  font-weight: 600;
   cursor: help;
 }
 
-.login-status.account-warning .login-dot {
-  background-color: #f0ad4e;
-}
-
-/* A store's last check failed (see health.ts): red, since claiming may be
-   affected until it clears. Sits before the login status. */
 .health-status {
-  font-size: 0.8em;
+  margin-right: 6px;
+  color: var(--danger);
+  font-size: 12px;
   font-weight: 600;
-  color: #d9534f;
   white-space: nowrap;
-  text-decoration: none;
-  margin-right: 0.5em;
   cursor: help;
 }
 
@@ -359,410 +482,276 @@ a.health-status {
 }
 
 a.health-status:hover {
+  color: var(--danger);
   text-decoration: underline;
 }
 
-.tabs {
+/* ---------- Prompt cards ---------- */
+
+.prompt-card {
+  margin: 10px 12px 0;
+  padding: 10px 12px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+}
+
+.prompt-card h2 {
+  margin-bottom: 2px;
+  font-size: 13px;
+  font-weight: 650;
+}
+
+.prompt-card p {
+  margin-bottom: 9px;
+  color: var(--muted);
+}
+
+.prompt-actions {
   display: flex;
-  justify-content: space-around;
-  margin: 1em 0;
-  width: 100%;
-  border-bottom: 1px solid rgba(255, 255, 255, 0.1);
+  align-items: center;
+  gap: 8px;
 }
 
-.tabs button {
+.prompt-actions .btn {
   flex: 1;
-  padding: 0.6em 1em;
-  border: none;
-  background: transparent;
-  color: rgba(255, 255, 255, 0.7);
-  font-size: 1em;
+}
+
+.prompt-report {
+  flex: none;
+  color: var(--faint);
+  font-size: 12px;
+  white-space: nowrap;
+}
+
+.prompt-report:hover {
+  color: var(--text);
+  text-decoration: underline;
+}
+
+.sponsor-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  column-gap: 10px;
+  background: linear-gradient(135deg, var(--sponsor-soft) 0%, var(--surface) 75%);
+  border-color: var(--sponsor-line);
+}
+
+.sponsor-card h2,
+.sponsor-card p {
+  grid-column: 2;
+}
+
+.sponsor-card .prompt-actions {
+  grid-column: 1 / -1;
+}
+
+.prompt-badge {
+  grid-row: 1 / span 2;
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  background: var(--sponsor);
+  color: #fff;
+  font-size: 17px;
+  line-height: 1;
+  animation: heartbeat 1.4s ease-in-out 0.4s 2;
+}
+
+.prompt-count {
+  color: var(--sponsor);
+  font-weight: 700;
+}
+
+.prompt-actions .btn-sponsor {
+  flex: 1.5;
+  background: var(--sponsor);
+  color: #fff;
+}
+
+.prompt-actions .btn-sponsor:hover {
+  background: var(--sponsor-dark);
+}
+
+@keyframes heartbeat {
+  0%, 40%, 100% {
+    transform: scale(1);
+  }
+  12% {
+    transform: scale(1.14);
+  }
+  26% {
+    transform: scale(1.06);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .prompt-badge {
+    animation: none;
+  }
+}
+
+/* ---------- Free games ---------- */
+
+/* Wraps rather than widening the popup where a system font runs wider. */
+.filter-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 3px;
+}
+
+.platform-filter {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 3px;
+}
+
+.chip {
+  flex: none;
+  height: 24px;
+  padding: 0 6px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: none;
+  color: var(--faint);
+  font-size: 11.5px;
   font-weight: 500;
-  border-radius: 0;
-  border-bottom: 3px solid transparent;
-  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
+  cursor: pointer;
 }
 
-.tabs button:hover {
-  color: #ffffff;
-  background-color: rgba(255, 255, 255, 0.05);
+.chip:hover {
+  color: var(--text);
 }
 
-.tabs button.active {
-  color: #60ea67;
-  border-bottom: 3px solid #60ea67;
+.chip.active {
+  color: var(--brand);
+  border-color: rgba(96, 234, 103, 0.5);
+  background: rgba(96, 234, 103, 0.08);
+}
+
+.chip-upcoming {
+  margin-left: auto;
+}
+
+.chip-upcoming.active {
+  color: var(--upcoming);
+  border-color: rgba(240, 168, 104, 0.5);
+  background: rgba(240, 168, 104, 0.08);
+}
+
+.game-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.game-card {
+  display: flex;
+  gap: 10px;
+  padding: 8px;
+  background: var(--surface);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  color: var(--text);
+}
+
+.game-card:hover {
+  color: var(--text);
+  border-color: var(--brand);
+}
+
+.game-card img {
+  flex: none;
+  width: 104px;
+  height: 58px;
+  border-radius: 4px;
+  object-fit: cover;
+  background: var(--field);
+}
+
+.game-card img.is-fallback {
+  object-fit: contain;
+}
+
+.game-body {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.game-title {
+  font-weight: 650;
+  line-height: 1.25;
+}
+
+.game-meta {
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.game-upcoming {
+  color: var(--upcoming);
+  font-size: 12px;
   font-weight: 600;
 }
 
-/* The tab colors above assume the dark theme: in light mode the inactive
-   label (70% white) vanished into the white background, hiding the Free
-   Games tab and the pending-redemptions list on it. */
-@media (prefers-color-scheme: light) {
-  .tabs {
-    border-bottom-color: rgba(0, 0, 0, 0.1);
-  }
-
-  .tabs button {
-    color: rgba(33, 53, 71, 0.7);
-  }
-
-  .tabs button:not(.active):hover {
-    color: #213547;
-    background-color: rgba(0, 0, 0, 0.04);
-  }
+.game-claimed {
+  color: var(--brand);
+  font-size: 12px;
+  font-weight: 600;
 }
 
-.tab-content {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  overflow-y: auto;
-  width: 100%;
-  box-sizing: border-box;
-  gap: 1em;
-  padding: 0 1em 1em;
+.game-description {
+  display: -webkit-box;
+  overflow: hidden;
+  color: var(--faint);
+  font-size: 12px;
+  -webkit-box-orient: vertical;
+  -webkit-line-clamp: 2;
 }
 
-.card {
-  border: 1px solid #60ea67;
-  border-radius: 4px;
-  margin-bottom: 10px;
-  padding: 10px;
-  align-items: center;
-}
-
-.future {
-  border-color: #ea9a60;
-}
-.card a {
-  display: grid;
-  grid-template-columns: 1fr 2fr;
-  grid-template-rows: auto auto auto;
-  grid-template-areas:
-    "img title"
-    "img platform"
-    "img desc"
-    "date-start date-end";
-  align-items: center;
-  column-gap: 15px;
-  row-gap: 5px;
-}
-
-.card img {
-    grid-area: img;
-  width: 100%;
-  height: auto;
-  object-fit: cover;
-  margin-right: 10px;
-}
-
-.card p {
-  justify-self: flex-start;
-  margin: 0;
-  font-size: 14px;
-}
-
-.card .game-title {
-  margin-bottom: 5px;
-  grid-area: title;
-  font-weight: bold;
-}
-
-.card .game-platform {
-  grid-area: platform;
-}
-
-.card .game-description {
-  grid-area: desc;
-  font-size: 0.95em;
-  color: #555;
-  margin-top: 6px;
-  text-align: left;
-}
-
-/* A Prime Gaming offer this account already collected: still listed while
-   it's live, but dimmed so the ones left to claim stand out. */
-.card.claimed {
+/* Already on the account: still listed while live, dimmed so the rest stand out. */
+.game-card.claimed {
   opacity: 0.6;
 }
 
-.card .game-claimed {
-  color: #60ea67;
-  font-weight: 600;
-}
-
-/* The theme green is unreadable as text on white. */
-@media (prefers-color-scheme: light) {
-  .card .game-claimed {
-    color: #1b7a30;
-  }
-}
-
-.card .game-date {
-  font-size: 1.0em;
-  color: #888;
-  margin-top: 2px;
-}
-
-.card .date-start {
-    grid-area: date-start;
-}
-
-.card .date-end {
-    grid-area: date-end;
-}
-
-.day-select {
+.empty-state {
   display: flex;
+  flex-direction: column;
   align-items: center;
-  gap: 0.5em;
-  font-size: 1em;
-  color: #c0bbbb;
-  width: 95%;
-  padding: 0.4em 0.75em;
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: 6px;
+  gap: 10px;
+  padding: 16px 0;
+  color: var(--muted);
+  text-align: center;
 }
 
-.day-select select {
-  padding: 0.3em 0.6em;
-  border-radius: 4px;
-  border: none;
-  background-color: #1a1a1a;
-  color: #ffffff;
-  font-family: inherit;
-}
-
-/* Single row by design — nowrap plus horizontal scroll as a fallback rather
-   than wrapping to a second row, which read as cluttered with 5 platforms. */
-.platform-filter {
-  display: flex;
-  flex-wrap: nowrap;
-  overflow-x: auto;
-  gap: 0.3em;
-  width: 100%;
-  justify-content: center;
-  margin-bottom: 0.75em;
-}
-
-.platform-chip {
-  flex-shrink: 0;
-  padding: 0.25em 0.6em;
-  border-radius: 999px;
-  border: 1px solid rgba(255, 255, 255, 0.15);
-  background-color: transparent;
-  color: #8a8585;
-  font-size: 0.8em;
-  font-weight: 500;
-  cursor: pointer;
-  transition: color 0.2s, border-color 0.2s, background-color 0.2s;
-}
-
-.platform-chip:hover {
-  border-color: #60ea67;
-}
-
-.platform-chip.active {
-  color: #60ea67;
-  border-color: #60ea67;
-  background-color: rgba(96, 234, 103, 0.1);
-}
-
-.center {
-  display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-}
-
-.mb-2 {
-    margin-bottom: 0.5em;
-}
-
-/* GitHub Sponsors promo above the footer. The button mirrors GitHub's own
-   Sponsor button in both color schemes; the global p and a rules are overridden
-   so it doesn't pick up the centered grey text or the green link color. */
-.sponsor-promo {
-  align-self: stretch;
-  display: flex;
-  align-items: center;
-  gap: 0.6em;
-  margin: 0.75em 1em 0;
-  padding: 0.5em 0.7em;
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-}
-
-.sponsor-promo-text {
-  margin: 0;
-  text-align: left;
-  font-size: 0.85em;
-  line-height: 1.35;
-  color: #c0bbbb;
-}
-
-.sponsor-button,
-.sponsor-button:hover {
-  color: #f0f6fc;
-}
-
-.sponsor-button {
-  flex-shrink: 0;
-  display: inline-flex;
-  align-items: center;
-  gap: 0.3em;
-  padding: 0.3em 0.75em;
-  font-size: 0.9em;
-  font-weight: 600;
-  background-color: #21262d;
-  border: 1px solid #3d444d;
-  border-radius: 6px;
-  transition: border-color 0.2s ease;
-}
-
-.sponsor-button:hover {
-  border-color: #db61a2;
-}
-
-.sponsor-heart {
-  color: #db61a2;
-}
-
-@media (prefers-color-scheme: light) {
-  .sponsor-promo {
-    background-color: #f6f8fa;
-  }
-  .sponsor-promo-text {
-    color: #213547;
-  }
-  .sponsor-button,
-  .sponsor-button:hover {
-    color: #24292f;
-  }
-  .sponsor-button {
-    background-color: #ffffff;
-    border-color: #d0d7de;
-  }
-  .sponsor-button:hover {
-    border-color: #bf3989;
-  }
-  .sponsor-heart {
-    color: #bf3989;
-  }
-}
-
-/* Review prompt card: same surface as the sponsor promo, which it replaces
-   while visible. Light-scheme overrides follow the base rules. */
-.review-prompt {
-  align-self: stretch;
-  margin: 0.75em 1em 0;
-  padding: 0.6em 0.8em;
-  background-color: rgba(255, 255, 255, 0.05);
-  border-radius: 8px;
-  text-align: left;
-}
-
-.review-prompt p {
-  margin: 0;
-  text-align: left;
-}
-
-.review-prompt-title {
-  font-size: 0.95em;
-  font-weight: 600;
-  color: #f0f0f0;
-}
-
-.review-prompt-text {
-  margin-top: 0.2em !important;
-  font-size: 0.85em;
-  line-height: 1.35;
-  color: #c0bbbb;
-}
-
-.review-prompt-actions {
-  display: flex;
-  gap: 0.5em;
-  margin-top: 0.5em;
-}
-
-.review-prompt-actions button {
-  padding: 0.3em 0.9em;
-  font-size: 0.9em;
-  border-radius: 6px;
-  cursor: pointer;
-}
-
-.review-prompt-primary {
-  background-color: #646cff;
-  border: 1px solid #646cff;
-  color: #ffffff;
-}
-
-.review-prompt-secondary {
-  background-color: transparent;
-  border: 1px solid #3d444d;
-  color: inherit;
-}
-
-.review-prompt-report {
-  display: inline-block;
-  margin-top: 0.5em;
-  font-size: 0.75em;
-  color: #8b949e;
-  text-decoration: underline;
-}
-
-@media (prefers-color-scheme: light) {
-  .review-prompt {
-    background-color: #f6f8fa;
-  }
-  .review-prompt-title,
-  .review-prompt-text {
-    color: #213547;
-  }
-  .review-prompt-secondary {
-    border-color: #d0d7de;
-  }
-  .review-prompt-report {
-    color: #57606a;
-  }
-}
-
-.footer {
-  width: 100%;
-  display: flex;
-  justify-content: space-around;
-}
-
-.footer span {
-  padding: 0.5em;
-  font-size: 1.2em;
-}
+/* ---------- Pending redemptions ---------- */
 
 .pending-redemptions {
-  width: 100%;
-  box-sizing: border-box;
-  padding: 0 1em;
-  margin-bottom: 0.75em;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
 }
 
 .pending-redemptions-title {
-  margin: 0 0 0.4em;
-  font-size: 0.85em;
-  font-weight: bold;
-  color: #ea9a60;
+  color: var(--upcoming);
+  font-size: 12px;
+  font-weight: 650;
 }
 
 .pending-redemption {
-  border: 1px solid #ea9a60;
-  border-radius: 4px;
-  padding: 8px 10px;
-  margin-bottom: 8px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
+  padding: 8px 10px;
+  border: 1px solid rgba(240, 168, 104, 0.5);
+  border-radius: var(--radius);
 }
 
 .pending-redemption-info {
@@ -770,44 +759,61 @@ a.health-status:hover {
 }
 
 .pending-redemption-title {
-  margin: 0;
-  font-size: 0.9em;
-  font-weight: bold;
   overflow: hidden;
+  font-weight: 650;
   text-overflow: ellipsis;
   white-space: nowrap;
 }
 
 .pending-redemption-platform {
-  font-weight: normal;
-  color: #888;
+  color: var(--faint);
+  font-weight: 400;
 }
 
 .pending-redemption-code {
-  font-size: 0.85em;
-  color: #555;
+  color: var(--muted);
+  font-size: 12px;
 }
 
 .pending-redemption-actions {
+  flex: none;
   display: flex;
   align-items: center;
   gap: 6px;
-  flex-shrink: 0;
 }
 
 .pending-redemption-actions button,
 .pending-redemption-actions a {
-  font-size: 0.8em;
   padding: 3px 8px;
-  border: 1px solid #c0bbbb;
-  border-radius: 4px;
+  border: 1px solid var(--line);
+  border-radius: 6px;
   background: none;
+  color: var(--text);
+  font-size: 12px;
   cursor: pointer;
-  text-decoration: none;
-  color: inherit;
 }
 
 .pending-redemption-actions button:hover,
 .pending-redemption-actions a:hover {
-  border-color: #60ea67;
+  color: var(--text);
+  border-color: var(--brand);
+}
+
+/* ---------- Footer ---------- */
+
+.app-footer {
+  display: flex;
+  justify-content: center;
+  gap: 14px;
+  padding: 0 12px 8px;
+}
+
+.app-footer a {
+  color: var(--faint);
+  font-size: 12px;
+}
+
+.app-footer a:hover {
+  color: var(--text);
+  text-decoration: underline;
 }

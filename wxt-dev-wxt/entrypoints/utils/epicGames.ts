@@ -129,7 +129,9 @@ export function formatEpicFreeGame(game: EpicElement, future: boolean): FreeGame
     // No resolvable slug would mean a bare "/p/" 404, so fall back to the
     // free-games hub: still claimable, and the content script runs there.
     link: slug ? `${EPIC_PRODUCT_BASE}/${path}/${slug}` : EPIC_FREE_GAMES_URL,
+    // Wide first: the popup's game cards are landscape, the Thumbnail portrait.
     img:
+        game.keyImages?.find((img: EpicKeyImage) => img.type === "OfferImageWide")?.url ||
         game.keyImages?.find((img: EpicKeyImage) => img.type === "Thumbnail")?.url ||
         game.keyImages?.[0]?.url ||
         "/icon/128.png",

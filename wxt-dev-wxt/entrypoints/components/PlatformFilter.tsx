@@ -42,7 +42,7 @@ function PlatformFilter({ visiblePlatforms, onChange }: PlatformFilterProps) {
                     <button
                         key={platform}
                         type="button"
-                        className={`platform-chip${isActive ? ' active' : ''}`}
+                        className={`chip${isActive ? ' active' : ''}`}
                         aria-pressed={isActive}
                         onClick={() => toggle(platform)}
                     >

@@ -7,11 +7,11 @@ export enum ClaimFrequency {
 }
 
 export const ClaimFrequencyLabels: Record<ClaimFrequency, string> = {
-  [ClaimFrequency.BROWSER_START]: "On Browser Start",
-  [ClaimFrequency.HOURLY]: "Every Hour",
-  [ClaimFrequency.EVERY_6_HOURS]: "Every 6 Hours",
-  [ClaimFrequency.EVERY_12_HOURS]: "Every 12 Hours",
-  [ClaimFrequency.DAILY]: "Once Daily"
+  [ClaimFrequency.BROWSER_START]: "On browser start",
+  [ClaimFrequency.HOURLY]: "Every hour",
+  [ClaimFrequency.EVERY_6_HOURS]: "Every 6 hours",
+  [ClaimFrequency.EVERY_12_HOURS]: "Every 12 hours",
+  [ClaimFrequency.DAILY]: "Once a day"
 };
 
 export const ClaimFrequencyMinutes: Record<ClaimFrequency, number> = {

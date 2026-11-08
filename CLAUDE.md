@@ -17,7 +17,8 @@ Run all commands from there:
 cd wxt-dev-wxt
 ```
 
-The repo root only holds the README, images, and a stub `package.json`.
+The repo root only holds the README, images, a stub `package.json`, and `store-assets/` (the
+Chrome Web Store and Firefox Add-ons listing images and the scripts that build them; see its README).
 
 ## Commands (run inside `wxt-dev-wxt/`)
 
@@ -106,8 +107,9 @@ a warning annotation. When a store's markup or API changes, update the canary al
 - **Immutability:** create new objects/state rather than mutating in place.
 - **Commits:** prefer Conventional Commits (`feat:`, `fix:`, `refactor:`, `docs:`, `chore:`).
   History is mixed (many bare subjects), but new work should follow the convention.
-- **PR workflow:** feature branches (e.g. `feat/<topic>`) merged via PR with **merge commits**
-  (history is not squashed).
+- **PR workflow:** feature branches (e.g. `feat/<topic>`) merged via PR as **one squashed commit**
+  (`gh pr merge <n> --squash --delete-branch`), so main has one entry per change. The squash
+  subject is a Conventional Commits message for the whole change, ending in `(#<n>)`.
 - **Browser APIs:** use the `browser` namespace from `wxt/browser` (not raw `chrome`).
 - Extension `permissions`/`host_permissions` live in `wxt.config.ts` — keep them minimal; new
   hosts are optional (see the `wxt.config.ts` bullet above).

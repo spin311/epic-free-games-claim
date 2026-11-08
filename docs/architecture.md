@@ -25,7 +25,7 @@ via `browser.runtime` message passing. There is **no server** — all logic is c
 | **Background** | `entrypoints/background.ts` (400 LOC) | Core orchestrator. Alarm scheduling, frequency logic, Epic API fetch, Steam HTML fetch, diffing new games, opening claim tabs, badge text, Steam MAIN-world `addToCart` injection. |
 | **Epic content** | `entrypoints/epic.content.ts` | Runs on `store.epicgames.com/*`. Scrapes free-game cards, detects login state, drives the purchase-CTA + iframe payment-confirm flow. |
 | **Steam content** | `entrypoints/steam.content.ts` | Runs on `store.steampowered.com/*`. Scrapes `-100%` free games, drives add-to-account (special-cases Steam's `javascript:addToCart()` URL via a background message). |
-| **Popup UI** | `entrypoints/popup/` + `components/` | React 19 popup: `Settings`, `GamesList`/`GameCard`, `FrequencySelect`, `OnButton`, `ManualClaimBtn`, `Footer`. |
+| **Popup UI** | `entrypoints/popup/` + `components/` | React 19 popup: `Settings`, `GamesList`/`GameCard`, `PopupHeader`, `FrequencySelect`, `AutoClaimSwitch`, `ManualClaimBtn`, `ReviewPrompt`/`SponsorMilestonePrompt`, `Footer`. |
 | **Storage layer** | `entrypoints/hooks/useStorage.ts` | `useStorage` React hook + `get/set/merge` helpers over WXT `storage`. Namespaces keys as `local:<key>`. |
 | **Helpers** | `entrypoints/utils/helpers.ts` | DOM polling (`waitForElement`), randomized `realClick`, iframe clicking, `incrementCounter`. |
 | **Types / enums** | `entrypoints/types/`, `entrypoints/enums/` | Shared models (`FreeGame`, `EpicSearchResponse`, …) and enums (`ClaimFrequency`, `Platforms`, `StorageValues`, `ActiveTabs`). |

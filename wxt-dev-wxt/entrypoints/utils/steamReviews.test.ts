@@ -3,7 +3,6 @@ import {
   parseSteamAppId,
   calculatePositivePercent,
   meetsPositiveThreshold,
-  parseThresholdInput,
   fetchSteamPositivePercent,
   shouldClaimSteamGame,
   STEAM_REVIEW_TIERS,
@@ -178,30 +177,6 @@ describe('meetsPositiveThreshold', () => {
   // Decided behavior: a confirmed reviewless game cannot clear a bar the user set.
   it('fails an unknown percentage when a threshold is set', () => {
     expect(meetsPositiveThreshold(null, 70)).toBe(false);
-  });
-});
-
-describe('parseThresholdInput', () => {
-  it('treats a blank field as no threshold', () => {
-    expect(parseThresholdInput('')).toBeNull();
-    expect(parseThresholdInput('   ')).toBeNull();
-  });
-
-  it('treats non-numeric input as no threshold', () => {
-    expect(parseThresholdInput('abc')).toBeNull();
-  });
-
-  it('accepts a plain percentage', () => {
-    expect(parseThresholdInput('70')).toBe(70);
-  });
-
-  it('accepts zero', () => {
-    expect(parseThresholdInput('0')).toBe(0);
-  });
-
-  it('clamps above 100 and below 0', () => {
-    expect(parseThresholdInput('150')).toBe(100);
-    expect(parseThresholdInput('-5')).toBe(0);
   });
 });
 

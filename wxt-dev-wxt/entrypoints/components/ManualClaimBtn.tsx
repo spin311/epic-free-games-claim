@@ -7,8 +7,8 @@ export function ManualClaimBtn() {
     const [isClaiming] = useStorage<boolean>("isClaiming", false);
 
     return (
-        <button className="manual-btn" onClick={claimGames} disabled={isClaiming}>
-            {isClaiming ? 'Claiming…' : 'Manually claim'}
+        <button type="button" className="btn btn-secondary claim-now" onClick={claimGames} disabled={isClaiming}>
+            {isClaiming ? 'Claiming…' : 'Claim now'}
         </button>
     );
 
