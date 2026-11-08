@@ -26,19 +26,18 @@ function ReviewPrompt({claimedCount, onAnswered}: Props) {
         else void saveReviewAnswer('rated');
     };
 
-    return <div className="review-prompt">
-        <p className="review-prompt-title">Enjoying Free Game Claimer?</p>
-        <p className="review-prompt-text">
-            It has claimed {claimedCount} games for you. A quick rating helps other players find it.
-        </p>
-        <div className="review-prompt-actions">
-            <button className="review-prompt-primary" onClick={rate}>Rate it</button>
-            <button className="review-prompt-secondary" onClick={dismiss}>Not now</button>
+    return <section className="prompt-card" aria-labelledby="review-prompt-title">
+        <h2 id="review-prompt-title">Enjoying Free Game Claimer?</h2>
+        <p>It has claimed {claimedCount} games for you. A quick rating helps other players find it.</p>
+        <div className="prompt-actions">
+            <button type="button" className="btn btn-primary" onClick={rate}>Rate it</button>
+            <button type="button" className="btn btn-quiet" onClick={dismiss}>Not now</button>
+            {/* Beside the buttons rather than under them: a line less in a popup with no height to spare. */}
+            <a href={ISSUES_URL} className="prompt-report" target="_blank" rel="noopener noreferrer">
+                Not working? Report it
+            </a>
         </div>
-        <a href={ISSUES_URL} className="review-prompt-report" target="_blank" rel="noopener noreferrer">
-            Something not working? Report it
-        </a>
-    </div>;
+    </section>;
 }
 
 export default ReviewPrompt;

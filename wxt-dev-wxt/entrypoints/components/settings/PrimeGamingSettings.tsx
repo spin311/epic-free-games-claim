@@ -70,19 +70,21 @@ function PrimeGamingSettings() {
             )}
             {isPrimeOn && (
                 <div className="sub-options">
-                    <p className="hint">Claim offers that go to:</p>
-                    <Checkbox name="Amazon Games App offers" checked={isAmazonGamesOn}
-                              onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.AmazonGames, e.target.checked, setClaimAmazonGames)}/>
-                    <Checkbox name="Epic-linked offers" checked={isEpicOn}
-                              onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.Epic, e.target.checked, setClaimEpic)}/>
-                    <Checkbox name="GOG-linked offers" checked={isGogOn}
-                              onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.GOG, e.target.checked, setClaimGog)}/>
-                    <Checkbox name="Windows-linked offers" checked={isWindowsOn}
-                              onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.Windows, e.target.checked, setClaimWindows)}/>
-                    <Checkbox name="Legacy Games offers" checked={isLegacyOn}
-                              onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.Legacy, e.target.checked, setClaimLegacy)}/>
+                    <p className="hint">Claim offers for:</p>
+                    <div className="option-grid">
+                        <Checkbox name="Amazon Games" id="prime-amazon-games" checked={isAmazonGamesOn}
+                                  onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.AmazonGames, e.target.checked, setClaimAmazonGames)}/>
+                        <Checkbox name="Epic" id="prime-epic" checked={isEpicOn}
+                                  onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.Epic, e.target.checked, setClaimEpic)}/>
+                        <Checkbox name="GOG" id="prime-gog" checked={isGogOn}
+                                  onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.GOG, e.target.checked, setClaimGog)}/>
+                        <Checkbox name="Microsoft Store" id="prime-microsoft" checked={isWindowsOn}
+                                  onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.Windows, e.target.checked, setClaimWindows)}/>
+                        <Checkbox name="Legacy Games" id="prime-legacy" checked={isLegacyOn}
+                                  onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.Legacy, e.target.checked, setClaimLegacy)}/>
+                    </div>
                     {isNothingPicked && (
-                        <p className="hint">Every Prime offer goes to one of these, so nothing is claimed until you pick one.</p>
+                        <p className="hint hint-warn">Pick at least one, or nothing is claimed.</p>
                     )}
                     {isLegacyOn && (
                         <div className="legacy-email">
@@ -98,8 +100,8 @@ function PrimeGamingSettings() {
                             />
                             <p className="hint">
                                 {isLegacyEmailInvalid
-                                    ? "Not a valid email; codes will be filled in for you to finish."
-                                    : "Codes are redeemed to this email (no newsletter). Leave empty to finish each one yourself."}
+                                    ? "Not a valid email: codes are filled in for you to finish."
+                                    : "Codes go to this email (no newsletter). Leave empty to finish each one yourself."}
                             </p>
                         </div>
                     )}

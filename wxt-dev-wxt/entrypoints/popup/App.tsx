@@ -6,7 +6,7 @@ import GamesList from "@/entrypoints/components/GamesList.tsx";
 import {ActiveTabs} from "@/entrypoints/enums/activeTabs.ts";
 import Settings from "@/entrypoints/components/Settings.tsx";
 import Footer from "@/entrypoints/components/Footer.tsx";
-import SponsorPromo from "@/entrypoints/components/SponsorPromo.tsx";
+import PopupHeader from "@/entrypoints/components/PopupHeader.tsx";
 import ReviewPrompt from "@/entrypoints/components/ReviewPrompt.tsx";
 import SponsorMilestonePrompt from "@/entrypoints/components/SponsorMilestonePrompt.tsx";
 import {usePromptChoice} from "@/entrypoints/hooks/usePromptChoice.ts";
@@ -23,27 +23,22 @@ function App() {
 
     return (
         <div className="App">
-            <div className="tabs">
-                <button onClick={() => setActiveTab(ActiveTabs.MAIN)}
-                        className={activeTab === ActiveTabs.MAIN ? 'active' : ''}>Settings
-                </button>
-                <button onClick={() => setActiveTab(ActiveTabs.FREE_GAMES)}
-                        className={activeTab === ActiveTabs.FREE_GAMES ? 'active' : ''}>Free Games
-                </button>
-            </div>
-            {activeTab === ActiveTabs.MAIN && (
-                <Settings/>
-            )}
-
-            {activeTab === ActiveTabs.FREE_GAMES && (
-                <div className="tab-content">
-                    <GamesList/>
-                </div>
-            )}
+            {/* One ask at a time; no Sponsor pill until the choice is known. */}
+            <PopupHeader showSponsor={choice === null}/>
             {choice === 'review' && <ReviewPrompt claimedCount={claimedCount} onAnswered={answered}/>}
             {choice === 'sponsor' && <SponsorMilestonePrompt claimedCount={claimedCount} onAnswered={answered}/>}
-            {/* One ask at a time; nothing until the choice is known. */}
-            {choice === null && <SponsorPromo/>}
+            <nav className="tabs" aria-label="Sections">
+                <button type="button" onClick={() => setActiveTab(ActiveTabs.MAIN)}
+                        className={activeTab === ActiveTabs.MAIN ? 'active' : ''}
+                        aria-current={activeTab === ActiveTabs.MAIN ? 'page' : undefined}>Settings
+                </button>
+                <button type="button" onClick={() => setActiveTab(ActiveTabs.FREE_GAMES)}
+                        className={activeTab === ActiveTabs.FREE_GAMES ? 'active' : ''}
+                        aria-current={activeTab === ActiveTabs.FREE_GAMES ? 'page' : undefined}>Free Games
+                </button>
+            </nav>
+            {activeTab === ActiveTabs.MAIN && <Settings/>}
+            {activeTab === ActiveTabs.FREE_GAMES && <GamesList/>}
             <Footer/>
         </div>
     );

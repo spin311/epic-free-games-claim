@@ -36,7 +36,7 @@ describe('didEnoughTimePass', () => {
 });
 
 describe('isActive', () => {
-  // Regression: `active` isn't persisted to storage until OnButton's
+  // Regression: `active` isn't persisted to storage until AutoClaimSwitch's
   // useStorage effect first mounts, so a fresh install (or any raw storage
   // read before the popup has ever opened) must not treat "unset" as "off".
   it('is true when unset (fresh install, never persisted)', () => {

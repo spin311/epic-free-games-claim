@@ -1,12 +1,9 @@
 import { ChangeEvent } from "react";
-import {
-    STEAM_REVIEW_TIERS,
-    findTierLabelForThreshold,
-    parseThresholdInput,
-} from "@/entrypoints/utils/steamReviews.ts";
+import { STEAM_REVIEW_TIERS, findTierLabelForThreshold } from "@/entrypoints/utils/steamReviews.ts";
 
-// Sentinel for a hand-typed number that matches no Steam tier. Shown so the
-// dropdown never reads "Any" while a threshold is actually in force.
+// Sentinel for a stored number that matches no Steam tier (set by the number
+// field older versions had). Shown so the dropdown never reads "Any" while a
+// threshold is actually in force.
 const CUSTOM_OPTION = "__custom";
 
 interface ReviewThresholdProps {
@@ -15,8 +12,7 @@ interface ReviewThresholdProps {
 }
 
 function ReviewThreshold({ value, onChange }: ReviewThresholdProps) {
-    const tierLabel = findTierLabelForThreshold(value);
-    const isCustom = value !== null && tierLabel === '';
+    const isCustom = value !== null && findTierLabelForThreshold(value) === '';
 
     function handleTierChange(e: ChangeEvent<HTMLSelectElement>) {
         // The blank "Any" option clears the gate; every other value is a number.
@@ -25,27 +21,15 @@ function ReviewThreshold({ value, onChange }: ReviewThresholdProps) {
     }
 
     return (
-        <div className="review-threshold">
-            <div className="threshold-row">
-                <label htmlFor="steam-review-threshold">Positive review % needed</label>
-                <input
-                    id="steam-review-threshold"
-                    type="number"
-                    min={0}
-                    max={100}
-                    step={1}
-                    placeholder="any"
-                    value={value ?? ''}
-                    onChange={e => onChange(parseThresholdInput(e.target.value))}
-                />
-            </div>
+        <div className="sub-row">
+            <label htmlFor="steam-review-threshold">Min. rating</label>
             <select
-                className="tier-select"
-                aria-label="Steam rating preset"
+                id="steam-review-threshold"
                 value={isCustom ? CUSTOM_OPTION : (value === null ? '' : String(value))}
                 onChange={handleTierChange}
+                title="Skip free Steam games whose reviews are less positive than this."
             >
-                <option value="">Any: claim every free game</option>
+                <option value="">Any</option>
                 {STEAM_REVIEW_TIERS.map(tier => (
                     <option key={tier.threshold} value={tier.threshold}>
                         {tier.threshold}%+ · {tier.label}

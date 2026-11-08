@@ -23,12 +23,12 @@ export function didEnoughTimePass(lastOpened: string, requiredMinutes: number): 
   return minutesElapsed >= requiredMinutes;
 }
 
-// `active` defaults to enabled (see OnButton's useStorage default) — unset
+// `active` defaults to enabled (see AutoClaimSwitch's useStorage default) — unset
 // storage (nothing persisted yet, e.g. before the popup has ever rendered)
 // must read as active, not inactive. The same asymmetric-default class of bug
 // already fixed for the platform toggles in resolvePlatformToggles: without
 // this, a fresh install's alarm never gets created and its first scheduled
-// check never runs, since nothing writes `active` to storage until OnButton
+// check never runs, since nothing writes `active` to storage until AutoClaimSwitch
 // itself mounts.
 export function isActive(active: unknown): boolean {
   return active !== false;

@@ -1,6 +1,5 @@
-import {setStorageItem, useStorage, useStorageValue} from "@/entrypoints/hooks/useStorage.ts";
-import OnButton from "@/entrypoints/components/OnButton.tsx";
-import {ManualClaimBtn} from "@/entrypoints/components/ManualClaimBtn.tsx";
+import {setStorageItem, useStorage} from "@/entrypoints/hooks/useStorage.ts";
+import AutoClaimSwitch from "@/entrypoints/components/AutoClaimSwitch.tsx";
 import FrequencySelect from "@/entrypoints/components/FrequencySelect.tsx";
 import SteamSettings from "@/entrypoints/components/settings/SteamSettings.tsx";
 import EpicSettings from "@/entrypoints/components/settings/EpicSettings.tsx";
@@ -11,11 +10,6 @@ import { ClaimFrequency } from "@/entrypoints/enums/claimFrequency.ts";
 import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
 
 function Settings() {
-
-    // Read-only: claim tabs count up while the popup is open, and a write-back
-    // of what the popup read could undo that.
-    const counter = useStorageValue<number>("counter") ?? 0;
-    const [isClaiming] = useStorage<boolean>("isClaiming", false);
     const [claimFrequency, setClaimFrequency] = useStorage<ClaimFrequency>("claimFrequency", ClaimFrequency.DAILY);
     const [claimHour, setClaimHour] = useStorage<number | null>("claimHour", null);
 
@@ -39,22 +33,19 @@ function Settings() {
 
     return (
         <div className="tab-content">
-            <p>Games claimed: {counter}</p>
-            {isClaiming && <p className="claiming-status">⏳ Claiming free games…</p>}
-            <OnButton/>
-
-            <div className="inputs">
-                <ManualClaimBtn/>
+            <section className="group">
+                <AutoClaimSwitch/>
                 <FrequencySelect value={claimFrequency} onChange={handleFrequencyChange}
                                  claimHour={claimHour} onClaimHourChange={handleClaimHourChange} />
-                <div className="checkboxes">
-                    <SteamSettings/>
-                    <EpicSettings/>
-                    <GogSettings/>
-                    <IndieGalaSettings/>
-                    <PrimeGamingSettings/>
-                </div>
-            </div>
+            </section>
+
+            <section className="group" aria-label="Stores">
+                <SteamSettings/>
+                <EpicSettings/>
+                <GogSettings/>
+                <IndieGalaSettings/>
+                <PrimeGamingSettings/>
+            </section>
         </div>
     );
 }
