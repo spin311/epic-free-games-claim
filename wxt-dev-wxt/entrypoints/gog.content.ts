@@ -129,6 +129,8 @@ export default defineContentScript({
             // Here a 401 is authoritative: the request went out from gog.com
             // itself, so a rejected session really is a signed-out user.
             await recordLoginState(Platforms.GOG, !lookup.unauthorized);
+            // Signed in and no giveaway running: the last one is over.
+            if (!lookup.unauthorized && !lookup.game) await setStorageItem("gogGames", []);
             if (lookup.unauthorized || !lookup.game) {
                 await closeCurrentTab();
                 return;

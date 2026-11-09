@@ -1500,6 +1500,61 @@ describe('Steam ownership', () => {
   });
 });
 
+// Regression (3.5.0): a store with nothing free returned before writing its
+// list, so the popup kept showing the last giveaway long after it ended.
+describe('a store with nothing free', () => {
+  const pastGiveaway = { title: 'Asleep: Act 1', platform: Platforms.Steam, link: 'https://store.steampowered.com/app/1583850/', img: '' };
+
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('clears the Steam list when the search page lists no free game', async () => {
+    await setStorageItem('steamGames', [pastGiveaway]);
+    vi.stubGlobal('fetch', respondWith(200, '<div id="search_result_container"></div>'));
+    const runner = Object.create(background);
+
+    await runner.getSteamGamesList(true);
+
+    expect(await getStorageItem('steamGames')).toEqual([]);
+  });
+
+  it('keeps the Steam list when the page has no result list at all', async () => {
+    await setStorageItem('steamGames', [pastGiveaway]);
+    vi.stubGlobal('fetch', respondWith(200, '<title>Just a moment...</title>'));
+    const runner = Object.create(background);
+
+    await expect(runner.getSteamGamesList(true)).rejects.toThrow(StoreChangedError);
+
+    expect(await getStorageItem('steamGames')).toEqual([pastGiveaway]);
+  });
+
+  it('clears the GOG list when no giveaway is running', async () => {
+    await setStorageItem('gogGames', [{ ...pastGiveaway, platform: Platforms.GOG }]);
+    vi.stubGlobal('fetch', respondWith(404, '{"message":"No active giveaway"}'));
+    const runner = Object.create(background);
+
+    await runner.getGogGamesList(true);
+
+    expect(await getStorageItem('gogGames')).toEqual([]);
+  });
+
+  it('keeps the GOG list on the worker\'s ambiguous 401', async () => {
+    const listed = [{ ...pastGiveaway, platform: Platforms.GOG }];
+    await setStorageItem('gogGames', listed);
+    vi.stubGlobal('fetch', respondWith(401, '{"message":"Unauthorized"}'));
+    const runner = Object.create(background);
+
+    await expect(runner.getGogGamesList(true)).rejects.toThrow();
+
+    expect(await getStorageItem('gogGames')).toEqual(listed);
+  });
+});
+
 describe('waitForTabToLoad', () => {
   beforeEach(() => {
     fakeBrowser.reset();

@@ -770,7 +770,12 @@ export const background = {
     if (parseSteamLoginState(html) === true) await recordLoginState(Platforms.Steam, true);
 
     const parsed = parseSteamFreeGames(html);
-    if (!parsed) return;
+    // The result list is there but empty: nothing is free now, so the last
+    // giveaway is over and leaves the popup.
+    if (!parsed) {
+      await setStorageItem("steamGames", []);
+      return;
+    }
     const currFreeGames: FreeGame[] = await getStorageItem("steamGames") || [];
     const owned = await this.loadSteamOwnedApps();
     // Without an answer the last known marks stand, rather than every game
@@ -820,7 +825,11 @@ export const background = {
     // giveaway is running, so any other answer means the session went along.
     await recordLoginState(Platforms.GOG, true);
     const game = lookup.game;
-    if (!game) return;
+    // No giveaway running, so the last one is over and leaves the popup.
+    if (!game) {
+      await setStorageItem("gogGames", []);
+      return;
+    }
 
     const currFreeGames: FreeGame[] = await getStorageItem("gogGames") || [];
     if (currFreeGames.some((g) => g?.title === game.title)) return;
