@@ -49,6 +49,16 @@ body {
   -moz-osx-font-smoothing: grayscale;
 }
 
+/* Scroll here, never the page. Firefox sizes a popup to the page's width without
+   the vertical scrollbar it adds past the 600 px cap, so a classic (non-overlay)
+   scrollbar, e.g. on macOS with a mouse, covered the right 15 px. A scrollbar on
+   this box sits inside the 360 px instead. Both browsers cap a popup at 600 px. */
+#root {
+  max-height: 600px;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
 h1,
 h2,
 p {
