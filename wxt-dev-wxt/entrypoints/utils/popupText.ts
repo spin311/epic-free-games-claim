@@ -1,4 +1,5 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
+import { parseGameDate } from "@/entrypoints/utils/gameDates.ts";
 
 // Short copy the popup builds from stored data, kept here so it can be tested.
 
@@ -9,13 +10,6 @@ export function claimedCountLabel(count: number): string {
 // "Prime Gaming → GOG" for a Prime offer that goes to another store.
 export function platformLabel(game: FreeGame): string {
     return game.store ? `${game.platform} → ${game.store}` : game.platform;
-}
-
-// A real date, or null: Epic writes new Date(0) when a promotion has no end.
-function parseDate(value: string | undefined): Date | null {
-    if (!value) return null;
-    const date = new Date(value);
-    return Number.isFinite(date.getTime()) && date.getTime() > 0 ? date : null;
 }
 
 function shortDate(date: Date, now: Date, locale: string | undefined): string {
@@ -32,8 +26,8 @@ function shortDate(date: Date, now: Date, locale: string | undefined): string {
  * Nov 13") for an upcoming one, or null when the store gave no usable date.
  */
 export function gameDateLabel(game: FreeGame, now: Date = new Date(), locale?: string): string | null {
-    const start = parseDate(game.startDate);
-    const end = parseDate(game.endDate);
+    const start = parseGameDate(game.startDate);
+    const end = parseGameDate(game.endDate);
     if (game.future) {
         if (!start) return null;
         return end

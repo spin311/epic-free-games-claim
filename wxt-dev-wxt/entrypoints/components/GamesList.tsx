@@ -6,6 +6,7 @@ import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import PlatformFilter, {ALL_PLATFORMS} from "@/entrypoints/components/PlatformFilter.tsx";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {EPIC_CLAIMED_KEY, withEpicClaimStatus} from "@/entrypoints/utils/epicGames.ts";
+import {withoutEnded} from "@/entrypoints/utils/gameDates.ts";
 
 function GamesList() {
     const [steamGames] = useStorage<FreeGame[]>("steamGames", []);
@@ -17,8 +18,11 @@ function GamesList() {
     const [gogGames] = useStorage<FreeGame[]>("gogGames", []);
     const [indieGalaGames] = useStorage<FreeGame[]>("indieGalaGames", []);
     const [primeGamingGames] = useStorage<FreeGame[]>("primeGamingGames", []);
-    const freeGames = [...epicGames, ...primeGamingGames, ...steamGames, ...gogGames, ...indieGalaGames];
-    const [futureGames] = useStorage<FreeGame[]>("futureGames", []);
+    // Only what is free now or soon: a stored list can still hold giveaways
+    // that have ended (see withoutEnded).
+    const freeGames = withoutEnded([...epicGames, ...primeGamingGames, ...steamGames, ...gogGames, ...indieGalaGames]);
+    const [storedFutureGames] = useStorage<FreeGame[]>("futureGames", []);
+    const futureGames = withoutEnded(storedFutureGames);
     const [showFutureGames, setShowFutureGames] = useStorage<boolean>("showFutureGames", true);
     // Defaults to every platform so existing users see no change until they
     // actually touch the filter.
