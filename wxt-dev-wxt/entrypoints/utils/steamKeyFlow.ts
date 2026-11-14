@@ -9,6 +9,7 @@ import {
 } from "@/entrypoints/utils/indieGalaGifts.ts";
 import { addPendingRedemption, PendingReasonKey, removePendingRedemption } from "@/entrypoints/utils/pendingRedemptions.ts";
 import {
+  englishSteamActivationUrl,
   isSteamKeyDone,
   pendingReasonKey,
   SteamKeyOutcome,
@@ -207,7 +208,7 @@ export async function handleGiftKeys(giftUrl: string, keys: GiftKey[], deps: Key
       reasonKey: "pendingReasonSteamUnfinished",
     });
     try {
-      await deps.openTab(steamActivationUrl(giftKey.key), "activateSteamKey", { title });
+      await deps.openTab(englishSteamActivationUrl(giftKey.key), "activateSteamKey", { title });
     } catch (error: unknown) {
       console.error("[steamKey] couldn't open Steam's activation page:", error);
       await recordSteamKeyResult({ key: giftKey.key, title, outcome: "failed", products: [], message: String(error) });
