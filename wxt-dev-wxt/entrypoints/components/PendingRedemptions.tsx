@@ -5,12 +5,14 @@ import {
     PendingRedemption,
     pendingRedemptionKey,
 } from "@/entrypoints/utils/pendingRedemptions.ts";
+import {t} from "@/entrypoints/utils/i18n.ts";
+import {pendingReasonText} from "@/entrypoints/utils/popupText.ts";
 
 // Where an entry without a code was kept, and how to get there.
 function codelessText(entry: PendingRedemption): { hint: string; link: string } {
     return entry.platform === "IndieGala"
-        ? { hint: "Key wasn't read; it's on IndieGala.", link: "Open on IndieGala" }
-        : { hint: "Code wasn't read; it's on Amazon's page.", link: "Open on Amazon" };
+        ? { hint: t("pendingIndieGalaKeyNotRead"), link: t("pendingOpenOnIndieGala") }
+        : { hint: t("pendingAmazonCodeNotRead"), link: t("pendingOpenOnAmazon") };
 }
 
 // Fallback for GOG/Microsoft codes the redeem content scripts couldn't
@@ -39,32 +41,33 @@ function PendingRedemptions() {
 
     return (
         <div className="pending-redemptions">
-            <p className="pending-redemptions-title">Needs manual redeem</p>
+            <p className="pending-redemptions-title">{t("pendingTitle")}</p>
             {pending.map((entry) => {
                 const key = pendingRedemptionKey(entry);
                 const codeless = codelessText(entry);
+                const reason = pendingReasonText(entry);
                 return (
                     <div className="pending-redemption" key={key}>
                         <div className="pending-redemption-info">
                             <p className="pending-redemption-title">
-                                {entry.title}
-                                <span className="pending-redemption-platform"> ({entry.platform})</span>
+                                <span className="pending-redemption-name">{entry.title}</span>
+                                <span className="pending-redemption-platform"> {t("pendingStore", entry.platform)}</span>
                             </p>
                             {entry.code
                                 ? <code className="pending-redemption-code">{entry.code}</code>
                                 : <p className="hint">{codeless.hint}</p>}
-                            {entry.reason && <p className="hint">{entry.reason}</p>}
+                            {reason && <p className="hint">{reason}</p>}
                         </div>
                         <div className="pending-redemption-actions">
                             {entry.code && (
                                 <button type="button" onClick={() => handleCopy(entry.code)}>
-                                    {copiedCode === entry.code ? "Copied" : "Copy"}
+                                    {copiedCode === entry.code ? t("pendingCopied") : t("pendingCopy")}
                                 </button>
                             )}
                             <a href={entry.redeemUrl} target="_blank" rel="noopener noreferrer">
-                                {entry.code ? (entry.platform === "Steam" ? "Activate" : "Try again") : codeless.link}
+                                {entry.code ? t(entry.platform === "Steam" ? "pendingActivate" : "pendingTryAgain") : codeless.link}
                             </a>
-                            <button type="button" onClick={() => handleDismiss(key)} aria-label="Dismiss">
+                            <button type="button" onClick={() => handleDismiss(key)} aria-label={t("pendingDismiss")}>
                                 &times;
                             </button>
                         </div>

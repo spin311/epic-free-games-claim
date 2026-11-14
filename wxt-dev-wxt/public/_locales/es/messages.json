@@ -1,0 +1,478 @@
+{
+  "extName": {
+    "message": "Free Game Claimer: juegos gratis Epic, Steam"
+  },
+  "extDescription": {
+    "message": "Reclama juegos gratis de Epic Games Store, Steam, GOG, IndieGala y Prime Gaming automáticamente. Solo mantén la sesión iniciada."
+  },
+  "extActionTitle": {
+    "message": "Free Game Claimer"
+  },
+  "catalogLocale": {
+    "message": "es"
+  },
+  "headerClaimedCount_one": {
+    "message": "$COUNT$ juego reclamado",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "headerClaimedCount_other": {
+    "message": "$COUNT$ juegos reclamados",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "47"
+      }
+    }
+  },
+  "headerClaimingStatus": {
+    "message": "Reclamando…"
+  },
+  "sponsorPill": {
+    "message": "Apoyar"
+  },
+  "sponsorPillTooltip": {
+    "message": "Apoya desde 5 USD al mes y tu nombre aparecerá en el README"
+  },
+  "tabsLabel": {
+    "message": "Secciones"
+  },
+  "settingsTab": {
+    "message": "Ajustes"
+  },
+  "freeGamesTab": {
+    "message": "Juegos gratis"
+  },
+  "autoClaimSwitch": {
+    "message": "Auto-reclamar"
+  },
+  "autoClaimPaused": {
+    "message": "en pausa"
+  },
+  "claimNowButton": {
+    "message": "Reclamar ahora"
+  },
+  "claimNowButtonBusy": {
+    "message": "Reclamando…"
+  },
+  "scheduleCheckLabel": {
+    "message": "Revisar"
+  },
+  "scheduleAtLabel": {
+    "message": "a las"
+  },
+  "scheduleHourTooltip": {
+    "message": "La revisión del día espera a esta hora; si el navegador está cerrado a esa hora, se hace cuando lo vuelvas a abrir ese día."
+  },
+  "scheduleAnyTime": {
+    "message": "Cualquier hora"
+  },
+  "frequencyBrowserStart": {
+    "message": "Al abrir el navegador"
+  },
+  "frequencyHourly": {
+    "message": "Cada hora"
+  },
+  "frequencyEvery6Hours": {
+    "message": "Cada 6 horas"
+  },
+  "frequencyEvery12Hours": {
+    "message": "Cada 12 horas"
+  },
+  "frequencyDaily": {
+    "message": "Una vez al día"
+  },
+  "storesLabel": {
+    "message": "Tiendas"
+  },
+  "loginLoggedIn": {
+    "message": "Conectado"
+  },
+  "loginLoggedInTooltip": {
+    "message": "Sesión iniciada en la última revisión"
+  },
+  "loginLogIn": {
+    "message": "Entrar"
+  },
+  "loginSignedOutTooltip": {
+    "message": "No había sesión iniciada en la última revisión, así que no se pueden reclamar juegos gratis. Haz clic para entrar."
+  },
+  "loginUncheckedTooltip": {
+    "message": "Aún no revisado. Haz clic para entrar."
+  },
+  "primeNoMembership": {
+    "message": "Sin Prime"
+  },
+  "primeNoMembershipTooltip": {
+    "message": "Sesión iniciada, pero esta cuenta de Amazon no tiene Prime, así que no se pueden reclamar las ofertas de Prime Gaming."
+  },
+  "healthNetwork": {
+    "message": "Tienda inaccesible"
+  },
+  "healthChanged": {
+    "message": "La tienda cambió"
+  },
+  "healthCaptcha": {
+    "message": "Requiere captcha"
+  },
+  "healthUnfinished": {
+    "message": "Sin completar"
+  },
+  "healthTooltip": {
+    "message": "$DETAIL$ ($TIME$)",
+    "placeholders": {
+      "detail": {
+        "content": "$1",
+        "example": "Epic's checkout didn't finish; it's retried tomorrow"
+      },
+      "time": {
+        "content": "$2",
+        "example": "11/14/2026, 9:30:00 AM"
+      }
+    }
+  },
+  "healthChangedTooltip": {
+    "message": "$DETAIL$ ($TIME$). La extensión necesita una actualización; haz clic para avisar.",
+    "placeholders": {
+      "detail": {
+        "content": "$1",
+        "example": "Steam's search page has no result list"
+      },
+      "time": {
+        "content": "$2",
+        "example": "11/14/2026, 9:30:00 AM"
+      }
+    }
+  },
+  "healthEpicGetButtonMissing": {
+    "message": "No se encontró el botón \"Get\" en la página de un juego gratis"
+  },
+  "healthEpicCheckoutUnfinished": {
+    "message": "El pedido en Epic no se completó; se reintentará mañana"
+  },
+  "healthEpicCaptcha": {
+    "message": "Epic pide resolver un captcha en su pestaña abierta para terminar de reclamar el juego"
+  },
+  "steamMinRatingLabel": {
+    "message": "Valoración mín."
+  },
+  "steamMinRatingTooltip": {
+    "message": "Omite los juegos gratis de Steam con reseñas menos positivas que esta."
+  },
+  "steamMinRatingAny": {
+    "message": "Cualquiera"
+  },
+  "steamMinRatingOption": {
+    "message": "$PERCENT$%+ · $RATING$",
+    "placeholders": {
+      "percent": {
+        "content": "$1",
+        "example": "80"
+      },
+      "rating": {
+        "content": "$2",
+        "example": "Very Positive"
+      }
+    }
+  },
+  "steamMinRatingCustom": {
+    "message": "$PERCENT$%+ · Personalizado",
+    "placeholders": {
+      "percent": {
+        "content": "$1",
+        "example": "73"
+      }
+    }
+  },
+  "steamRatingVeryPositive": {
+    "message": "Muy positivas"
+  },
+  "steamRatingMostlyPositive": {
+    "message": "Mayormente positivas"
+  },
+  "steamRatingMixed": {
+    "message": "Variadas"
+  },
+  "steamRatingMostlyNegative": {
+    "message": "Mayormente negativas"
+  },
+  "indieGalaWheel": {
+    "message": "Rueda de la Fortuna"
+  },
+  "indieGalaLastPrize": {
+    "message": "Último premio: $PRIZE$ ($DATE$)",
+    "placeholders": {
+      "prize": {
+        "content": "$1",
+        "example": "50 Galasilver"
+      },
+      "date": {
+        "content": "$2",
+        "example": "11/14/2026"
+      }
+    }
+  },
+  "indieGalaSteamKeyActivated": {
+    "message": "Clave de Steam activada: $GAME$ ($DATE$)",
+    "placeholders": {
+      "game": {
+        "content": "$1",
+        "example": "Some Game"
+      },
+      "date": {
+        "content": "$2",
+        "example": "11/14/2026"
+      }
+    }
+  },
+  "indieGalaSteamKeyOwned": {
+    "message": "Ya tienes el juego de la clave de Steam: $GAME$ ($DATE$)",
+    "placeholders": {
+      "game": {
+        "content": "$1",
+        "example": "Some Game"
+      },
+      "date": {
+        "content": "$2",
+        "example": "11/14/2026"
+      }
+    }
+  },
+  "primeRegionalAccess": {
+    "message": "Amazon te envía a $HOST$. $BUTTON$ para poder reclamar ahí los juegos de Prime Gaming.",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "luna.amazon.de"
+      },
+      "button": {
+        "content": "$2",
+        "example": "Allow access"
+      }
+    }
+  },
+  "primeRegionalAccessButton": {
+    "message": "Permitir acceso"
+  },
+  "primeClaimOffersFor": {
+    "message": "Reclamar ofertas para:"
+  },
+  "primePickAtLeastOne": {
+    "message": "Elige al menos uno o no se reclamará nada."
+  },
+  "legacyEmailLabel": {
+    "message": "Correo de Legacy Games"
+  },
+  "legacyEmailPlaceholder": {
+    "message": "tu@ejemplo.com"
+  },
+  "legacyEmailInvalid": {
+    "message": "Correo no válido: los códigos se rellenan para que tú termines."
+  },
+  "legacyEmailHint": {
+    "message": "Los códigos llegan a este correo (sin boletín). Déjalo vacío para terminar cada uno tú mismo."
+  },
+  "gamesEmpty": {
+    "message": "No hay juegos gratis ahora mismo."
+  },
+  "gamesFilterEmpty": {
+    "message": "Ningún juego coincide con este filtro."
+  },
+  "platformFilterLabel": {
+    "message": "Filtrar por plataforma"
+  },
+  "upcomingFilter": {
+    "message": "Próximos"
+  },
+  "upcomingFilterTooltip": {
+    "message": "Mostrar juegos que pronto serán gratis"
+  },
+  "gameUpcoming": {
+    "message": "Próximamente"
+  },
+  "gameClaimedPrime": {
+    "message": "Reclamado"
+  },
+  "gameInLibrary": {
+    "message": "En la biblioteca"
+  },
+  "gameFreeUntil": {
+    "message": "Gratis hasta el $DATE$",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Nov 13"
+      }
+    }
+  },
+  "gameFreeFrom": {
+    "message": "Desde el $DATE$",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Nov 13"
+      }
+    }
+  },
+  "gameDateRange": {
+    "message": "$START$ – $END$",
+    "placeholders": {
+      "start": {
+        "content": "$1",
+        "example": "Nov 13"
+      },
+      "end": {
+        "content": "$2",
+        "example": "Nov 20"
+      }
+    }
+  },
+  "pendingTitle": {
+    "message": "Requiere canje manual"
+  },
+  "pendingStore": {
+    "message": "($STORE$)",
+    "placeholders": {
+      "store": {
+        "content": "$1",
+        "example": "GOG"
+      }
+    }
+  },
+  "pendingCopy": {
+    "message": "Copiar"
+  },
+  "pendingCopied": {
+    "message": "Copiado"
+  },
+  "pendingActivate": {
+    "message": "Activar"
+  },
+  "pendingTryAgain": {
+    "message": "Reintentar"
+  },
+  "pendingDismiss": {
+    "message": "Descartar"
+  },
+  "pendingReasonSteamInvalid": {
+    "message": "Steam dice que la clave no es válida"
+  },
+  "pendingReasonSteamUsed": {
+    "message": "Steam dice que otra cuenta ya usó esta clave"
+  },
+  "pendingReasonSteamRateLimited": {
+    "message": "Steam pide una pausa tras demasiadas activaciones; inténtalo más tarde"
+  },
+  "pendingReasonSteamRegion": {
+    "message": "Steam dice que este juego no se vende en tu país"
+  },
+  "pendingReasonSteamNeedsBaseGame": {
+    "message": "Steam dice que primero necesitas otro juego"
+  },
+  "pendingReasonSteamSignedOut": {
+    "message": "Inicia sesión en Steam y luego actívala"
+  },
+  "pendingReasonSteamFailed": {
+    "message": "Steam no la activó"
+  },
+  "pendingReasonSteamUnfinished": {
+    "message": "La activación en Steam no terminó"
+  },
+  "pendingReasonGiftNotShown": {
+    "message": "Ganada en la ruleta; el regalo aún no aparece en G. Giveaway"
+  },
+  "pendingReasonGiftPageNotOpened": {
+    "message": "La página del regalo no se abrió"
+  },
+  "pendingReasonGiftNoKey": {
+    "message": "La página del regalo no mostró ninguna clave"
+  },
+  "pendingReasonNotSteamKey": {
+    "message": "No es una clave de Steam; canjéala donde indique IndieGala"
+  },
+  "pendingReasonKeyNotShown": {
+    "message": "IndieGala no mostró la clave"
+  },
+  "pendingIndieGalaKeyNotRead": {
+    "message": "No se leyó la clave; está en IndieGala."
+  },
+  "pendingOpenOnIndieGala": {
+    "message": "Abrir en IndieGala"
+  },
+  "pendingAmazonCodeNotRead": {
+    "message": "No se leyó el código; está en la página de Amazon."
+  },
+  "pendingOpenOnAmazon": {
+    "message": "Abrir en Amazon"
+  },
+  "reviewPromptTitle": {
+    "message": "¿Te gusta Free Game Claimer?"
+  },
+  "reviewPromptBody_one": {
+    "message": "Ya reclamó $COUNT$ juego por ti. Una valoración rápida ayuda a otros jugadores a encontrarlo.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "reviewPromptBody_other": {
+    "message": "Ya reclamó $COUNT$ juegos por ti. Una valoración rápida ayuda a otros jugadores a encontrarlo.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "5"
+      }
+    }
+  },
+  "reviewPromptRate": {
+    "message": "Valorar"
+  },
+  "promptNotNow": {
+    "message": "Ahora no"
+  },
+  "reviewPromptReport": {
+    "message": "¿No funciona? Avísanos"
+  },
+  "sponsorCardTitle_one": {
+    "message": "Ya reclamó $COUNT$ juego por ti",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "sponsorCardTitle_other": {
+    "message": "Ya reclamó $COUNT$ juegos por ti",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "20"
+      }
+    }
+  },
+  "sponsorCardBody": {
+    "message": "Gratis y hecho en mi tiempo libre. Tu apoyo lo mantiene funcionando cuando las tiendas cambian."
+  },
+  "sponsorCardButton": {
+    "message": "Apoyar desde 2 USD"
+  },
+  "sponsorCardButtonTooltip": {
+    "message": "En GitHub, mensual o una sola vez"
+  },
+  "footerContact": {
+    "message": "Contacto"
+  },
+  "footerDonate": {
+    "message": "Donar"
+  },
+  "badgeUpdated": {
+    "message": "New"
+  }
+}

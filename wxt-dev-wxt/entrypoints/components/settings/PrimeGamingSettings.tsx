@@ -9,6 +9,7 @@ import { EXTERNAL_PLATFORM_DEFAULTS, EXTERNAL_PLATFORM_STORAGE_KEYS } from "@/en
 import { PRIME_REGIONAL_HOST_KEY } from "@/entrypoints/utils/primeGamingApi.ts";
 import { isLunaRegionalHost } from "@/entrypoints/utils/optionalAccess.ts";
 import { LEGACY_EMAIL_STORAGE_KEY, normalizeEmail } from "@/entrypoints/utils/legacyGamesRedeem.ts";
+import { SLOT, splitAtSlot, t } from "@/entrypoints/utils/i18n.ts";
 
 function PrimeGamingSettings() {
     // Off by default (see spec: IndieGala and Prime Gaming both start disabled
@@ -51,8 +52,12 @@ function PrimeGamingSettings() {
         ? `https://${storedRegionalHost}/claims/home`
         : "https://gaming.amazon.com/home";
     const primeWarning = hasPrime === false
-        ? { label: "No Prime", title: "Signed in, but this Amazon account has no Prime membership, so Prime Gaming offers can't be claimed." }
+        ? { label: t("primeNoMembership"), title: t("primeNoMembershipTooltip") }
         : null;
+    // The button sits wherever the translation puts it.
+    const [regionalBefore, regionalAfter] = regionalHost
+        ? splitAtSlot(t("primeRegionalAccess", [regionalHost, SLOT]))
+        : ["", ""];
 
     return (
         <div className="platform-group">
@@ -61,16 +66,16 @@ function PrimeGamingSettings() {
                                                    accountWarning={primeWarning}/></>}/>
             {isPrimeOn && regionalHost && (
                 <p className="hint regional-access">
-                    Amazon sends you to {regionalHost}.{" "}
+                    {regionalBefore}
                     <button type="button" className="link-button" onClick={() => access.requestGroup(regionalHost)}>
-                        Allow access
-                    </button>{" "}
-                    so Prime Gaming games can be claimed there.
+                        {t("primeRegionalAccessButton")}
+                    </button>
+                    {regionalAfter}
                 </p>
             )}
             {isPrimeOn && (
                 <div className="sub-options">
-                    <p className="hint">Claim offers for:</p>
+                    <p className="hint">{t("primeClaimOffersFor")}</p>
                     <div className="option-grid">
                         <Checkbox name="Amazon Games" id="prime-amazon-games" checked={isAmazonGamesOn}
                                   onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.AmazonGames, e.target.checked, setClaimAmazonGames)}/>
@@ -84,24 +89,24 @@ function PrimeGamingSettings() {
                                   onChange={e => access.setWithAccess(EXTERNAL_PLATFORM_STORAGE_KEYS.Legacy, e.target.checked, setClaimLegacy)}/>
                     </div>
                     {isNothingPicked && (
-                        <p className="hint hint-warn">Pick at least one, or nothing is claimed.</p>
+                        <p className="hint hint-warn">{t("primePickAtLeastOne")}</p>
                     )}
                     {isLegacyOn && (
                         <div className="legacy-email">
-                            <label htmlFor="legacy-games-email">Legacy Games email</label>
+                            <label htmlFor="legacy-games-email">{t("legacyEmailLabel")}</label>
                             <input
                                 id="legacy-games-email"
                                 type="email"
                                 autoComplete="email"
-                                placeholder="you@example.com"
+                                placeholder={t("legacyEmailPlaceholder")}
                                 value={legacyEmail}
                                 aria-invalid={isLegacyEmailInvalid}
                                 onChange={e => setLegacyEmail(e.target.value)}
                             />
                             <p className="hint">
                                 {isLegacyEmailInvalid
-                                    ? "Not a valid email: codes are filled in for you to finish."
-                                    : "Codes go to this email (no newsletter). Leave empty to finish each one yourself."}
+                                    ? t("legacyEmailInvalid")
+                                    : t("legacyEmailHint")}
                             </p>
                         </div>
                     )}

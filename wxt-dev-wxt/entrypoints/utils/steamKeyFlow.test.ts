@@ -3,6 +3,7 @@ import { describe, it, expect, beforeEach } from 'vitest';
 import { fakeBrowser } from 'wxt/testing';
 import { getStorageItem, setStorageItem } from '@/entrypoints/hooks/useStorage';
 import { PENDING_REDEMPTIONS_STORAGE_KEY, PendingRedemption } from './pendingRedemptions';
+import { t } from './i18n';
 import {
   handleGiftKeys,
   KNOWN_GIFTS_KEY,
@@ -70,18 +71,19 @@ describe('recordSteamKeyResult', () => {
       platform: 'Steam',
       title: 'Some Game',
       redeemUrl: 'https://store.steampowered.com/account/registerkey?key=AAAAA-BBBBB-CCCCC',
-      reason: expect.stringMatching(/sign in to Steam/i),
     })]);
+    // Stored as a key; the popup shows its text.
+    expect(t(pending![0].reasonKey!)).toMatch(/sign in to Steam/i);
   });
 });
 
 describe('recordUnreadGiftKey', () => {
   it('keeps the page the key is on, so the win is never lost', async () => {
-    await recordUnreadGiftKey('Steam key (Wheel of Fortune)', 'https://www.indiegala.com/library', 'Not found');
+    await recordUnreadGiftKey('Steam key (Wheel of Fortune)', 'https://www.indiegala.com/library', 'pendingReasonGiftNoKey');
 
     const pending = await getStorageItem<PendingRedemption[]>(PENDING_REDEMPTIONS_STORAGE_KEY);
     expect(pending).toEqual([expect.objectContaining({
-      code: '', platform: 'IndieGala', redeemUrl: 'https://www.indiegala.com/library', reason: 'Not found',
+      code: '', platform: 'IndieGala', redeemUrl: 'https://www.indiegala.com/library', reasonKey: 'pendingReasonGiftNoKey',
     })]);
   });
 });

@@ -8,6 +8,7 @@ import IndieGalaSettings from "@/entrypoints/components/settings/IndieGalaSettin
 import PrimeGamingSettings from "@/entrypoints/components/settings/PrimeGamingSettings.tsx";
 import { ClaimFrequency } from "@/entrypoints/enums/claimFrequency.ts";
 import { MessageRequest } from "@/entrypoints/types/messageRequest.ts";
+import { t } from "@/entrypoints/utils/i18n.ts";
 
 function Settings() {
     const [claimFrequency, setClaimFrequency] = useStorage<ClaimFrequency>("claimFrequency", ClaimFrequency.DAILY);
@@ -39,7 +40,7 @@ function Settings() {
                                  claimHour={claimHour} onClaimHourChange={handleClaimHourChange} />
             </section>
 
-            <section className="group" aria-label="Stores">
+            <section className="group" aria-label={t("storesLabel")}>
                 <SteamSettings/>
                 <EpicSettings/>
                 <GogSettings/>

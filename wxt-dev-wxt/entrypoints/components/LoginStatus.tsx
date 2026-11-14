@@ -1,5 +1,6 @@
 import { LoginState } from "@/entrypoints/utils/loginState.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
+import { t } from "@/entrypoints/utils/i18n.ts";
 
 interface LoginStatusProps {
     state: LoginState;
@@ -35,9 +36,9 @@ function LoginStatus({ state, loginUrl, platform, accountWarning }: LoginStatusP
     }
     if (state === true) {
         return (
-            <span className="login-status logged-in" title="Signed in as of the last claim run">
+            <span className="login-status logged-in" title={t("loginLoggedInTooltip")}>
                 <span className="login-dot" aria-hidden="true"/>
-                Logged in
+                {t("loginLoggedIn")}
             </span>
         );
     }
@@ -51,12 +52,12 @@ function LoginStatus({ state, loginUrl, platform, accountWarning }: LoginStatusP
             onClick={() => requestLoginRecheck(platform)}
             title={
                 state === false
-                    ? "Not signed in as of the last claim run — free games can't be claimed. Click to log in."
-                    : "Not checked yet — click to log in."
+                    ? t("loginSignedOutTooltip")
+                    : t("loginUncheckedTooltip")
             }
         >
             <span className="login-dot" aria-hidden="true"/>
-            Log in
+            {t("loginLogIn")}
         </a>
     );
 }

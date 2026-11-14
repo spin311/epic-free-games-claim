@@ -25,8 +25,12 @@ export default defineConfig({
     esbuild: { legalComments: 'inline' },
   }),
   manifest: {
-    // addons.mozilla.org rejects names over 45 characters.
-    name: "Free Game Claimer: Epic, Steam, GOG, Prime",
+    // Text lives in public/_locales/<locale>/messages.json (English is the
+    // fallback); entrypoints/tests/localeParity.test.ts checks every locale,
+    // including the name's 45-character limit on addons.mozilla.org.
+    default_locale: 'en',
+    name: '__MSG_extName__',
+    description: '__MSG_extDescription__',
     permissions: ['storage', "tabs", "scripting", "alarms", "declarativeNetRequestWithHostAccess"],
     // Only the hosts 2.6.1 shipped with: Chrome disables an extension on update
     // until the user approves any new install-time host. Every other host is

@@ -1,13 +1,7 @@
 import { useStorageValue } from "@/entrypoints/hooks/useStorage.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
-import { activeProblem, HealthError, healthKey, HealthProblem, PlatformHealth } from "@/entrypoints/utils/health.ts";
-
-const LABELS: Record<HealthProblem, string> = {
-    network: "Can't reach store",
-    changed: "Store changed",
-    captcha: "Needs captcha",
-    unfinished: "Claim unfinished",
-};
+import { activeProblem, HealthError, healthKey, PlatformHealth } from "@/entrypoints/utils/health.ts";
+import { healthLabel, healthTooltip } from "@/entrypoints/utils/popupText.ts";
 
 const ISSUES_URL = "https://github.com/spin311/epic-free-games-claim/issues";
 
@@ -25,16 +19,15 @@ function HealthStatus({ platform }: HealthStatusProps) {
     const problem = newer(activeProblem(check), activeProblem(claim));
     if (!problem) return null;
 
-    const title = `${problem.detail} (${new Date(problem.at).toLocaleString()})`;
     if (problem.problem === "changed") {
         return (
             <a className="health-status" href={ISSUES_URL} target="_blank" rel="noopener noreferrer"
-               title={`${title}. The extension needs an update; click to report it.`}>
-                ⚠ {LABELS.changed}
+               title={healthTooltip(problem)}>
+                ⚠ {healthLabel(problem.problem)}
             </a>
         );
     }
-    return <span className="health-status" title={title}>⚠ {LABELS[problem.problem]}</span>;
+    return <span className="health-status" title={healthTooltip(problem)}>⚠ {healthLabel(problem.problem)}</span>;
 }
 
 function newer(a: HealthError | null, b: HealthError | null): HealthError | null {

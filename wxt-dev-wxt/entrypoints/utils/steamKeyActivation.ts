@@ -4,6 +4,8 @@
 // #receipt_form; a refusal shows a message in #error_display, one per
 // purchase result code (texts from Steam's registerkey.js).
 
+import type { PendingReasonKey } from "@/entrypoints/utils/pendingRedemptions.ts";
+
 export const STEAM_ACTIVATION_PAGE = "https://store.steampowered.com/account/registerkey";
 
 export function steamActivationUrl(key: string): string {
@@ -59,25 +61,28 @@ export function readSteamKeyResult(doc: Document): SteamKeyResult | null {
   return null;
 }
 
+export type DoneSteamKeyOutcome = "activated" | "owned";
+export type PendingSteamKeyOutcome = Exclude<SteamKeyOutcome, DoneSteamKeyOutcome>;
+
 // Owned already: the game is on the account, which is all the key was for.
-export function isSteamKeyDone(outcome: SteamKeyOutcome): boolean {
+export function isSteamKeyDone(outcome: SteamKeyOutcome): outcome is DoneSteamKeyOutcome {
   return outcome === "activated" || outcome === "owned";
 }
 
-const OUTCOME_REASONS: Record<SteamKeyOutcome, string> = {
-  activated: "Activated",
-  owned: "Already on your Steam account",
-  invalid: "Steam says the key isn't valid",
-  used: "Steam says another account already used this key",
-  "rate-limited": "Steam wants a break after too many activations; try again later",
-  region: "Steam says this game isn't sold in your country",
-  "needs-base-game": "Steam says this needs another game first",
-  "signed-out": "Sign in to Steam, then activate it",
-  failed: "Steam didn't activate it",
+// Why a key is still pending, as a message key: the popup translates it
+// when it shows the pending list.
+const OUTCOME_REASON_KEYS: Record<PendingSteamKeyOutcome, PendingReasonKey> = {
+  invalid: "pendingReasonSteamInvalid",
+  used: "pendingReasonSteamUsed",
+  "rate-limited": "pendingReasonSteamRateLimited",
+  region: "pendingReasonSteamRegion",
+  "needs-base-game": "pendingReasonSteamNeedsBaseGame",
+  "signed-out": "pendingReasonSteamSignedOut",
+  failed: "pendingReasonSteamFailed",
 };
 
-export function describeSteamKeyOutcome(outcome: SteamKeyOutcome): string {
-  return OUTCOME_REASONS[outcome];
+export function pendingReasonKey(outcome: PendingSteamKeyOutcome): PendingReasonKey {
+  return OUTCOME_REASON_KEYS[outcome];
 }
 
 // Runs in the page's MAIN world via scripting.executeScript (Steam's button

@@ -7,6 +7,7 @@ import PlatformFilter, {ALL_PLATFORMS} from "@/entrypoints/components/PlatformFi
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {EPIC_CLAIMED_KEY, withEpicClaimStatus} from "@/entrypoints/utils/epicGames.ts";
 import {withoutEnded} from "@/entrypoints/utils/gameDates.ts";
+import {t} from "@/entrypoints/utils/i18n.ts";
 
 function GamesList() {
     const [steamGames] = useStorage<FreeGame[]>("steamGames", []);
@@ -36,7 +37,7 @@ function GamesList() {
 
             {allGames.length === 0 ? (
                 <div className="empty-state">
-                    <p>No free games right now.</p>
+                    <p>{t("gamesEmpty")}</p>
                     <ManualClaimBtn/>
                 </div>
             ) : (
@@ -45,12 +46,12 @@ function GamesList() {
                         <PlatformFilter visiblePlatforms={visiblePlatforms} onChange={setVisiblePlatforms}/>
                         <button type="button" className={`chip chip-upcoming${showFutureGames ? ' active' : ''}`}
                                 aria-pressed={showFutureGames} onClick={() => setShowFutureGames(!showFutureGames)}
-                                title="Show games that become free soon">
-                            Upcoming
+                                title={t("upcomingFilterTooltip")}>
+                            {t("upcomingFilter")}
                         </button>
                     </div>
                     {filteredGames.length === 0 ? (
-                        <p className="empty-state">No games match this filter.</p>
+                        <p className="empty-state">{t("gamesFilterEmpty")}</p>
                     ) : (
                         <div className="game-list">
                             {filteredGames.map((game) => (

@@ -1,6 +1,7 @@
 import {setStorageItem, useStorage} from "@/entrypoints/hooks/useStorage.ts";
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
 import {ManualClaimBtn} from "@/entrypoints/components/ManualClaimBtn.tsx";
+import {t} from "@/entrypoints/utils/i18n.ts";
 
 // The extension's on/off: off pauses scheduled checks (Claim now still works,
 // so it sits on the same row).
@@ -29,10 +30,10 @@ function AutoClaimSwitch() {
                 <label className="setting-label">
                     <input type="checkbox" role="switch" className="switch" checked={active}
                            onChange={e => void toggleActive(e.target.checked)}/>
-                    Auto-claim
+                    {t("autoClaimSwitch")}
                 </label>
                 {/* Outside the label: the switch's own off state already says it. */}
-                {!active && <span className="setting-note" aria-hidden="true">· paused</span>}
+                {!active && <span className="setting-note" aria-hidden="true">· {t("autoClaimPaused")}</span>}
             </div>
             <ManualClaimBtn/>
         </div>

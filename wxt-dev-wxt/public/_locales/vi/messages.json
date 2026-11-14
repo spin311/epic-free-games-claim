@@ -1,0 +1,478 @@
+{
+  "extName": {
+    "message": "Free Game Claimer: game miễn phí Epic, Steam"
+  },
+  "extDescription": {
+    "message": "Tự động nhận game miễn phí từ Epic Games Store, Steam, GOG, IndieGala và Prime Gaming. Chỉ cần luôn đăng nhập."
+  },
+  "extActionTitle": {
+    "message": "Free Game Claimer"
+  },
+  "catalogLocale": {
+    "message": "vi"
+  },
+  "headerClaimedCount_one": {
+    "message": "Đã nhận $COUNT$ game",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "headerClaimedCount_other": {
+    "message": "Đã nhận $COUNT$ game",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "47"
+      }
+    }
+  },
+  "headerClaimingStatus": {
+    "message": "Đang nhận…"
+  },
+  "sponsorPill": {
+    "message": "Ủng hộ"
+  },
+  "sponsorPillTooltip": {
+    "message": "Ủng hộ từ 5 USD/tháng để có tên trong README"
+  },
+  "tabsLabel": {
+    "message": "Mục"
+  },
+  "settingsTab": {
+    "message": "Cài đặt"
+  },
+  "freeGamesTab": {
+    "message": "Game miễn phí"
+  },
+  "autoClaimSwitch": {
+    "message": "Tự động nhận"
+  },
+  "autoClaimPaused": {
+    "message": "đã tạm dừng"
+  },
+  "claimNowButton": {
+    "message": "Nhận ngay"
+  },
+  "claimNowButtonBusy": {
+    "message": "Đang nhận…"
+  },
+  "scheduleCheckLabel": {
+    "message": "Kiểm tra"
+  },
+  "scheduleAtLabel": {
+    "message": "lúc"
+  },
+  "scheduleHourTooltip": {
+    "message": "Lần kiểm tra trong ngày sẽ chờ đến giờ này; nếu lúc đó trình duyệt đang đóng, nó sẽ chạy khi bạn mở lại trong ngày."
+  },
+  "scheduleAnyTime": {
+    "message": "Bất kỳ lúc nào"
+  },
+  "frequencyBrowserStart": {
+    "message": "Khi mở trình duyệt"
+  },
+  "frequencyHourly": {
+    "message": "Mỗi giờ"
+  },
+  "frequencyEvery6Hours": {
+    "message": "Mỗi 6 giờ"
+  },
+  "frequencyEvery12Hours": {
+    "message": "Mỗi 12 giờ"
+  },
+  "frequencyDaily": {
+    "message": "Mỗi ngày một lần"
+  },
+  "storesLabel": {
+    "message": "Cửa hàng"
+  },
+  "loginLoggedIn": {
+    "message": "Đã đăng nhập"
+  },
+  "loginLoggedInTooltip": {
+    "message": "Đã đăng nhập ở lần nhận gần nhất"
+  },
+  "loginLogIn": {
+    "message": "Đăng nhập"
+  },
+  "loginSignedOutTooltip": {
+    "message": "Chưa đăng nhập ở lần nhận gần nhất nên không thể nhận game miễn phí. Bấm để đăng nhập."
+  },
+  "loginUncheckedTooltip": {
+    "message": "Chưa kiểm tra. Bấm để đăng nhập."
+  },
+  "primeNoMembership": {
+    "message": "Không có Prime"
+  },
+  "primeNoMembershipTooltip": {
+    "message": "Đã đăng nhập, nhưng tài khoản Amazon này không có Prime nên không thể nhận ưu đãi Prime Gaming."
+  },
+  "healthNetwork": {
+    "message": "Không kết nối được"
+  },
+  "healthChanged": {
+    "message": "Cửa hàng đã đổi"
+  },
+  "healthCaptcha": {
+    "message": "Cần captcha"
+  },
+  "healthUnfinished": {
+    "message": "Chưa nhận xong"
+  },
+  "healthTooltip": {
+    "message": "$DETAIL$ ($TIME$)",
+    "placeholders": {
+      "detail": {
+        "content": "$1",
+        "example": "Epic's checkout didn't finish; it's retried tomorrow"
+      },
+      "time": {
+        "content": "$2",
+        "example": "11/14/2026, 9:30:00 AM"
+      }
+    }
+  },
+  "healthChangedTooltip": {
+    "message": "$DETAIL$ ($TIME$). Tiện ích cần cập nhật; bấm để báo lỗi.",
+    "placeholders": {
+      "detail": {
+        "content": "$1",
+        "example": "Steam's search page has no result list"
+      },
+      "time": {
+        "content": "$2",
+        "example": "11/14/2026, 9:30:00 AM"
+      }
+    }
+  },
+  "healthEpicGetButtonMissing": {
+    "message": "Không tìm thấy nút \"Get\" trên trang game miễn phí"
+  },
+  "healthEpicCheckoutUnfinished": {
+    "message": "Bước thanh toán của Epic chưa xong; sẽ thử lại vào ngày mai"
+  },
+  "healthEpicCaptcha": {
+    "message": "Epic yêu cầu giải captcha trong thẻ đang mở để hoàn tất việc nhận"
+  },
+  "steamMinRatingLabel": {
+    "message": "Đánh giá tối thiểu"
+  },
+  "steamMinRatingTooltip": {
+    "message": "Bỏ qua game Steam miễn phí có đánh giá kém tích cực hơn mức này."
+  },
+  "steamMinRatingAny": {
+    "message": "Bất kỳ"
+  },
+  "steamMinRatingOption": {
+    "message": "$PERCENT$%+ · $RATING$",
+    "placeholders": {
+      "percent": {
+        "content": "$1",
+        "example": "80"
+      },
+      "rating": {
+        "content": "$2",
+        "example": "Very Positive"
+      }
+    }
+  },
+  "steamMinRatingCustom": {
+    "message": "$PERCENT$%+ · Tùy chỉnh",
+    "placeholders": {
+      "percent": {
+        "content": "$1",
+        "example": "73"
+      }
+    }
+  },
+  "steamRatingVeryPositive": {
+    "message": "Rất tích cực"
+  },
+  "steamRatingMostlyPositive": {
+    "message": "Khá tích cực"
+  },
+  "steamRatingMixed": {
+    "message": "Trái chiều"
+  },
+  "steamRatingMostlyNegative": {
+    "message": "Khá tiêu cực"
+  },
+  "indieGalaWheel": {
+    "message": "Vòng quay may mắn"
+  },
+  "indieGalaLastPrize": {
+    "message": "Giải gần nhất: $PRIZE$ ($DATE$)",
+    "placeholders": {
+      "prize": {
+        "content": "$1",
+        "example": "50 Galasilver"
+      },
+      "date": {
+        "content": "$2",
+        "example": "11/14/2026"
+      }
+    }
+  },
+  "indieGalaSteamKeyActivated": {
+    "message": "Đã kích hoạt key Steam: $GAME$ ($DATE$)",
+    "placeholders": {
+      "game": {
+        "content": "$1",
+        "example": "Some Game"
+      },
+      "date": {
+        "content": "$2",
+        "example": "11/14/2026"
+      }
+    }
+  },
+  "indieGalaSteamKeyOwned": {
+    "message": "Đã sở hữu game của key Steam: $GAME$ ($DATE$)",
+    "placeholders": {
+      "game": {
+        "content": "$1",
+        "example": "Some Game"
+      },
+      "date": {
+        "content": "$2",
+        "example": "11/14/2026"
+      }
+    }
+  },
+  "primeRegionalAccess": {
+    "message": "Amazon chuyển bạn đến $HOST$. $BUTTON$ để có thể nhận game Prime Gaming ở đó.",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "luna.amazon.de"
+      },
+      "button": {
+        "content": "$2",
+        "example": "Allow access"
+      }
+    }
+  },
+  "primeRegionalAccessButton": {
+    "message": "Cho phép truy cập"
+  },
+  "primeClaimOffersFor": {
+    "message": "Nhận ưu đãi cho:"
+  },
+  "primePickAtLeastOne": {
+    "message": "Chọn ít nhất một, nếu không sẽ không nhận gì cả."
+  },
+  "legacyEmailLabel": {
+    "message": "Email Legacy Games"
+  },
+  "legacyEmailPlaceholder": {
+    "message": "ban@example.com"
+  },
+  "legacyEmailInvalid": {
+    "message": "Email không hợp lệ: mã sẽ được điền sẵn để bạn tự hoàn tất."
+  },
+  "legacyEmailHint": {
+    "message": "Mã sẽ gửi đến email này (không có bản tin). Để trống nếu muốn tự hoàn tất từng mã."
+  },
+  "gamesEmpty": {
+    "message": "Hiện chưa có game miễn phí."
+  },
+  "gamesFilterEmpty": {
+    "message": "Không có game nào khớp bộ lọc này."
+  },
+  "platformFilterLabel": {
+    "message": "Lọc theo nền tảng"
+  },
+  "upcomingFilter": {
+    "message": "Sắp tới"
+  },
+  "upcomingFilterTooltip": {
+    "message": "Hiện game sắp miễn phí"
+  },
+  "gameUpcoming": {
+    "message": "Sắp tới"
+  },
+  "gameClaimedPrime": {
+    "message": "Đã nhận"
+  },
+  "gameInLibrary": {
+    "message": "Đã có trong thư viện"
+  },
+  "gameFreeUntil": {
+    "message": "Miễn phí đến $DATE$",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Nov 13"
+      }
+    }
+  },
+  "gameFreeFrom": {
+    "message": "Từ $DATE$",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Nov 13"
+      }
+    }
+  },
+  "gameDateRange": {
+    "message": "$START$ – $END$",
+    "placeholders": {
+      "start": {
+        "content": "$1",
+        "example": "Nov 13"
+      },
+      "end": {
+        "content": "$2",
+        "example": "Nov 20"
+      }
+    }
+  },
+  "pendingTitle": {
+    "message": "Cần đổi mã thủ công"
+  },
+  "pendingStore": {
+    "message": "($STORE$)",
+    "placeholders": {
+      "store": {
+        "content": "$1",
+        "example": "GOG"
+      }
+    }
+  },
+  "pendingCopy": {
+    "message": "Sao chép"
+  },
+  "pendingCopied": {
+    "message": "Đã chép"
+  },
+  "pendingActivate": {
+    "message": "Kích hoạt"
+  },
+  "pendingTryAgain": {
+    "message": "Thử lại"
+  },
+  "pendingDismiss": {
+    "message": "Xóa"
+  },
+  "pendingReasonSteamInvalid": {
+    "message": "Steam báo key không hợp lệ"
+  },
+  "pendingReasonSteamUsed": {
+    "message": "Steam báo key này đã được tài khoản khác dùng"
+  },
+  "pendingReasonSteamRateLimited": {
+    "message": "Steam yêu cầu tạm nghỉ vì kích hoạt quá nhiều; hãy thử lại sau"
+  },
+  "pendingReasonSteamRegion": {
+    "message": "Steam báo game này không bán ở quốc gia của bạn"
+  },
+  "pendingReasonSteamNeedsBaseGame": {
+    "message": "Steam báo cần có game khác trước"
+  },
+  "pendingReasonSteamSignedOut": {
+    "message": "Đăng nhập Steam rồi kích hoạt"
+  },
+  "pendingReasonSteamFailed": {
+    "message": "Steam không kích hoạt được"
+  },
+  "pendingReasonSteamUnfinished": {
+    "message": "Kích hoạt trên Steam chưa xong"
+  },
+  "pendingReasonGiftNotShown": {
+    "message": "Trúng từ vòng quay; quà chưa hiện trong G. Giveaway"
+  },
+  "pendingReasonGiftPageNotOpened": {
+    "message": "Trang quà không mở được"
+  },
+  "pendingReasonGiftNoKey": {
+    "message": "Trang quà không hiện key"
+  },
+  "pendingReasonNotSteamKey": {
+    "message": "Không phải key Steam; đổi ở nơi IndieGala hướng dẫn"
+  },
+  "pendingReasonKeyNotShown": {
+    "message": "IndieGala không hiện key"
+  },
+  "pendingIndieGalaKeyNotRead": {
+    "message": "Chưa đọc được key; key nằm trên IndieGala."
+  },
+  "pendingOpenOnIndieGala": {
+    "message": "Mở trên IndieGala"
+  },
+  "pendingAmazonCodeNotRead": {
+    "message": "Chưa đọc được mã; mã nằm trên trang Amazon."
+  },
+  "pendingOpenOnAmazon": {
+    "message": "Mở trên Amazon"
+  },
+  "reviewPromptTitle": {
+    "message": "Bạn có thích Free Game Claimer không?"
+  },
+  "reviewPromptBody_one": {
+    "message": "Tiện ích đã nhận $COUNT$ game cho bạn. Một đánh giá nhanh giúp người chơi khác tìm thấy nó.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "reviewPromptBody_other": {
+    "message": "Tiện ích đã nhận $COUNT$ game cho bạn. Một đánh giá nhanh giúp người chơi khác tìm thấy nó.",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "5"
+      }
+    }
+  },
+  "reviewPromptRate": {
+    "message": "Đánh giá"
+  },
+  "promptNotNow": {
+    "message": "Để sau"
+  },
+  "reviewPromptReport": {
+    "message": "Không chạy? Báo lỗi"
+  },
+  "sponsorCardTitle_one": {
+    "message": "Đã nhận $COUNT$ game cho bạn",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "sponsorCardTitle_other": {
+    "message": "Đã nhận $COUNT$ game cho bạn",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "20"
+      }
+    }
+  },
+  "sponsorCardBody": {
+    "message": "Miễn phí và được làm trong thời gian rảnh của tôi. Sự ủng hộ giúp tiện ích tiếp tục chạy khi các cửa hàng thay đổi."
+  },
+  "sponsorCardButton": {
+    "message": "Ủng hộ từ 2 USD"
+  },
+  "sponsorCardButtonTooltip": {
+    "message": "Trên GitHub, hằng tháng hoặc một lần"
+  },
+  "footerContact": {
+    "message": "Liên hệ"
+  },
+  "footerDonate": {
+    "message": "Quyên góp"
+  },
+  "badgeUpdated": {
+    "message": "Mới"
+  }
+}

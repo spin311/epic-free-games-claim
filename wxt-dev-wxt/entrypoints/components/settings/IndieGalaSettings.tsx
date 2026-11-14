@@ -7,6 +7,7 @@ import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts"
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { StoredWheelPrize } from "@/entrypoints/utils/indieGalaWheel.ts";
 import { LAST_STEAM_KEY_KEY, SteamKeyRecord } from "@/entrypoints/utils/steamKeyFlow.ts";
+import { formatLocale, t } from "@/entrypoints/utils/i18n.ts";
 
 function IndieGalaSettings() {
     // Off by default (see spec: IndieGala and Prime Gaming both start disabled
@@ -41,18 +42,22 @@ function IndieGalaSettings() {
                       trailing={isIndieGalaOn && <><HealthStatus platform={Platforms.IndieGala}/><LoginStatus state={indieGalaLoggedIn} loginUrl="https://www.indiegala.com/login" platform={Platforms.IndieGala}/></>}/>
             {isIndieGalaOn && (
                 <div className="sub-options">
-                    <Checkbox name="Wheel of Fortune" checked={isWheelOn}
+                    <Checkbox name={t("indieGalaWheel")} id="indiegala-wheel" checked={isWheelOn}
                               onChange={e => access.setWithAccess("indieGalaWheelCheck", e.target.checked, setIndieGalaWheelCheck)}/>
                     {indieGalaWheelLastPrize && (
                         <p className="hint">
-                            Last prize: {indieGalaWheelLastPrize.label}
-                            {' '}({new Date(indieGalaWheelLastPrize.wonAt).toLocaleDateString()})
+                            {t("indieGalaLastPrize", [
+                                indieGalaWheelLastPrize.label,
+                                new Date(indieGalaWheelLastPrize.wonAt).toLocaleDateString(formatLocale()),
+                            ])}
                         </p>
                     )}
                     {lastSteamKey && (
                         <p className="hint">
-                            Steam key {lastSteamKey.outcome === "owned" ? "already owned" : "activated"}: {lastSteamKey.title}
-                            {' '}({new Date(lastSteamKey.at).toLocaleDateString()})
+                            {t(lastSteamKey.outcome === "owned" ? "indieGalaSteamKeyOwned" : "indieGalaSteamKeyActivated", [
+                                lastSteamKey.title,
+                                new Date(lastSteamKey.at).toLocaleDateString(formatLocale()),
+                            ])}
                         </p>
                     )}
                 </div>

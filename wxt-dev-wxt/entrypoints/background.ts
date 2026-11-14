@@ -97,7 +97,8 @@ import {
   SignedOutError,
   StoreChangedError,
 } from "@/entrypoints/utils/network.ts";
-import {classifyFailure, HealthProblem, recordHealthError, recordHealthOk} from "@/entrypoints/utils/health.ts";
+import {classifyFailure, HealthProblem, parseHealthDetailKey, recordHealthError, recordHealthOk} from "@/entrypoints/utils/health.ts";
+import {t} from "@/entrypoints/utils/i18n.ts";
 
 const ALARM_NAME = "checkFreeGames";
 // One-off: a run where no store could be reached (offline, e.g. right after
@@ -601,7 +602,8 @@ export const background = {
         await recordHealthOk(platform, new Date(), "claim");
         return;
       }
-      await recordHealthError(platform, problem, String(request.data?.detail ?? ""), new Date(), "claim");
+      const detailKey = parseHealthDetailKey(request.data?.detailKey);
+      await recordHealthError(platform, problem, detailKey ? { key: detailKey } : "", new Date(), "claim");
       // Over a claimed count, if one is showing: a claim that needs the user
       // matters more than how many tabs opened.
       await this.showProblemBadge();
@@ -689,7 +691,7 @@ export const background = {
   async handleInstall(r: Browser.runtime.InstalledDetails) {
     if (r.reason === "update") {
       void setActionBadgeBackgroundColor("#50ca26");
-      void this.setBadgeText("New");
+      void this.setBadgeText(t("badgeUpdated"));
     } else if (r.reason === "install") {
       await this.checkIfActiveAndDue();
     }

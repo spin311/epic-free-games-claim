@@ -1,5 +1,6 @@
 import { ChangeEvent } from "react";
-import { STEAM_REVIEW_TIERS, findTierLabelForThreshold } from "@/entrypoints/utils/steamReviews.ts";
+import { STEAM_REVIEW_TIERS, findTierLabelForThreshold, isCustomThreshold } from "@/entrypoints/utils/steamReviews.ts";
+import { t } from "@/entrypoints/utils/i18n.ts";
 
 // Sentinel for a stored number that matches no Steam tier (set by the number
 // field older versions had). Shown so the dropdown never reads "Any" while a
@@ -12,7 +13,7 @@ interface ReviewThresholdProps {
 }
 
 function ReviewThreshold({ value, onChange }: ReviewThresholdProps) {
-    const isCustom = value !== null && findTierLabelForThreshold(value) === '';
+    const isCustom = isCustomThreshold(value);
 
     function handleTierChange(e: ChangeEvent<HTMLSelectElement>) {
         // The blank "Any" option clears the gate; every other value is a number.
@@ -22,22 +23,22 @@ function ReviewThreshold({ value, onChange }: ReviewThresholdProps) {
 
     return (
         <div className="sub-row">
-            <label htmlFor="steam-review-threshold">Min. rating</label>
+            <label htmlFor="steam-review-threshold">{t("steamMinRatingLabel")}</label>
             <select
                 id="steam-review-threshold"
                 value={isCustom ? CUSTOM_OPTION : (value === null ? '' : String(value))}
                 onChange={handleTierChange}
-                title="Skip free Steam games whose reviews are less positive than this."
+                title={t("steamMinRatingTooltip")}
             >
-                <option value="">Any</option>
+                <option value="">{t("steamMinRatingAny")}</option>
                 {STEAM_REVIEW_TIERS.map(tier => (
                     <option key={tier.threshold} value={tier.threshold}>
-                        {tier.threshold}%+ · {tier.label}
+                        {t("steamMinRatingOption", [String(tier.threshold), findTierLabelForThreshold(tier.threshold)])}
                     </option>
                 ))}
                 {isCustom && (
                     <option value={CUSTOM_OPTION} disabled>
-                        {value}%+ · Custom
+                        {t("steamMinRatingCustom", String(value))}
                     </option>
                 )}
             </select>

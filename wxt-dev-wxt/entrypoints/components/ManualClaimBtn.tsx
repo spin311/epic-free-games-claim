@@ -1,5 +1,6 @@
 import {useStorageValue} from "@/entrypoints/hooks/useStorage.ts";
 import {MessageRequest} from "@/entrypoints/types/messageRequest.ts";
+import {t} from "@/entrypoints/utils/i18n.ts";
 
 export function ManualClaimBtn() {
     // Live and read-only: only background.ts writes it, for automatic
@@ -9,7 +10,7 @@ export function ManualClaimBtn() {
 
     return (
         <button type="button" className="btn btn-secondary claim-now" onClick={claimGames} disabled={isClaiming}>
-            {isClaiming ? 'Claiming…' : 'Claim now'}
+            {isClaiming ? t("claimNowButtonBusy") : t("claimNowButton")}
         </button>
     );
 

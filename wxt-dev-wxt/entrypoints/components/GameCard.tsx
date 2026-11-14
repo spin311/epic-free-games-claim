@@ -1,13 +1,14 @@
 import {FreeGame} from "@/entrypoints/types/freeGame.ts";
 import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {gameDateLabel, platformLabel} from "@/entrypoints/utils/popupText.ts";
+import {t} from "@/entrypoints/utils/i18n.ts";
 
 const FALLBACK_IMAGE = "/icon/128.png";
 
 // Prime Gaming's mark is Amazon's "collected" (a code may still need
 // redeeming); everywhere else it means the game is on the account.
 function claimedLabel(game: FreeGame): string {
-    return game.platform === Platforms.PrimeGaming ? "✓ Claimed" : "✓ In library";
+    return `✓ ${t(game.platform === Platforms.PrimeGaming ? "gameClaimedPrime" : "gameInLibrary")}`;
 }
 
 interface GameCardProps {
@@ -29,7 +30,7 @@ function GameCard({game}: GameCardProps) {
                     {platformLabel(game)}
                     {!game.future && dateLabel && <> · {dateLabel}</>}
                 </p>
-                {game.future && <p className="game-upcoming">Upcoming{dateLabel && ` · ${dateLabel}`}</p>}
+                {game.future && <p className="game-upcoming">{t("gameUpcoming")}{dateLabel && ` · ${dateLabel}`}</p>}
                 {game.claimed && <p className="game-claimed">{claimedLabel(game)}</p>}
                 {game.description && <p className="game-description">{game.description}</p>}
             </div>

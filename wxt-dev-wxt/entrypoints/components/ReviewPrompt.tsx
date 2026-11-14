@@ -4,6 +4,7 @@ import {
     rateAndOpenReviewPage,
     saveReviewAnswer,
 } from "@/entrypoints/utils/reviewPrompt.ts";
+import {t, tPlural} from "@/entrypoints/utils/i18n.ts";
 
 const ISSUES_URL = "https://github.com/spin311/epic-free-games-claim/issues/new";
 
@@ -27,14 +28,14 @@ function ReviewPrompt({claimedCount, onAnswered}: Props) {
     };
 
     return <section className="prompt-card" aria-labelledby="review-prompt-title">
-        <h2 id="review-prompt-title">Enjoying Free Game Claimer?</h2>
-        <p>It has claimed {claimedCount} games for you. A quick rating helps other players find it.</p>
+        <h2 id="review-prompt-title">{t("reviewPromptTitle")}</h2>
+        <p>{tPlural("reviewPromptBody", claimedCount)}</p>
         <div className="prompt-actions">
-            <button type="button" className="btn btn-primary" onClick={rate}>Rate it</button>
-            <button type="button" className="btn btn-quiet" onClick={dismiss}>Not now</button>
+            <button type="button" className="btn btn-primary" onClick={rate}>{t("reviewPromptRate")}</button>
+            <button type="button" className="btn btn-quiet" onClick={dismiss}>{t("promptNotNow")}</button>
             {/* Beside the buttons rather than under them: a line less in a popup with no height to spare. */}
             <a href={ISSUES_URL} className="prompt-report" target="_blank" rel="noopener noreferrer">
-                Not working? Report it
+                {t("reviewPromptReport")}
             </a>
         </div>
     </section>;

@@ -11,5 +11,7 @@ export default defineConfig({
     // which trips esbuild's startup invariant and made suites flakily fail to load.
     environment: 'happy-dom',
     include: ['entrypoints/**/*.{test,spec}.ts'],
+    // The fake browser has no i18n; this gives every suite the English catalog.
+    setupFiles: ['entrypoints/tests/setup.ts'],
   },
 });
