@@ -12,6 +12,15 @@ export function steamActivationUrl(key: string): string {
   return `${STEAM_ACTIVATION_PAGE}?key=${encodeURIComponent(key)}`;
 }
 
+// The page the extension submits and reads itself. Steam's refusal messages
+// come from registerkey.js in the page's language, and ERROR_OUTCOMES knows
+// them in English. Confirmed live (Nov 2026): ?l=english serves a store page
+// in English over a Steam_Language cookie (schinese, tchinese, brazilian,
+// spanish, latam, french, vietnamese) and sets no cookie of its own.
+export function englishSteamActivationUrl(key: string): string {
+  return `${steamActivationUrl(key)}&l=english`;
+}
+
 export type SteamKeyOutcome =
     | "activated"
     | "owned"

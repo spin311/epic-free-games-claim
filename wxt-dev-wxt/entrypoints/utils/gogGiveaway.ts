@@ -10,7 +10,11 @@ import { assertStoreOk } from "@/entrypoints/utils/network.ts";
 export const GOG_HOME_URL = "https://www.gog.com/";
 export const GOG_STATUS_URL = "https://www.gog.com/giveaway/status";
 export const GOG_CLAIM_URL = "https://www.gog.com/giveaway/claim";
-export const GOG_REDEEM_URL = "https://www.gog.com/redeem";
+// Pinned to English for gog.content.ts, which finds the form's buttons by
+// label. Confirmed live (Nov 2026): a bare /redeem follows the gog_lc
+// cookie (fr-FR, zh-Hans, pt-BR, ...), /en/redeem serves en-US whatever it
+// says and leaves the cookie alone.
+export const GOG_REDEEM_URL = "https://www.gog.com/en/redeem";
 // Confirmed live: same-origin, answers {"owned": number[]} for the signed-in
 // account — the one positive signal that a redeem actually landed.
 export const GOG_OWNED_GAMES_URL = "https://www.gog.com/user/data/games";

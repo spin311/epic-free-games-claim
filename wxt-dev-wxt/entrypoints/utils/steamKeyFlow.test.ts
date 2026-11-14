@@ -4,6 +4,7 @@ import { fakeBrowser } from 'wxt/testing';
 import { getStorageItem, setStorageItem } from '@/entrypoints/hooks/useStorage';
 import { PENDING_REDEMPTIONS_STORAGE_KEY, PendingRedemption } from './pendingRedemptions';
 import { t } from './i18n';
+import { englishSteamActivationUrl, steamActivationUrl } from './steamKeyActivation';
 import {
   handleGiftKeys,
   KNOWN_GIFTS_KEY,
@@ -102,6 +103,19 @@ describe('handleGiftKeys', () => {
         deps(async () => { pendingWhenOpened = await getStorageItem(PENDING_REDEMPTIONS_STORAGE_KEY); }));
 
     expect(pendingWhenOpened).toEqual([expect.objectContaining({ code: 'AAAAA-BBBBB-CCCCC', platform: 'Steam' })]);
+  });
+
+  // Only the extension's own tab needs English (its messages are read); the
+  // link the user may open from the pending list stays in their language.
+  it('reads Steam\'s answer on the English page and keeps the plain link for the user', async () => {
+    const opened: string[] = [];
+    await handleGiftKeys('https://www.indiegala.com/gift-bundle/x',
+        [{ title: 'Some Game', key: 'AAAAA-BBBBB-CCCCC', isSteam: true }],
+        deps(async (url) => { opened.push(url); }));
+
+    expect(opened).toEqual([englishSteamActivationUrl('AAAAA-BBBBB-CCCCC')]);
+    const pending = await getStorageItem<PendingRedemption[]>(PENDING_REDEMPTIONS_STORAGE_KEY);
+    expect(pending?.map((entry) => entry.redeemUrl)).toEqual([steamActivationUrl('AAAAA-BBBBB-CCCCC')]);
   });
 
   it('clears that entry once Steam has the game', async () => {

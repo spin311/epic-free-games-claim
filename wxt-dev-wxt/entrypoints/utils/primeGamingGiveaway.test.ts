@@ -134,6 +134,13 @@ describe('hasPrimeMembership', () => {
     expect(hasPrimeMembership(docFrom('<button><p>Sign in</p></button><button><p>Try Prime</p></button>'))).toBe(false);
     expect(hasPrimeMembership(docFrom('<button><p>Claim Games</p></button><button><p>Janez</p></button>'))).toBe(true);
   });
+
+  // Confirmed live (Nov 2026): the label is translated ("Essayer Prime",
+  // "Experimente Amazon Prime", ...), the attribute is the same everywhere.
+  it('is false when Luna\'s "Try Prime" button is present, whatever its language', () => {
+    expect(hasPrimeMembership(docFrom('<button data-a-target="try-prime-button"><p>Essayer Prime</p></button>'))).toBe(false);
+    expect(hasPrimeMembership(docFrom('<button data-a-target="try-prime-button"><p>Experimente Amazon Prime</p></button>'))).toBe(false);
+  });
 });
 
 describe('readAllowedExternalPlatforms', () => {
@@ -454,6 +461,18 @@ const COLLECTED_EXTERNAL_CARD = `
 describe('isCollectedOfferCard', () => {
   it('is true when the card shows the "Collected" marker', () => {
     expect(isCollectedOfferCard(elFrom(COLLECTED_EXTERNAL_CARD))).toBe(true);
+  });
+
+  // Luna's own label in the languages it offers (core.locales.<lang>.js,
+  // smc-item-card-claim-status-collected; read live, Nov 2026). It has no
+  // Chinese or Vietnamese locale: those accounts see the English one.
+  it.each(['Récupéré', 'Obtenido', 'Coletado', 'Recolhido', 'Eingesammelt', '入手済み'])(
+      'is true when the card shows Luna\'s "%s" marker', (label) => {
+    expect(isCollectedOfferCard(elFrom(COLLECTED_EXTERNAL_CARD.replace('Collected', label)))).toBe(true);
+  });
+
+  it('is false for a translated "Claim game" label', () => {
+    expect(isCollectedOfferCard(elFrom(COLLECTED_EXTERNAL_CARD.replace('Collected', 'Récupérer le jeu')))).toBe(false);
   });
 
   it('is false for an unclaimed card', () => {
