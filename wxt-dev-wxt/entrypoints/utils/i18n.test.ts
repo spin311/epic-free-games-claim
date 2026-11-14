@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing';
-import { SLOT, splitAtSlot, t, tPlural, uiLocale } from './i18n';
+import { formatLocale, SLOT, splitAtSlot, t, tPlural } from './i18n';
 
 // The English catalog comes from the shared test setup (entrypoints/tests/setup.ts).
 const englishGetMessage = fakeBrowser.i18n.getMessage;
@@ -60,11 +60,25 @@ describe('tPlural', () => {
   });
 });
 
-describe('uiLocale', () => {
-  it("is the browser's UI language", () => {
+// Dates sit inside the catalogue's sentences, so they follow its language.
+describe('formatLocale', () => {
+  it("is the catalogue's language when the browser's language has no translation", () => {
     vi.spyOn(fakeBrowser.i18n, 'getUILanguage').mockReturnValue('de');
 
-    expect(uiLocale()).toBe('de');
+    expect(formatLocale()).toBe('en');
+  });
+
+  it("keeps the browser's region when it speaks the catalogue's language", () => {
+    vi.spyOn(fakeBrowser.i18n, 'getUILanguage').mockReturnValue('en-GB');
+
+    expect(formatLocale()).toBe('en-GB');
+  });
+
+  it('gives a region-specific catalogue as a BCP 47 tag', () => {
+    vi.spyOn(fakeBrowser.i18n, 'getUILanguage').mockReturnValue('de');
+    useCatalogLocale('pt_BR');
+
+    expect(formatLocale()).toBe('pt-BR');
   });
 });
 

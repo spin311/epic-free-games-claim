@@ -7,7 +7,7 @@ import { LOGIN_STATE_KEYS, LoginState } from "@/entrypoints/utils/loginState.ts"
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { StoredWheelPrize } from "@/entrypoints/utils/indieGalaWheel.ts";
 import { LAST_STEAM_KEY_KEY, SteamKeyRecord } from "@/entrypoints/utils/steamKeyFlow.ts";
-import { t, uiLocale } from "@/entrypoints/utils/i18n.ts";
+import { formatLocale, t } from "@/entrypoints/utils/i18n.ts";
 
 function IndieGalaSettings() {
     // Off by default (see spec: IndieGala and Prime Gaming both start disabled
@@ -48,7 +48,7 @@ function IndieGalaSettings() {
                         <p className="hint">
                             {t("indieGalaLastPrize", [
                                 indieGalaWheelLastPrize.label,
-                                new Date(indieGalaWheelLastPrize.wonAt).toLocaleDateString(uiLocale()),
+                                new Date(indieGalaWheelLastPrize.wonAt).toLocaleDateString(formatLocale()),
                             ])}
                         </p>
                     )}
@@ -56,7 +56,7 @@ function IndieGalaSettings() {
                         <p className="hint">
                             {t(lastSteamKey.outcome === "owned" ? "indieGalaSteamKeyOwned" : "indieGalaSteamKeyActivated", [
                                 lastSteamKey.title,
-                                new Date(lastSteamKey.at).toLocaleDateString(uiLocale()),
+                                new Date(lastSteamKey.at).toLocaleDateString(formatLocale()),
                             ])}
                         </p>
                     )}

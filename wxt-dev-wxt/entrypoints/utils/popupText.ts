@@ -1,6 +1,6 @@
 import { FreeGame } from "@/entrypoints/types/freeGame.ts";
 import { parseGameDate } from "@/entrypoints/utils/gameDates.ts";
-import { t, tPlural, uiLocale } from "@/entrypoints/utils/i18n.ts";
+import { formatLocale, t, tPlural } from "@/entrypoints/utils/i18n.ts";
 
 // Short copy the popup builds from stored data, kept here so it can be tested.
 
@@ -26,7 +26,7 @@ function shortDate(date: Date, now: Date, locale: string): string {
  * "Free until Nov 13" for a current giveaway, "Nov 13 – Nov 20" (or "From
  * Nov 13") for an upcoming one, or null when the store gave no usable date.
  */
-export function gameDateLabel(game: FreeGame, now: Date = new Date(), locale: string = uiLocale()): string | null {
+export function gameDateLabel(game: FreeGame, now: Date = new Date(), locale: string = formatLocale()): string | null {
     const start = parseGameDate(game.startDate);
     const end = parseGameDate(game.endDate);
     if (game.future) {

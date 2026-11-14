@@ -1,7 +1,7 @@
 import { useStorageValue } from "@/entrypoints/hooks/useStorage.ts";
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { activeProblem, HealthError, healthKey, HealthProblem, PlatformHealth } from "@/entrypoints/utils/health.ts";
-import { MessageKey, t, uiLocale } from "@/entrypoints/utils/i18n.ts";
+import { MessageKey, formatLocale, t } from "@/entrypoints/utils/i18n.ts";
 
 const LABEL_KEYS: Record<HealthProblem, MessageKey> = {
     network: "healthNetwork",
@@ -28,7 +28,7 @@ function HealthStatus({ platform }: HealthStatusProps) {
 
     // An explanation a claim tab gave is a key; a check's own error stays as it was.
     const detail = (problem.detailKey && t(problem.detailKey)) || problem.detail;
-    const tooltipParts = [detail, new Date(problem.at).toLocaleString(uiLocale())];
+    const tooltipParts = [detail, new Date(problem.at).toLocaleString(formatLocale())];
     if (problem.problem === "changed") {
         return (
             <a className="health-status" href={ISSUES_URL} target="_blank" rel="noopener noreferrer"

@@ -1,4 +1,5 @@
-import { describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+import { fakeBrowser } from 'wxt/testing';
 import { claimedCountLabel, gameDateLabel, platformLabel } from './popupText';
 import { Platforms } from '../enums/platforms';
 import { FreeGame } from '../types/freeGame';
@@ -14,6 +15,10 @@ const NOW = new Date(localNoon(2026, 11, 8));
 function game(overrides: Partial<FreeGame> = {}): FreeGame {
   return { title: 'T', platform: Platforms.Epic, link: 'https://x', img: '', ...overrides };
 }
+
+afterEach(() => {
+  vi.restoreAllMocks();
+});
 
 describe('claimedCountLabel', () => {
   it('uses the singular for one game', () => {
@@ -52,6 +57,14 @@ describe('gameDateLabel', () => {
 
   it('adds the year when a date falls in another year', () => {
     expect(gameDateLabel(game({ endDate: localNoon(2027, 1, 2) }), NOW, 'en-US')).toBe('Free until Jan 2, 2027');
+  });
+
+  // A German browser shown the English catalogue: "Free until 13. Nov."
+  // would mix two languages in one line.
+  it("formats the date in the catalogue's language, not the browser's", () => {
+    vi.spyOn(fakeBrowser.i18n, 'getUILanguage').mockReturnValue('de');
+
+    expect(gameDateLabel(game({ endDate: localNoon(2026, 11, 13) }), NOW)).toBe('Free until Nov 13');
   });
 
   it('has no label without dates', () => {

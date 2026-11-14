@@ -1,5 +1,5 @@
 import { ClaimFrequency, ClaimFrequencyLabelKeys } from "@/entrypoints/enums/claimFrequency.ts";
-import { t, uiLocale } from "@/entrypoints/utils/i18n.ts";
+import { formatLocale, t } from "@/entrypoints/utils/i18n.ts";
 
 interface FrequencySelectProps {
     value: ClaimFrequency;
@@ -15,7 +15,7 @@ const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
 // In the browser's own clock format: "18:00" or "6:00 PM".
 function hourLabel(hour: number): string {
-    return new Date(2000, 0, 1, hour).toLocaleTimeString(uiLocale(), { hour: "numeric", minute: "2-digit" });
+    return new Date(2000, 0, 1, hour).toLocaleTimeString(formatLocale(), { hour: "numeric", minute: "2-digit" });
 }
 
 // One row: "Check [Once a day] at [Any time]". Each label and its dropdown
