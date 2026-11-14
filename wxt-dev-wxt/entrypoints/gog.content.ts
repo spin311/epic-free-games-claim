@@ -13,6 +13,7 @@ import {runtimeContentScriptOptions} from "@/entrypoints/utils/runtimeContentScr
 
 // Confirmed live: redeeming is two steps — "Continue" previews the code's
 // product, then a separate "Redeem" button actually adds it to the library.
+// English labels: the code arrives on GOG_REDEEM_URL, which is pinned to /en/.
 const GOG_SUBMIT_LABELS = ['Continue', 'Redeem'];
 const REDEEM_CONFIRM_TIMEOUT_MS = 15_000;
 
