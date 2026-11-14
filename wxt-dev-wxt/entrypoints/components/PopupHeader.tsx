@@ -1,5 +1,6 @@
 import {useStorageValue} from "@/entrypoints/hooks/useStorage.ts";
 import {claimedCountLabel} from "@/entrypoints/utils/popupText.ts";
+import {t} from "@/entrypoints/utils/i18n.ts";
 
 // metadata_source shows up in GitHub Sponsors exports, so sponsorships that start
 // in this popup can be told apart from the README and website ones.
@@ -27,13 +28,13 @@ function PopupHeader({isReady, showSponsor}: PopupHeaderProps) {
                 <h1>Free Game Claimer</h1>
                 <p>
                     {isReady && claimedCountLabel(counter)}
-                    {isClaiming && <span className="app-claiming"> · Claiming…</span>}
+                    {isClaiming && <span className="app-claiming"> · {t("headerClaimingStatus")}</span>}
                 </p>
             </div>
             {showSponsor && (
                 <a href={SPONSOR_URL} className="sponsor-pill" target="_blank" rel="noopener noreferrer"
-                   title="Sponsor from $5/month and get your name in the README">
-                    <span aria-hidden="true">♥</span> Sponsor
+                   title={t("sponsorPillTooltip")}>
+                    <span aria-hidden="true">♥</span> {t("sponsorPill")}
                 </a>
             )}
         </header>

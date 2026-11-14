@@ -76,7 +76,7 @@ describe('STEAM_REVIEW_TIERS', () => {
     for (const tier of STEAM_REVIEW_TIERS) {
       expect(tier.threshold).toBeGreaterThanOrEqual(0);
       expect(tier.threshold).toBeLessThanOrEqual(100);
-      expect(tier.label).not.toBe('');
+      expect(findTierLabelForThreshold(tier.threshold)).not.toBe('');
     }
   });
 });

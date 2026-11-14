@@ -10,6 +10,7 @@ import PopupHeader from "@/entrypoints/components/PopupHeader.tsx";
 import ReviewPrompt from "@/entrypoints/components/ReviewPrompt.tsx";
 import SponsorMilestonePrompt from "@/entrypoints/components/SponsorMilestonePrompt.tsx";
 import {usePromptChoice} from "@/entrypoints/hooks/usePromptChoice.ts";
+import {t} from "@/entrypoints/utils/i18n.ts";
 
 function App() {
     const [activeTab, setActiveTab] = useStorage<ActiveTabs>("activeTab", ActiveTabs.MAIN);
@@ -28,14 +29,14 @@ function App() {
             <PopupHeader isReady={choice !== undefined} showSponsor={choice === null}/>
             {choice === 'review' && <ReviewPrompt claimedCount={claimedCount} onAnswered={answered}/>}
             {choice === 'sponsor' && <SponsorMilestonePrompt claimedCount={claimedCount} onAnswered={answered}/>}
-            <nav className="tabs" aria-label="Sections">
+            <nav className="tabs" aria-label={t("tabsLabel")}>
                 <button type="button" onClick={() => setActiveTab(ActiveTabs.MAIN)}
                         className={activeTab === ActiveTabs.MAIN ? 'active' : ''}
-                        aria-current={activeTab === ActiveTabs.MAIN ? 'page' : undefined}>Settings
+                        aria-current={activeTab === ActiveTabs.MAIN ? 'page' : undefined}>{t("settingsTab")}
                 </button>
                 <button type="button" onClick={() => setActiveTab(ActiveTabs.FREE_GAMES)}
                         className={activeTab === ActiveTabs.FREE_GAMES ? 'active' : ''}
-                        aria-current={activeTab === ActiveTabs.FREE_GAMES ? 'page' : undefined}>Free Games
+                        aria-current={activeTab === ActiveTabs.FREE_GAMES ? 'page' : undefined}>{t("freeGamesTab")}
                 </button>
             </nav>
             {activeTab === ActiveTabs.MAIN && <Settings/>}

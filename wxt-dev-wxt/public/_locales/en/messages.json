@@ -28,5 +28,421 @@
     "placeholders": {
       "count": { "content": "$1", "example": "47" }
     }
+  },
+  "headerClaimingStatus": {
+    "message": "Claiming…",
+    "description": "Popup header, after the claimed count (\"47 games claimed · Claiming…\") while a claim run is going on."
+  },
+  "sponsorPill": {
+    "message": "Sponsor",
+    "description": "Small pill-shaped link after a heart in the popup header's right corner; opens GitHub Sponsors. About 10 characters fit."
+  },
+  "sponsorPillTooltip": {
+    "message": "Sponsor from $$5/month and get your name in the README",
+    "description": "Tooltip on the header's Sponsor link. Write $$ for a dollar sign: $$5 shows as $5."
+  },
+  "tabsLabel": {
+    "message": "Sections",
+    "description": "Screen-reader name for the two tabs at the top of the popup (Settings, Free Games)."
+  },
+  "settingsTab": {
+    "message": "Settings",
+    "description": "First of the two tabs at the top of the popup. Each tab gets half of the popup's 360 px width."
+  },
+  "freeGamesTab": {
+    "message": "Free Games",
+    "description": "Second of the two tabs at the top of the popup: the games that are free now. Each tab gets half of the popup's 360 px width."
+  },
+  "autoClaimSwitch": {
+    "message": "Auto-claim",
+    "description": "Settings: label of the on/off switch for scheduled checks. Shares a row with the Claim now button."
+  },
+  "autoClaimPaused": {
+    "message": "paused",
+    "description": "Settings: shown after the Auto-claim switch while it is off, as \"· paused\"."
+  },
+  "claimNowButton": {
+    "message": "Claim now",
+    "description": "Button that checks every store and claims what's free right away. Shares a row with the Auto-claim switch and doesn't wrap: keep it short."
+  },
+  "claimNowButtonBusy": {
+    "message": "Claiming…",
+    "description": "The Claim now button's label while a claim run is going on (the button is disabled). Keep it short."
+  },
+  "scheduleCheckLabel": {
+    "message": "Check",
+    "description": "Settings: label before the dropdown for how often the stores are checked. The row reads \"Check [Once a day] at [Any time]\"; each label names the dropdown after it."
+  },
+  "scheduleAtLabel": {
+    "message": "at",
+    "description": "Settings: label before the time-of-day dropdown, shown only for \"Once a day\". The row reads \"Check [Once a day] at [Any time]\"."
+  },
+  "scheduleHourTooltip": {
+    "message": "The day's check waits for this hour; if the browser is closed then, it runs when you next open it that day.",
+    "description": "Tooltip on the time-of-day dropdown."
+  },
+  "scheduleAnyTime": {
+    "message": "Any time",
+    "description": "First option of the time-of-day dropdown: no set hour. The other options are clock times."
+  },
+  "frequencyBrowserStart": {
+    "message": "On browser start",
+    "description": "Option of the how-often dropdown: check each time the browser starts."
+  },
+  "frequencyHourly": {
+    "message": "Every hour",
+    "description": "Option of the how-often dropdown."
+  },
+  "frequencyEvery6Hours": {
+    "message": "Every 6 hours",
+    "description": "Option of the how-often dropdown."
+  },
+  "frequencyEvery12Hours": {
+    "message": "Every 12 hours",
+    "description": "Option of the how-often dropdown."
+  },
+  "frequencyDaily": {
+    "message": "Once a day",
+    "description": "Option of the how-often dropdown (the default)."
+  },
+  "storesLabel": {
+    "message": "Stores",
+    "description": "Screen-reader name for the list of stores in Settings."
+  },
+  "loginLoggedIn": {
+    "message": "Logged in",
+    "description": "Settings, at the right end of a store's row: the user is signed in to that store. Shares the row with the store name and doesn't wrap: keep it short."
+  },
+  "loginLoggedInTooltip": {
+    "message": "Signed in as of the last claim run",
+    "description": "Tooltip on \"Logged in\"."
+  },
+  "loginLogIn": {
+    "message": "Log in",
+    "description": "Settings, at the right end of a store's row: link to the store's sign-in page. Shares the row with the store name and doesn't wrap: keep it short."
+  },
+  "loginSignedOutTooltip": {
+    "message": "Not signed in as of the last claim run — free games can't be claimed. Click to log in.",
+    "description": "Tooltip on \"Log in\" when the last check found the user signed out."
+  },
+  "loginUncheckedTooltip": {
+    "message": "Not checked yet — click to log in.",
+    "description": "Tooltip on \"Log in\" before any check has run."
+  },
+  "primeNoMembership": {
+    "message": "No Prime",
+    "description": "Settings, at the right end of the Prime Gaming row, in place of \"Logged in\": the Amazon account has no Prime membership. Prime is Amazon's product name. Doesn't wrap: keep it short."
+  },
+  "primeNoMembershipTooltip": {
+    "message": "Signed in, but this Amazon account has no Prime membership, so Prime Gaming offers can't be claimed.",
+    "description": "Tooltip on \"No Prime\"."
+  },
+  "healthNetwork": {
+    "message": "Can't reach store",
+    "description": "Settings: warning after a ⚠ sign on a store's row: the store didn't answer. Shares the row with the store name and \"Logged in\" and doesn't wrap: keep it short."
+  },
+  "healthChanged": {
+    "message": "Store changed",
+    "description": "Settings: warning after a ⚠ sign on a store's row: the store's site changed and the extension needs an update. Links to the issue tracker. Doesn't wrap: keep it short."
+  },
+  "healthCaptcha": {
+    "message": "Needs captcha",
+    "description": "Settings: warning after a ⚠ sign on a store's row: a claim is waiting for the user to solve a captcha. Doesn't wrap: keep it short."
+  },
+  "healthUnfinished": {
+    "message": "Claim unfinished",
+    "description": "Settings: warning after a ⚠ sign on a store's row: a claim didn't get to the end (it is retried). Doesn't wrap: keep it short."
+  },
+  "healthTooltip": {
+    "message": "$DETAIL$ ($TIME$)",
+    "description": "Tooltip on a store's warning: what went wrong, then when.",
+    "placeholders": {
+      "detail": { "content": "$1", "example": "Epic's checkout didn't finish; it's retried tomorrow" },
+      "time": { "content": "$2", "example": "11/14/2026, 9:30:00 AM" }
+    }
+  },
+  "healthChangedTooltip": {
+    "message": "$DETAIL$ ($TIME$). The extension needs an update; click to report it.",
+    "description": "Tooltip on the \"Store changed\" warning, which links to the issue tracker: what went wrong, when, and what to do.",
+    "placeholders": {
+      "detail": { "content": "$1", "example": "Steam's search page has no result list" },
+      "time": { "content": "$2", "example": "11/14/2026, 9:30:00 AM" }
+    }
+  },
+  "steamMinRatingLabel": {
+    "message": "Min. rating",
+    "description": "Settings, under Steam: label before the dropdown for the lowest review score a free Steam game needs to be claimed."
+  },
+  "steamMinRatingTooltip": {
+    "message": "Skip free Steam games whose reviews are less positive than this.",
+    "description": "Tooltip on the Min. rating dropdown."
+  },
+  "steamMinRatingAny": {
+    "message": "Any",
+    "description": "First option of the Min. rating dropdown: claim every free Steam game, whatever its reviews."
+  },
+  "steamMinRatingOption": {
+    "message": "$PERCENT$%+ · $RATING$",
+    "description": "Option of the Min. rating dropdown: this share of positive reviews or more, then Steam's name for that score.",
+    "placeholders": {
+      "percent": { "content": "$1", "example": "80" },
+      "rating": { "content": "$2", "example": "Very Positive" }
+    }
+  },
+  "steamMinRatingCustom": {
+    "message": "$PERCENT$%+ · Custom",
+    "description": "Option of the Min. rating dropdown for a value an older version stored that matches none of the presets.",
+    "placeholders": {
+      "percent": { "content": "$1", "example": "73" }
+    }
+  },
+  "steamRatingVeryPositive": {
+    "message": "Very Positive",
+    "description": "Steam's name for a review score, in the Min. rating dropdown. Use the wording Steam's store shows in your language."
+  },
+  "steamRatingMostlyPositive": {
+    "message": "Mostly Positive",
+    "description": "Steam's name for a review score, in the Min. rating dropdown. Use the wording Steam's store shows in your language."
+  },
+  "steamRatingMixed": {
+    "message": "Mixed",
+    "description": "Steam's name for a review score, in the Min. rating dropdown. Use the wording Steam's store shows in your language."
+  },
+  "steamRatingMostlyNegative": {
+    "message": "Mostly Negative",
+    "description": "Steam's name for a review score, in the Min. rating dropdown. Use the wording Steam's store shows in your language."
+  },
+  "indieGalaWheel": {
+    "message": "Wheel of Fortune",
+    "description": "Settings, under IndieGala: checkbox to spin IndieGala's daily prize wheel. Use the name IndieGala's site gives it in your language, if it has one."
+  },
+  "indieGalaLastPrize": {
+    "message": "Last prize: $PRIZE$ ($DATE$)",
+    "description": "Settings, under IndieGala: what the last wheel spin won, and when. The prize text comes from IndieGala's page.",
+    "placeholders": {
+      "prize": { "content": "$1", "example": "50 Galasilver" },
+      "date": { "content": "$2", "example": "11/14/2026" }
+    }
+  },
+  "indieGalaSteamKeyActivated": {
+    "message": "Steam key activated: $GAME$ ($DATE$)",
+    "description": "Settings, under IndieGala: a Steam key won on the wheel was activated on the user's Steam account.",
+    "placeholders": {
+      "game": { "content": "$1", "example": "Some Game" },
+      "date": { "content": "$2", "example": "11/14/2026" }
+    }
+  },
+  "indieGalaSteamKeyOwned": {
+    "message": "Steam key already owned: $GAME$ ($DATE$)",
+    "description": "Settings, under IndieGala: a Steam key won on the wheel was for a game already on the user's Steam account.",
+    "placeholders": {
+      "game": { "content": "$1", "example": "Some Game" },
+      "date": { "content": "$2", "example": "11/14/2026" }
+    }
+  },
+  "primeRegionalAccess": {
+    "message": "Amazon sends you to $HOST$. $BUTTON$ so Prime Gaming games can be claimed there.",
+    "description": "Settings, under Prime Gaming: Amazon sends this user to their country's Prime Gaming site, which the extension needs permission for. $BUTTON$ is a button labelled with primeRegionalAccessButton: put it where the sentence needs it.",
+    "placeholders": {
+      "host": { "content": "$1", "example": "luna.amazon.de" },
+      "button": { "content": "$2", "example": "Allow access" }
+    }
+  },
+  "primeRegionalAccessButton": {
+    "message": "Allow access",
+    "description": "Button inside the primeRegionalAccess sentence: asks the browser for permission to the country's Prime Gaming site."
+  },
+  "primeClaimOffersFor": {
+    "message": "Claim offers for:",
+    "description": "Settings, under Prime Gaming: heading of the checkboxes for the stores a Prime Gaming offer can go to (Amazon Games, Epic, GOG, Microsoft Store, Legacy Games)."
+  },
+  "primePickAtLeastOne": {
+    "message": "Pick at least one, or nothing is claimed.",
+    "description": "Warning under those checkboxes while all of them are off."
+  },
+  "legacyEmailLabel": {
+    "message": "Legacy Games email",
+    "description": "Settings, under Prime Gaming: label of an email field. Legacy Games is a store: keep its name in English."
+  },
+  "legacyEmailPlaceholder": {
+    "message": "you@example.com",
+    "description": "Example address shown in the empty Legacy Games email field."
+  },
+  "legacyEmailInvalid": {
+    "message": "Not a valid email: codes are filled in for you to finish.",
+    "description": "Under the Legacy Games email field while its text isn't an email address."
+  },
+  "legacyEmailHint": {
+    "message": "Codes go to this email (no newsletter). Leave empty to finish each one yourself.",
+    "description": "Under the Legacy Games email field: what the address is used for."
+  },
+  "gamesEmpty": {
+    "message": "No free games right now.",
+    "description": "Free Games tab, when no store has a free game."
+  },
+  "gamesFilterEmpty": {
+    "message": "No games match this filter.",
+    "description": "Free Games tab, when the store filter hides every game."
+  },
+  "platformFilterLabel": {
+    "message": "Filter by platform",
+    "description": "Screen-reader name for the row of store buttons that filter the Free Games tab."
+  },
+  "upcomingFilter": {
+    "message": "Upcoming",
+    "description": "Free Games tab: small toggle at the end of the store filter row that also lists games that become free soon. About 10 characters fit on the row."
+  },
+  "upcomingFilterTooltip": {
+    "message": "Show games that become free soon",
+    "description": "Tooltip on the Upcoming toggle."
+  },
+  "gameUpcoming": {
+    "message": "Upcoming",
+    "description": "On a game in the Free Games tab: it becomes free later. Followed by its dates, as \"Upcoming · Nov 13 – Nov 20\"."
+  },
+  "gameClaimedPrime": {
+    "message": "Claimed",
+    "description": "On a Prime Gaming game in the Free Games tab, after a ✓: Amazon counts it as claimed (a code may still need redeeming)."
+  },
+  "gameInLibrary": {
+    "message": "In library",
+    "description": "On a game in the Free Games tab, after a ✓: the game is already on the user's account."
+  },
+  "gameFreeUntil": {
+    "message": "Free until $DATE$",
+    "description": "On a game in the Free Games tab: the last day it is free.",
+    "placeholders": {
+      "date": { "content": "$1", "example": "Nov 13" }
+    }
+  },
+  "gameFreeFrom": {
+    "message": "From $DATE$",
+    "description": "On an upcoming game in the Free Games tab whose end date isn't known: the day it becomes free.",
+    "placeholders": {
+      "date": { "content": "$1", "example": "Nov 13" }
+    }
+  },
+  "gameDateRange": {
+    "message": "$START$ – $END$",
+    "description": "On an upcoming game in the Free Games tab: the days it is free, first to last.",
+    "placeholders": {
+      "start": { "content": "$1", "example": "Nov 13" },
+      "end": { "content": "$2", "example": "Nov 20" }
+    }
+  },
+  "pendingTitle": {
+    "message": "Needs manual redeem",
+    "description": "Free Games tab: heading of the list of codes and keys the extension couldn't redeem by itself."
+  },
+  "pendingStore": {
+    "message": "($STORE$)",
+    "description": "In that list, after a game's title: the store the code is for.",
+    "placeholders": {
+      "store": { "content": "$1", "example": "GOG" }
+    }
+  },
+  "pendingCopy": {
+    "message": "Copy",
+    "description": "Small button next to a code that copies it. Shares the row with the code and two other buttons: keep it short."
+  },
+  "pendingCopied": {
+    "message": "Copied",
+    "description": "The Copy button's label for a moment after it copied. Keep it short."
+  },
+  "pendingActivate": {
+    "message": "Activate",
+    "description": "Small link next to a Steam key: opens Steam's activation page. Shares the row: keep it short."
+  },
+  "pendingTryAgain": {
+    "message": "Try again",
+    "description": "Small link next to a code: opens the store's redeem page to try again. Shares the row: keep it short."
+  },
+  "pendingDismiss": {
+    "message": "Dismiss",
+    "description": "Screen-reader name of the × button that removes an entry from the list."
+  },
+  "pendingIndieGalaKeyNotRead": {
+    "message": "Key wasn't read; it's on IndieGala.",
+    "description": "In the list, in place of a key the extension couldn't read: it is still on IndieGala's page."
+  },
+  "pendingOpenOnIndieGala": {
+    "message": "Open on IndieGala",
+    "description": "Small link that opens that IndieGala page. Shares the row: keep it short."
+  },
+  "pendingAmazonCodeNotRead": {
+    "message": "Code wasn't read; it's on Amazon's page.",
+    "description": "In the list, in place of a code the extension couldn't read: it is still on Amazon's page."
+  },
+  "pendingOpenOnAmazon": {
+    "message": "Open on Amazon",
+    "description": "Small link that opens that Amazon page. Shares the row: keep it short."
+  },
+  "reviewPromptTitle": {
+    "message": "Enjoying Free Game Claimer?",
+    "description": "Heading of a card above the tabs that asks for a store rating. Keep \"Free Game Claimer\" in English."
+  },
+  "reviewPromptBody_one": {
+    "message": "It has claimed $COUNT$ game for you. A quick rating helps other players find it.",
+    "description": "Text of the rating card. \"It\" is the extension. Form for counts your language treats as singular.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "1" }
+    }
+  },
+  "reviewPromptBody_other": {
+    "message": "It has claimed $COUNT$ games for you. A quick rating helps other players find it.",
+    "description": "Text of the rating card. \"It\" is the extension. Form for all other counts.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "5" }
+    }
+  },
+  "reviewPromptRate": {
+    "message": "Rate it",
+    "description": "Button on the rating card that opens the store's review page. Shares a row with two other actions."
+  },
+  "promptNotNow": {
+    "message": "Not now",
+    "description": "Button on the rating card and on the sponsor card that hides the card."
+  },
+  "reviewPromptReport": {
+    "message": "Not working? Report it",
+    "description": "Link at the end of the rating card's button row; opens the issue tracker. Shares the row with two buttons and doesn't wrap: keep it short."
+  },
+  "sponsorCardTitle_one": {
+    "message": "It has claimed $COUNT$ game for you",
+    "description": "Heading of a thank-you card that asks for sponsorship, shown after 20 or more claims. \"It\" is the extension; the number is in bold. Form for counts your language treats as singular.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "1" }
+    }
+  },
+  "sponsorCardTitle_other": {
+    "message": "It has claimed $COUNT$ games for you",
+    "description": "Heading of a thank-you card that asks for sponsorship, shown after 20 or more claims. \"It\" is the extension; the number is in bold. Form for all other counts.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "20" }
+    }
+  },
+  "sponsorCardBody": {
+    "message": "Free and built in my spare time. Sponsoring keeps it working when stores change.",
+    "description": "Text of the sponsor card. \"my\" is the developer; \"it\" is the extension."
+  },
+  "sponsorCardButton": {
+    "message": "Sponsor from $$2",
+    "description": "Main button of the sponsor card, after a heart; opens GitHub Sponsors. Doesn't wrap. Write $$ for a dollar sign: $$2 shows as $2."
+  },
+  "sponsorCardButtonTooltip": {
+    "message": "On GitHub, monthly or one-time",
+    "description": "Tooltip on the sponsor card's main button."
+  },
+  "footerContact": {
+    "message": "Contact",
+    "description": "Link at the bottom of the popup, between GitHub and Donate."
+  },
+  "footerDonate": {
+    "message": "Donate",
+    "description": "Link at the bottom of the popup, after GitHub and Contact."
+  },
+  "badgeUpdated": {
+    "message": "New",
+    "description": "Text on the toolbar button's badge after the extension updates. At most 4 characters: the badge cuts off the rest."
   }
 }

@@ -98,6 +98,7 @@ import {
   StoreChangedError,
 } from "@/entrypoints/utils/network.ts";
 import {classifyFailure, HealthProblem, recordHealthError, recordHealthOk} from "@/entrypoints/utils/health.ts";
+import {t} from "@/entrypoints/utils/i18n.ts";
 
 const ALARM_NAME = "checkFreeGames";
 // One-off: a run where no store could be reached (offline, e.g. right after
@@ -689,7 +690,7 @@ export const background = {
   async handleInstall(r: Browser.runtime.InstalledDetails) {
     if (r.reason === "update") {
       void setActionBadgeBackgroundColor("#50ca26");
-      void this.setBadgeText("New");
+      void this.setBadgeText(t("badgeUpdated"));
     } else if (r.reason === "install") {
       await this.checkIfActiveAndDue();
     }

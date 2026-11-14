@@ -1,4 +1,5 @@
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
+import { t } from "@/entrypoints/utils/i18n.ts";
 
 // Matches the Free Games tab's own list order (see GamesList.tsx).
 const ALL_PLATFORMS: Platforms[] = [
@@ -35,7 +36,7 @@ function PlatformFilter({ visiblePlatforms, onChange }: PlatformFilterProps) {
     }
 
     return (
-        <div className="platform-filter" role="group" aria-label="Filter by platform">
+        <div className="platform-filter" role="group" aria-label={t("platformFilterLabel")}>
             {ALL_PLATFORMS.map(platform => {
                 const isActive = visiblePlatforms.includes(platform);
                 return (

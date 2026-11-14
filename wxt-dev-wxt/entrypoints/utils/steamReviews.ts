@@ -14,6 +14,7 @@
 // on the page, so the page is the primary source and the API is the fallback
 // for when the page can't be parsed (age-gate interstitial, markup change).
 import { parse } from 'node-html-parser';
+import { MessageKey, t } from '@/entrypoints/utils/i18n.ts';
 
 export type SteamReviewSummary = {
     total_positive?: number;
@@ -24,22 +25,23 @@ export type SteamReviewSummary = {
 export interface ReviewTier {
     // The minimum positive percentage this preset requires.
     threshold: number;
-    // Steam's name for the rating band that CONTAINS that percentage. Several
-    // presets can share a label — 40/50/60 all sit inside "Mixed" (40-69%) —
-    // which is fine because the threshold, not the label, identifies a preset.
-    label: string;
+    // Steam's name for the rating band that CONTAINS that percentage, as a
+    // message key. Several presets can share a label — 40/50/60 all sit inside
+    // "Mixed" (40-69%) — which is fine because the threshold, not the label,
+    // identifies a preset.
+    labelKey: MessageKey;
 }
 
 // Selectable presets, strictest first. Thresholds are unique, so the number
 // alone keys the dropdown.
 export const STEAM_REVIEW_TIERS: readonly ReviewTier[] = [
-    { threshold: 90, label: 'Very Positive' },
-    { threshold: 80, label: 'Very Positive' },
-    { threshold: 70, label: 'Mostly Positive' },
-    { threshold: 60, label: 'Mixed' },
-    { threshold: 50, label: 'Mixed' },
-    { threshold: 40, label: 'Mixed' },
-    { threshold: 20, label: 'Mostly Negative' },
+    { threshold: 90, labelKey: 'steamRatingVeryPositive' },
+    { threshold: 80, labelKey: 'steamRatingVeryPositive' },
+    { threshold: 70, labelKey: 'steamRatingMostlyPositive' },
+    { threshold: 60, labelKey: 'steamRatingMixed' },
+    { threshold: 50, labelKey: 'steamRatingMixed' },
+    { threshold: 40, labelKey: 'steamRatingMixed' },
+    { threshold: 20, labelKey: 'steamRatingMostlyNegative' },
 ] as const;
 
 const MIN_PERCENT = 0;
@@ -49,7 +51,8 @@ const MAX_PERCENT = 100;
 // the UI surfaces as "Custom" rather than silently showing "Any".
 export function findTierLabelForThreshold(threshold: number | null): string {
     if (threshold === null) return '';
-    return STEAM_REVIEW_TIERS.find((tier) => tier.threshold === threshold)?.label ?? '';
+    const tier = STEAM_REVIEW_TIERS.find((candidate) => candidate.threshold === threshold);
+    return tier ? t(tier.labelKey) : '';
 }
 
 export function parseSteamAppId(url: string): number | null {

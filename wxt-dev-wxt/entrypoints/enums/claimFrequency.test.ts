@@ -1,9 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   ClaimFrequency,
-  ClaimFrequencyLabels,
+  ClaimFrequencyLabelKeys,
   ClaimFrequencyMinutes,
 } from './claimFrequency';
+import { t } from '../utils/i18n';
 
 describe('ClaimFrequency maps', () => {
   it('defines a minutes interval for every frequency', () => {
@@ -14,7 +15,7 @@ describe('ClaimFrequency maps', () => {
 
   it('defines a human label for every frequency', () => {
     for (const freq of Object.values(ClaimFrequency)) {
-      expect(ClaimFrequencyLabels[freq]).toBeTruthy();
+      expect(t(ClaimFrequencyLabelKeys[freq])).toBeTruthy();
     }
   });
 

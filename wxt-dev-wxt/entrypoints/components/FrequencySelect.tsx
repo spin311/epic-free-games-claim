@@ -1,4 +1,5 @@
-import { ClaimFrequency, ClaimFrequencyLabels } from "@/entrypoints/enums/claimFrequency.ts";
+import { ClaimFrequency, ClaimFrequencyLabelKeys } from "@/entrypoints/enums/claimFrequency.ts";
+import { t, uiLocale } from "@/entrypoints/utils/i18n.ts";
 
 interface FrequencySelectProps {
     value: ClaimFrequency;
@@ -14,14 +15,14 @@ const HOURS = Array.from({ length: 24 }, (_, hour) => hour);
 
 // In the browser's own clock format: "18:00" or "6:00 PM".
 function hourLabel(hour: number): string {
-    return new Date(2000, 0, 1, hour).toLocaleTimeString([], { hour: "numeric", minute: "2-digit" });
+    return new Date(2000, 0, 1, hour).toLocaleTimeString(uiLocale(), { hour: "numeric", minute: "2-digit" });
 }
 
 // One row: "Check [Once a day] at [Any time]".
 function FrequencySelect({ value, onChange, claimHour, onClaimHourChange }: FrequencySelectProps) {
     return (
         <div className="schedule-row">
-            <label htmlFor="frequency-select">Check</label>
+            <label htmlFor="frequency-select">{t("scheduleCheckLabel")}</label>
             <select
                 id="frequency-select"
                 value={value}
@@ -29,20 +30,20 @@ function FrequencySelect({ value, onChange, claimHour, onClaimHourChange }: Freq
             >
                 {Object.values(ClaimFrequency).map((frequency) => (
                     <option key={frequency} value={frequency}>
-                        {ClaimFrequencyLabels[frequency]}
+                        {t(ClaimFrequencyLabelKeys[frequency])}
                     </option>
                 ))}
             </select>
             {value === ClaimFrequency.DAILY && (
                 <>
-                    <label htmlFor="claim-hour-select">at</label>
+                    <label htmlFor="claim-hour-select">{t("scheduleAtLabel")}</label>
                     <select
                         id="claim-hour-select"
                         value={claimHour ?? ANY_TIME}
                         onChange={(e) => onClaimHourChange(e.target.value === ANY_TIME ? null : Number(e.target.value))}
-                        title="The day's check waits for this hour; if the browser is closed then, it runs when you next open it that day."
+                        title={t("scheduleHourTooltip")}
                     >
-                        <option value={ANY_TIME}>Any time</option>
+                        <option value={ANY_TIME}>{t("scheduleAnyTime")}</option>
                         {HOURS.map((hour) => (
                             <option key={hour} value={hour}>{hourLabel(hour)}</option>
                         ))}

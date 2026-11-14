@@ -1,5 +1,6 @@
 import {browser} from '#imports';
 import {saveSponsorAnswer, sponsorAndOpen} from "@/entrypoints/utils/sponsorPrompt.ts";
+import {SLOT, splitAtSlot, t, tPlural} from "@/entrypoints/utils/i18n.ts";
 
 interface Props {
     claimedCount: number;
@@ -20,17 +21,20 @@ function SponsorMilestonePrompt({claimedCount, onAnswered}: Props) {
         void saveSponsorAnswer('dismissed');
     };
 
+    // The count is bold wherever the translation puts it.
+    const [titleBefore, titleAfter] = splitAtSlot(tPlural("sponsorCardTitle", claimedCount, [SLOT]));
+
     return <section className="prompt-card sponsor-card" aria-labelledby="sponsor-prompt-title">
         <span className="prompt-badge" aria-hidden="true">♥</span>
         <h2 id="sponsor-prompt-title">
-            It has claimed <strong className="prompt-count">{claimedCount}</strong> games for you
+            {titleBefore}<strong className="prompt-count">{claimedCount}</strong>{titleAfter}
         </h2>
-        <p>Free and built in my spare time. Sponsoring keeps it working when stores change.</p>
+        <p>{t("sponsorCardBody")}</p>
         <div className="prompt-actions">
-            <button type="button" className="btn btn-sponsor" onClick={sponsor} title="On GitHub, monthly or one-time">
-                <span aria-hidden="true">♥</span> Sponsor from $2
+            <button type="button" className="btn btn-sponsor" onClick={sponsor} title={t("sponsorCardButtonTooltip")}>
+                <span aria-hidden="true">♥</span> {t("sponsorCardButton")}
             </button>
-            <button type="button" className="btn btn-quiet" onClick={dismiss}>Not now</button>
+            <button type="button" className="btn btn-quiet" onClick={dismiss}>{t("promptNotNow")}</button>
         </div>
     </section>;
 }

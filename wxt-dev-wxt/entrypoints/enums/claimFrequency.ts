@@ -1,3 +1,5 @@
+import type { MessageKey } from "@/entrypoints/utils/i18n.ts";
+
 export enum ClaimFrequency {
   BROWSER_START = "browser_start",
   HOURLY = "hourly",
@@ -6,12 +8,13 @@ export enum ClaimFrequency {
   DAILY = "daily"
 }
 
-export const ClaimFrequencyLabels: Record<ClaimFrequency, string> = {
-  [ClaimFrequency.BROWSER_START]: "On browser start",
-  [ClaimFrequency.HOURLY]: "Every hour",
-  [ClaimFrequency.EVERY_6_HOURS]: "Every 6 hours",
-  [ClaimFrequency.EVERY_12_HOURS]: "Every 12 hours",
-  [ClaimFrequency.DAILY]: "Once a day"
+// The dropdown's labels, as message keys (see utils/i18n.ts).
+export const ClaimFrequencyLabelKeys: Record<ClaimFrequency, MessageKey> = {
+  [ClaimFrequency.BROWSER_START]: "frequencyBrowserStart",
+  [ClaimFrequency.HOURLY]: "frequencyHourly",
+  [ClaimFrequency.EVERY_6_HOURS]: "frequencyEvery6Hours",
+  [ClaimFrequency.EVERY_12_HOURS]: "frequencyEvery12Hours",
+  [ClaimFrequency.DAILY]: "frequencyDaily"
 };
 
 export const ClaimFrequencyMinutes: Record<ClaimFrequency, number> = {
