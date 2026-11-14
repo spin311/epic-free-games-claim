@@ -1,0 +1,32 @@
+{
+  "extName": {
+    "message": "Free Game Claimer: Epic, Steam, GOG, Prime",
+    "description": "Extension name in the browser's extension list and on the store pages. At most 45 characters (addons.mozilla.org limit). Keep \"Free Game Claimer\" and the store names in English."
+  },
+  "extDescription": {
+    "message": "Automatically claim free games from Epic Games Store, Steam, GOG, IndieGala and Prime Gaming. Just stay signed in.",
+    "description": "Short description in the browser's extension list and on the store pages. At most 132 characters (Chrome Web Store limit). Keep the store names in English."
+  },
+  "extActionTitle": {
+    "message": "Free Games Claimer",
+    "description": "Tooltip on the extension's toolbar button. The product name: keep it in English."
+  },
+  "catalogLocale": {
+    "message": "en",
+    "description": "Not shown. Set it to this file's folder name (for example de or pt_BR): it picks the plural rules for counts such as \"3 games claimed\"."
+  },
+  "headerClaimedCount_one": {
+    "message": "$COUNT$ game claimed",
+    "description": "Popup header, under the extension name: how many games it has claimed so far. Form for counts your language treats as singular.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "1" }
+    }
+  },
+  "headerClaimedCount_other": {
+    "message": "$COUNT$ games claimed",
+    "description": "Popup header, under the extension name: how many games it has claimed so far. Form for all other counts.",
+    "placeholders": {
+      "count": { "content": "$1", "example": "47" }
+    }
+  }
+}
