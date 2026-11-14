@@ -16,7 +16,7 @@ afterEach(() => {
 
 describe('t', () => {
   it('returns a plain message', () => {
-    expect(t('extActionTitle')).toBe('Free Games Claimer');
+    expect(t('extActionTitle')).toBe('Free Game Claimer');
   });
 
   it('fills in a substitution', () => {

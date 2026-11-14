@@ -8,7 +8,7 @@
     "description": "Short description in the browser's extension list and on the store pages. At most 132 characters (Chrome Web Store limit). Keep the store names in English."
   },
   "extActionTitle": {
-    "message": "Free Games Claimer",
+    "message": "Free Game Claimer",
     "description": "Tooltip on the extension's toolbar button. The product name: keep it in English."
   },
   "catalogLocale": {
