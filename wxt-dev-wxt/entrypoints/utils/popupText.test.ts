@@ -1,6 +1,8 @@
 import { afterEach, describe, it, expect, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing';
-import { claimedCountLabel, gameDateLabel, platformLabel } from './popupText';
+import { claimedCountLabel, gameDateLabel, healthTooltip, pendingReasonText, platformLabel } from './popupText';
+import { HealthDetailKey, HealthError } from './health';
+import { PendingReasonKey, PendingRedemption } from './pendingRedemptions';
 import { Platforms } from '../enums/platforms';
 import { FreeGame } from '../types/freeGame';
 
@@ -76,5 +78,50 @@ describe('gameDateLabel', () => {
     expect(gameDateLabel(game({ endDate: '1970-01-01T00:00:00.000Z' }), NOW, 'en-US')).toBeNull();
     expect(gameDateLabel(game({ endDate: 'soon' }), NOW, 'en-US')).toBeNull();
     expect(gameDateLabel(game({ future: true, startDate: '1970-01-01T00:00:00.000Z' }), NOW, 'en-US')).toBeNull();
+  });
+});
+
+describe('healthTooltip', () => {
+  const AT = '2026-11-13T09:30:00.000Z';
+  const time = new Date(AT).toLocaleString('en-US');
+  const error = (overrides: Partial<HealthError>): HealthError => ({ problem: 'captcha', detail: '', at: AT, ...overrides });
+
+  it('gives a claim tab\'s explanation in the catalogue\'s words, then when', () => {
+    expect(healthTooltip(error({ detailKey: 'healthEpicCaptcha' }), 'en-US'))
+      .toBe(`Epic wants a captcha solved in its open tab to finish a claim (${time})`);
+  });
+
+  it('keeps a check\'s own diagnostic as it is', () => {
+    expect(healthTooltip(error({ problem: 'network', detail: 'Failed to fetch' }), 'en-US')).toBe(`Failed to fetch (${time})`);
+  });
+
+  it('asks for an update when the store changed', () => {
+    expect(healthTooltip(error({ problem: 'changed', detailKey: 'healthEpicGetButtonMissing' }), 'en-US'))
+      .toBe(`Couldn't find the "Get" button on a free game's page (${time}). The extension needs an update; click to report it.`);
+  });
+
+  // A key a later release renamed resolves to "": the tooltip must not
+  // become " (11/13/2026, ...)".
+  it('falls back to the warning\'s name when a stored explanation no longer resolves', () => {
+    expect(healthTooltip(error({ detailKey: 'renamedKey' as HealthDetailKey }), 'en-US')).toBe(`Needs captcha (${time})`);
+    expect(healthTooltip(error({ problem: 'unfinished' }), 'en-US')).toBe(`Claim unfinished (${time})`);
+  });
+});
+
+describe('pendingReasonText', () => {
+  const entry = (overrides: Partial<PendingRedemption>): PendingRedemption =>
+    ({ code: 'K', platform: 'Steam', title: 'T', redeemUrl: 'https://x', addedAt: '2026-11-13T09:30:00.000Z', ...overrides });
+
+  it('translates a stored reason key', () => {
+    expect(pendingReasonText(entry({ reasonKey: 'pendingReasonSteamSignedOut' }))).toBe('Sign in to Steam, then activate it');
+  });
+
+  it('shows the English reason earlier versions stored', () => {
+    expect(pendingReasonText(entry({ reason: 'Steam says the key isn\'t valid' }))).toBe('Steam says the key isn\'t valid');
+  });
+
+  it('gives nothing, not an empty line, when a stored key no longer resolves', () => {
+    expect(pendingReasonText(entry({ reasonKey: 'renamedKey' as PendingReasonKey }))).toBeUndefined();
+    expect(pendingReasonText(entry({}))).toBeUndefined();
   });
 });

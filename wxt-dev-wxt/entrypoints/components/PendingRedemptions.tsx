@@ -6,6 +6,7 @@ import {
     pendingRedemptionKey,
 } from "@/entrypoints/utils/pendingRedemptions.ts";
 import {t} from "@/entrypoints/utils/i18n.ts";
+import {pendingReasonText} from "@/entrypoints/utils/popupText.ts";
 
 // Where an entry without a code was kept, and how to get there.
 function codelessText(entry: PendingRedemption): { hint: string; link: string } {
@@ -44,7 +45,7 @@ function PendingRedemptions() {
             {pending.map((entry) => {
                 const key = pendingRedemptionKey(entry);
                 const codeless = codelessText(entry);
-                const reason = (entry.reasonKey && t(entry.reasonKey)) || entry.reason;
+                const reason = pendingReasonText(entry);
                 return (
                     <div className="pending-redemption" key={key}>
                         <div className="pending-redemption-info">
