@@ -1,8 +1,10 @@
 import { describe, it, expect } from 'vitest';
 import {
   classifySteamKeyError,
+  englishSteamActivationUrl,
   isSteamKeyDone,
   readSteamKeyResult,
+  STEAM_ACTIVATION_PAGE,
   steamActivationUrl,
 } from './steamKeyActivation';
 
@@ -10,6 +12,19 @@ describe('steamActivationUrl', () => {
   // Steam fills the key in from ?key= (confirmed live, Nov 2026).
   it('opens Steam\'s activation page with the key filled in', () => {
     expect(steamActivationUrl('AAAAA-BBBBB-CCCCC')).toBe('https://store.steampowered.com/account/registerkey?key=AAAAA-BBBBB-CCCCC');
+  });
+});
+
+describe('englishSteamActivationUrl', () => {
+  // Steam's refusal messages come from registerkey.js in the page's language
+  // (confirmed live, Nov 2026: ?l=schinese serves them in Chinese), and
+  // ?l=english overrides a Steam_Language cookie without setting one.
+  it('opens the activation page in English, whatever language the account uses', () => {
+    const url = new URL(englishSteamActivationUrl('AAAAA-BBBBB-CCCCC'));
+
+    expect(`${url.origin}${url.pathname}`).toBe(STEAM_ACTIVATION_PAGE);
+    expect(url.searchParams.get('key')).toBe('AAAAA-BBBBB-CCCCC');
+    expect(url.searchParams.get('l')).toBe('english');
   });
 });
 

@@ -68,11 +68,14 @@ export function readIndieGalaLoginState(doc: QueryRoot): LoginState {
 // Confirmed live by vogler/free-games-claimer's prime-gaming.js: the user
 // dropdown only renders once signed in; a "Sign in" button renders only when
 // signed out. Neither present yet means the page hasn't hydrated.
+// Confirmed live (Nov 2026): Luna translates the button's label but not its
+// data-a-target; the English label is only a fallback.
 export function readPrimeGamingLoginState(doc: Document): LoginState {
     if (doc.querySelector('[data-a-target="user-dropdown-first-name-text"]')) return true;
-    const hasSignIn = Array.from(doc.querySelectorAll('button')).some(
-        (btn) => (btn.textContent ?? '').trim().toLowerCase() === 'sign in'
-    );
+    const hasSignIn = doc.querySelector('[data-a-target="sign-in-button"]') !== null
+        || Array.from(doc.querySelectorAll('button')).some(
+            (btn) => (btn.textContent ?? '').trim().toLowerCase() === 'sign in'
+        );
     if (hasSignIn) return false;
     return null;
 }

@@ -26,6 +26,13 @@ describe('buildRedeemUrl', () => {
     const url = new URL(buildRedeemUrl('YRXG7D62AF07ADCE5B', 'DOOM + DOOM II'));
     expect(url.searchParams.get('extTitle')).toBe('DOOM + DOOM II');
   });
+
+  // Confirmed live (Nov 2026): a bare /redeem follows the gog_lc cookie
+  // (fr-FR, zh-Hans, pt-BR, ...); /en/redeem is English whatever it says.
+  it('opens the English redeem page, whatever language the account uses', () => {
+    const url = new URL(buildRedeemUrl('YRXG7D62AF07ADCE5B'));
+    expect(`${url.origin}${url.pathname}`).toBe('https://www.gog.com/en/redeem');
+  });
 });
 
 describe('extractRedeemCodeParam', () => {

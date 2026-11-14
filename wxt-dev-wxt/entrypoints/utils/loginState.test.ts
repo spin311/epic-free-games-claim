@@ -98,6 +98,13 @@ describe('readPrimeGamingLoginState', () => {
     expect(readPrimeGamingLoginState(doc)).toBe(false);
   });
 
+  // Confirmed live (Nov 2026): Luna translates the label ("Se connecter",
+  // "Fazer login", ...) but keeps this attribute in every language.
+  it('is false when Luna\'s sign-in button is present, whatever its language', () => {
+    const doc = docFrom('<button data-a-target="sign-in-button"><p>Se connecter</p></button>');
+    expect(readPrimeGamingLoginState(doc)).toBe(false);
+  });
+
   it('is null when neither signal has rendered yet', () => {
     const doc = docFrom('<div>loading…</div>');
     expect(readPrimeGamingLoginState(doc)).toBeNull();

@@ -1353,7 +1353,7 @@ describe('a Steam key won on IndieGala\'s wheel', () => {
     }, { url: giftUrl('new'), tab: { id: 7 } });
 
     expect(opened).toEqual([{
-      url: 'https://store.steampowered.com/account/registerkey?key=AAAAA-BBBBB-CCCCC',
+      url: 'https://store.steampowered.com/account/registerkey?key=AAAAA-BBBBB-CCCCC&l=english',
       action: 'activateSteamKey',
       data: { title: 'Some Game' },
     }]);
@@ -1400,6 +1400,10 @@ describe('a Steam key won on IndieGala\'s wheel', () => {
 
     await runner.handleMessage({ target: 'background', action: 'steamRegisterKey' }, { url: 'https://store.steampowered.com/account/registerkey?key=K', tab: { id: 7 } });
     expect(executeScript).toHaveBeenCalledTimes(1);
+
+    // The page the extension opens itself is pinned to English.
+    await runner.handleMessage({ target: 'background', action: 'steamRegisterKey' }, { url: 'https://store.steampowered.com/account/registerkey?key=K&l=english', tab: { id: 7 } });
+    expect(executeScript).toHaveBeenCalledTimes(2);
     executeScript.mockRestore();
   });
 

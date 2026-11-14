@@ -185,7 +185,10 @@ export function isOfferDetailsPage(pathname: string): boolean {
 // A signed-in non-Prime account is a valid, expected state — not a failure — so
 // callers must check this before treating an empty offer list as "nothing to
 // claim right now" versus "can't claim anything, ever, on this account."
+// Confirmed live (Nov 2026): the "Try Prime" label is translated, its
+// data-a-target isn't; the English label is only a fallback.
 export function hasPrimeMembership(doc: Document): boolean {
+  if (doc.querySelector('[data-a-target="try-prime-button"]')) return false;
   return !Array.from(doc.querySelectorAll('button')).some(
       (btn) => (btn.textContent ?? '').trim().toLowerCase() === 'try prime'
   );
@@ -193,12 +196,32 @@ export function hasPrimeMembership(doc: Document): boolean {
 
 export type ClaimOutcome = "claimed" | "already-claimed" | "failed";
 
+// Luna's "Collected" in every language it offers, from its own string
+// bundles (core.locales.<lang>.js, key smc-item-card-claim-status-collected;
+// read live, Nov 2026). The card carries no other sign of it, and no URL
+// parameter pins Luna to English. It has no Chinese or Vietnamese locale.
+const COLLECTED_LABELS: ReadonlySet<string> = new Set([
+  'collected', // en-US, en-GB
+  'eingesammelt', // de-DE
+  'obtenido', // es-ES, es-MX
+  'récupéré', // fr-FR
+  'raccolto', // it-IT
+  'geclaimd', // nl-NL
+  'zebrane', // pl-PL
+  'coletado', // pt-BR
+  'recolhido', // pt-PT
+  'hämtat', // sv-SE
+  'toplandı', // tr-TR
+  'تم الحصول عليها', // ar-AE
+  '入手済み', // ja-JP
+]);
+
 // Confirmed by vogler/free-games-claimer's prime-gaming.js (internal cards)
 // and live (external cards): a collected offer shows a <p> reading
-// "Collected".
+// "Collected", in the account's Luna language.
 export function isCollectedOfferCard(card: Element): boolean {
   return Array.from(card.querySelectorAll('p')).some(
-      (p) => (p.textContent ?? '').trim().toLowerCase() === 'collected'
+      (p) => COLLECTED_LABELS.has((p.textContent ?? '').trim().toLowerCase())
   );
 }
 
