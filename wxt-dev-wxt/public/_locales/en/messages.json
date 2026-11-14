@@ -169,6 +169,18 @@
       "time": { "content": "$2", "example": "11/14/2026, 9:30:00 AM" }
     }
   },
+  "healthEpicGetButtonMissing": {
+    "message": "Couldn't find the \"Get\" button on a free game's page",
+    "description": "Tooltip on Epic's \"Store changed\" warning: what went wrong. \"Get\" is the label of Epic's own button; use the label Epic's store shows in your language."
+  },
+  "healthEpicCheckoutUnfinished": {
+    "message": "Epic's checkout didn't finish; it's retried tomorrow",
+    "description": "Tooltip on Epic's \"Claim unfinished\" warning: what went wrong."
+  },
+  "healthEpicCaptcha": {
+    "message": "Epic wants a captcha solved in its open tab to finish a claim",
+    "description": "Tooltip on Epic's \"Needs captcha\" warning: what the user has to do."
+  },
   "steamMinRatingLabel": {
     "message": "Min. rating",
     "description": "Settings, under Steam: label before the dropdown for the lowest review score a free Steam game needs to be claimed."
@@ -360,6 +372,58 @@
   "pendingDismiss": {
     "message": "Dismiss",
     "description": "Screen-reader name of the × button that removes an entry from the list."
+  },
+  "pendingReasonSteamInvalid": {
+    "message": "Steam says the key isn't valid",
+    "description": "In the Needs manual redeem list, under a Steam key: why Steam didn't activate it."
+  },
+  "pendingReasonSteamUsed": {
+    "message": "Steam says another account already used this key",
+    "description": "In the Needs manual redeem list, under a Steam key: why Steam didn't activate it."
+  },
+  "pendingReasonSteamRateLimited": {
+    "message": "Steam wants a break after too many activations; try again later",
+    "description": "In the Needs manual redeem list, under a Steam key: why Steam didn't activate it."
+  },
+  "pendingReasonSteamRegion": {
+    "message": "Steam says this game isn't sold in your country",
+    "description": "In the Needs manual redeem list, under a Steam key: why Steam didn't activate it."
+  },
+  "pendingReasonSteamNeedsBaseGame": {
+    "message": "Steam says this needs another game first",
+    "description": "In the Needs manual redeem list, under a Steam key: Steam wants the base game on the account first (the key is for a DLC)."
+  },
+  "pendingReasonSteamSignedOut": {
+    "message": "Sign in to Steam, then activate it",
+    "description": "In the Needs manual redeem list, under a Steam key: the user wasn't signed in to Steam. Next to it is an Activate link."
+  },
+  "pendingReasonSteamFailed": {
+    "message": "Steam didn't activate it",
+    "description": "In the Needs manual redeem list, under a Steam key: Steam refused for another reason, or didn't answer."
+  },
+  "pendingReasonSteamUnfinished": {
+    "message": "Activation on Steam didn't finish",
+    "description": "In the Needs manual redeem list, under a Steam key: the Steam page that activates it closed before it reported back."
+  },
+  "pendingReasonGiftNotShown": {
+    "message": "Won on the wheel; its gift didn't show up in G. Giveaway yet",
+    "description": "In the Needs manual redeem list: a Steam key won on IndieGala's wheel isn't in the user's IndieGala library yet. \"G. Giveaway\" is the name of a tab in that library: keep it as IndieGala shows it."
+  },
+  "pendingReasonGiftPageNotOpened": {
+    "message": "The gift page didn't open",
+    "description": "In the Needs manual redeem list: the IndieGala page with a won key didn't open."
+  },
+  "pendingReasonGiftNoKey": {
+    "message": "The gift page showed no key",
+    "description": "In the Needs manual redeem list: the IndieGala page with a won prize showed no key."
+  },
+  "pendingReasonNotSteamKey": {
+    "message": "Not a Steam key; redeem it where IndieGala says",
+    "description": "In the Needs manual redeem list, under a key won on IndieGala that is for another store."
+  },
+  "pendingReasonKeyNotShown": {
+    "message": "IndieGala didn't show the key",
+    "description": "In the Needs manual redeem list: IndieGala's page didn't show a won key."
   },
   "pendingIndieGalaKeyNotRead": {
     "message": "Key wasn't read; it's on IndieGala.",

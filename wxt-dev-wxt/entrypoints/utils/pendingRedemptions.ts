@@ -1,4 +1,5 @@
 import { getStorageItem, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
+import type { MessageKey } from "@/entrypoints/utils/i18n.ts";
 
 // "Steam" is a key for Steam's activation page; "IndieGala" an entry whose
 // key couldn't be read, kept as the IndieGala page it's on.
@@ -10,7 +11,10 @@ export interface PendingRedemption {
     title: string;
     redeemUrl: string;
     addedAt: string;
-    // Why it wasn't redeemed, when known.
+    // Why it wasn't redeemed, when known, as a message key: the popup
+    // translates it when it shows the list.
+    reasonKey?: MessageKey;
+    // The same in English, as versions before reasonKey stored it; shown as is.
     reason?: string;
 }
 

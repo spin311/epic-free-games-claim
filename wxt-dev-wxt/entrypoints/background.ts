@@ -97,7 +97,7 @@ import {
   SignedOutError,
   StoreChangedError,
 } from "@/entrypoints/utils/network.ts";
-import {classifyFailure, HealthProblem, recordHealthError, recordHealthOk} from "@/entrypoints/utils/health.ts";
+import {classifyFailure, HealthProblem, parseHealthDetailKey, recordHealthError, recordHealthOk} from "@/entrypoints/utils/health.ts";
 import {t} from "@/entrypoints/utils/i18n.ts";
 
 const ALARM_NAME = "checkFreeGames";
@@ -602,7 +602,8 @@ export const background = {
         await recordHealthOk(platform, new Date(), "claim");
         return;
       }
-      await recordHealthError(platform, problem, String(request.data?.detail ?? ""), new Date(), "claim");
+      const detailKey = parseHealthDetailKey(request.data?.detailKey);
+      await recordHealthError(platform, problem, detailKey ? { key: detailKey } : "", new Date(), "claim");
       // Over a claimed count, if one is showing: a claim that needs the user
       // matters more than how many tabs opened.
       await this.showProblemBadge();

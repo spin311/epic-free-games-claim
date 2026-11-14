@@ -7,6 +7,7 @@ import { NetworkError, SignedOutError, StoreChangedError } from './network';
 import {
   activeProblem,
   classifyFailure,
+  parseHealthDetailKey,
   HEALTH_KEYS,
   healthKey,
   PlatformHealth,
@@ -90,5 +91,33 @@ describe('claim-stage health', () => {
     await recordHealthOk(Platforms.Epic, new Date('2026-10-29T11:00:00Z'));
 
     expect(activeProblem(await getStorageItem<PlatformHealth>(healthKey(Platforms.Epic, 'claim')))?.detail).toBe('no Get button');
+  });
+});
+
+// A claim tab's explanation is stored as a message key and translated when
+// the popup shows it, not in whatever language the tab ran in.
+describe('a claim tab\'s explanation', () => {
+  beforeEach(() => {
+    fakeBrowser.reset();
+  });
+
+  it('is stored as its message key', async () => {
+    await recordHealthError(Platforms.Epic, 'captcha', { key: 'healthEpicCaptcha' }, new Date('2026-10-29T10:00:00Z'), 'claim');
+
+    expect(activeProblem(await getStorageItem<PlatformHealth>(healthKey(Platforms.Epic, 'claim'))))
+        .toEqual({ problem: 'captcha', detail: '', detailKey: 'healthEpicCaptcha', at: '2026-10-29T10:00:00.000Z' });
+  });
+});
+
+describe('parseHealthDetailKey', () => {
+  it('accepts a key a claim tab may send', () => {
+    expect(parseHealthDetailKey('healthEpicGetButtonMissing')).toBe('healthEpicGetButtonMissing');
+  });
+
+  it('drops anything else, other message keys included', () => {
+    expect(parseHealthDetailKey('extName')).toBeUndefined();
+    expect(parseHealthDetailKey('No "Get" button')).toBeUndefined();
+    expect(parseHealthDetailKey(3)).toBeUndefined();
+    expect(parseHealthDetailKey(undefined)).toBeUndefined();
   });
 });

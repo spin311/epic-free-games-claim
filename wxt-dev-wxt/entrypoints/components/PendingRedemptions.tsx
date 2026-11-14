@@ -44,6 +44,7 @@ function PendingRedemptions() {
             {pending.map((entry) => {
                 const key = pendingRedemptionKey(entry);
                 const codeless = codelessText(entry);
+                const reason = (entry.reasonKey && t(entry.reasonKey)) || entry.reason;
                 return (
                     <div className="pending-redemption" key={key}>
                         <div className="pending-redemption-info">
@@ -54,7 +55,7 @@ function PendingRedemptions() {
                             {entry.code
                                 ? <code className="pending-redemption-code">{entry.code}</code>
                                 : <p className="hint">{codeless.hint}</p>}
-                            {entry.reason && <p className="hint">{entry.reason}</p>}
+                            {reason && <p className="hint">{reason}</p>}
                         </div>
                         <div className="pending-redemption-actions">
                             {entry.code && (

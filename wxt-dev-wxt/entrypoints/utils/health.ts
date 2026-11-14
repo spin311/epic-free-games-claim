@@ -1,6 +1,7 @@
 import { Platforms } from "@/entrypoints/enums/platforms.ts";
 import { getStorageItem, setStorageItem } from "@/entrypoints/hooks/useStorage.ts";
 import { NetworkError, SignedOutError } from "@/entrypoints/utils/network.ts";
+import type { MessageKey } from "@/entrypoints/utils/i18n.ts";
 
 // What went wrong on a store's last check, as the popup shows it:
 // - "network": the store couldn't be reached, even after retries
@@ -16,11 +17,33 @@ export type HealthProblem = "network" | "changed" | "captcha" | "unfinished";
 // a claim tab's report, and vice versa.
 export type HealthStage = "check" | "claim";
 
+// What a claim tab can give as its explanation, as message keys: the popup
+// translates one when it shows it, so nothing is stored in whatever language
+// the tab happened to run in.
+export const HEALTH_DETAIL_KEYS = [
+    "healthEpicGetButtonMissing",
+    "healthEpicCheckoutUnfinished",
+    "healthEpicCaptcha",
+] as const satisfies readonly MessageKey[];
+
+export type HealthDetailKey = (typeof HEALTH_DETAIL_KEYS)[number];
+
+// Checked where a claim tab's message comes in; anything else is dropped.
+export function parseHealthDetailKey(value: unknown): HealthDetailKey | undefined {
+    return HEALTH_DETAIL_KEYS.find((key) => key === value);
+}
+
 export interface HealthError {
     problem: HealthProblem;
+    // A diagnostic (an error's message, in English); empty when detailKey
+    // gives the explanation instead.
     detail: string;
+    detailKey?: HealthDetailKey;
     at: string;
 }
+
+// A diagnostic, or an explanation the popup translates.
+export type HealthDetail = string | { key: HealthDetailKey };
 
 // Both kept, so a later success clears the warning by being newer, without
 // losing what the last failure was.
@@ -82,10 +105,12 @@ export async function recordHealthOk(
 export async function recordHealthError(
     platform: Platforms,
     problem: HealthProblem,
-    detail: string,
+    detail: HealthDetail,
     now: Date = new Date(),
     stage: HealthStage = "check"
 ): Promise<void> {
     const key = healthKey(platform, stage);
-    await setStorageItem(key, { ...(await readHealth(key)), lastError: { problem, detail, at: now.toISOString() } });
+    const described = typeof detail === "string" ? { detail } : { detail: "", detailKey: detail.key };
+    const lastError: HealthError = { problem, ...described, at: now.toISOString() };
+    await setStorageItem(key, { ...(await readHealth(key)), lastError });
 }

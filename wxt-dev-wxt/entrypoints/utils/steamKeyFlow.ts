@@ -9,11 +9,12 @@ import {
 } from "@/entrypoints/utils/indieGalaGifts.ts";
 import { addPendingRedemption, removePendingRedemption } from "@/entrypoints/utils/pendingRedemptions.ts";
 import {
-  describeSteamKeyOutcome,
   isSteamKeyDone,
+  pendingReasonKey,
   SteamKeyOutcome,
   steamActivationUrl,
 } from "@/entrypoints/utils/steamKeyActivation.ts";
+import type { MessageKey } from "@/entrypoints/utils/i18n.ts";
 
 // State for taking a Steam key won on IndieGala's wheel to Steam: which
 // G. Giveaway gifts were already there (so only a new one is opened), and
@@ -100,21 +101,21 @@ export async function recordSteamKeyResult(report: SteamKeyReport): Promise<"don
     title,
     redeemUrl: steamActivationUrl(report.key),
     addedAt: new Date().toISOString(),
-    reason: describeSteamKeyOutcome(report.outcome),
+    reasonKey: pendingReasonKey(report.outcome),
   });
   return "pending";
 }
 
 // Not taken to Steam: the entry keeps the IndieGala page the key is on, and
 // the key itself when there is one (e.g. a key for another store).
-export async function recordUnreadGiftKey(title: string, pageUrl: string, reason: string, code: string = ""): Promise<void> {
+export async function recordUnreadGiftKey(title: string, pageUrl: string, reasonKey: MessageKey, code: string = ""): Promise<void> {
   await addPendingRedemption({
     code,
     platform: "IndieGala",
     title,
     redeemUrl: pageUrl,
     addedAt: new Date().toISOString(),
-    reason,
+    reasonKey,
   });
 }
 
@@ -165,7 +166,7 @@ export async function collectWonSteamKeys(prizeLabel: string, deps: KeyFlowDeps)
     }
     if (!isSteamKeyPrize(prizeLabel)) return "none";
   }
-  await recordUnreadGiftKey(WHEEL_KEY_TITLE, INDIEGALA_LIBRARY_URL, "Won on the wheel; its gift didn't show up in G. Giveaway yet");
+  await recordUnreadGiftKey(WHEEL_KEY_TITLE, INDIEGALA_LIBRARY_URL, "pendingReasonGiftNotShown");
   return "pending";
 }
 
@@ -174,7 +175,7 @@ async function openGift(gift: IndieGalaGift, deps: KeyFlowDeps): Promise<void> {
     await deps.openTab(gift.url, "revealGiftKey", { password: gift.password });
   } catch (error: unknown) {
     console.error("[steamKey] couldn't open the gift page:", error);
-    await recordUnreadGiftKey(WHEEL_KEY_TITLE, gift.url, "The gift page didn't open");
+    await recordUnreadGiftKey(WHEEL_KEY_TITLE, gift.url, "pendingReasonGiftPageNotOpened");
   }
 }
 
@@ -183,15 +184,15 @@ async function openGift(gift: IndieGalaGift, deps: KeyFlowDeps): Promise<void> {
 // True when something was kept for the user.
 export async function handleGiftKeys(giftUrl: string, keys: GiftKey[], deps: KeyFlowDeps): Promise<boolean> {
   if (keys.length === 0) {
-    await recordUnreadGiftKey(WHEEL_KEY_TITLE, giftUrl, "The gift page showed no key");
+    await recordUnreadGiftKey(WHEEL_KEY_TITLE, giftUrl, "pendingReasonGiftNoKey");
     return true;
   }
   let isAnyKept = false;
   for (const giftKey of keys) {
     const title = giftKey.title || WHEEL_KEY_TITLE;
     if (!giftKey.key || !giftKey.isSteam) {
-      const reason = giftKey.key ? "Not a Steam key; redeem it where IndieGala says" : "IndieGala didn't show the key";
-      await recordUnreadGiftKey(title, giftUrl, reason, giftKey.key ?? "");
+      const reasonKey = giftKey.key ? "pendingReasonNotSteamKey" : "pendingReasonKeyNotShown";
+      await recordUnreadGiftKey(title, giftUrl, reasonKey, giftKey.key ?? "");
       isAnyKept = true;
       continue;
     }
@@ -204,7 +205,7 @@ export async function handleGiftKeys(giftUrl: string, keys: GiftKey[], deps: Key
       title,
       redeemUrl: steamActivationUrl(giftKey.key),
       addedAt: new Date().toISOString(),
-      reason: "Activation on Steam didn't finish",
+      reasonKey: "pendingReasonSteamUnfinished",
     });
     try {
       await deps.openTab(steamActivationUrl(giftKey.key), "activateSteamKey", { title });

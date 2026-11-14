@@ -2187,15 +2187,31 @@ describe('store health', () => {
     await runner.handleMessage({
       target: 'background',
       action: 'reportHealth',
-      data: { platform: Platforms.Epic, problem: 'changed', detail: 'No "Get" button' },
+      data: { platform: Platforms.Epic, problem: 'changed', detailKey: 'healthEpicGetButtonMissing' },
     });
 
     const claimProblem = async () => activeProblem(await getStorageItem<PlatformHealth>(healthKey(Platforms.Epic, 'claim')));
-    expect((await claimProblem())?.detail).toBe('No "Get" button');
+    expect((await claimProblem())?.detailKey).toBe('healthEpicGetButtonMissing');
     expect(badges).toEqual(['!']);
 
     await runner.handleMessage({ target: 'background', action: 'reportHealth', data: { platform: Platforms.Epic } });
     expect(await claimProblem()).toBeNull();
+  });
+
+  // Checked at the message boundary: the popup would show whatever key it got.
+  it('keeps a claim tab\'s report but drops an explanation it doesn\'t know', async () => {
+    const runner = Object.create(background);
+    runner.setBadgeText = async () => {};
+
+    await runner.handleMessage({
+      target: 'background',
+      action: 'reportHealth',
+      data: { platform: Platforms.Epic, problem: 'captcha', detailKey: 'extName' },
+    });
+
+    const problem = activeProblem(await getStorageItem<PlatformHealth>(healthKey(Platforms.Epic, 'claim')));
+    expect(problem).toMatchObject({ problem: 'captcha', detail: '' });
+    expect(problem?.detailKey).toBeUndefined();
   });
 
   // Regression: a signed-out answer proves GOG is reachable, but used to leave

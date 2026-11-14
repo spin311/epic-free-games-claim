@@ -5,7 +5,7 @@ import {Platforms} from "@/entrypoints/enums/platforms.ts";
 import {closeCurrentTab, onClaimMessage} from "@/entrypoints/utils/contentMessaging.ts";
 import {detectAndRecordLoginState} from "@/entrypoints/utils/loginState.ts";
 import {EPIC_CLAIMED_KEY, epicProductKey} from "@/entrypoints/utils/epicGames.ts";
-import {HealthProblem} from "@/entrypoints/utils/health.ts";
+import {HealthDetailKey, HealthProblem} from "@/entrypoints/utils/health.ts";
 import {
     getRndInteger,
     wait,
@@ -64,7 +64,7 @@ export default defineContentScript({
                 // Not marked claimed, so the background retries it tomorrow.
                 console.warn('[claimer] No "Get" button on this page; it may have changed');
                 logClaimDiagnostics();
-                await reportHealth('changed', 'Couldn\'t find the "Get" button on a free game\'s page');
+                await reportHealth('changed', 'healthEpicGetButtonMissing');
                 await closeCurrentTab();
                 return;
             }
@@ -91,7 +91,7 @@ export default defineContentScript({
             } else {
                 console.warn('[claimer] Could not complete claim within timeout');
                 logClaimDiagnostics();
-                await reportHealth('unfinished', 'Epic\'s checkout didn\'t finish; it\'s retried tomorrow');
+                await reportHealth('unfinished', 'healthEpicCheckoutUnfinished');
             }
             await closeCurrentTab();
         }
@@ -110,13 +110,14 @@ export default defineContentScript({
         }
 
         // For the popup's health status (see health.ts); no problem means the
-        // claim worked. Never throws: the tab must still close after it.
-        async function reportHealth(problem?: HealthProblem, detail?: string) {
+        // claim worked. The explanation goes as a message key, translated when
+        // the popup shows it. Never throws: the tab must still close after it.
+        async function reportHealth(problem?: HealthProblem, detailKey?: HealthDetailKey) {
             try {
                 await browser.runtime.sendMessage({
                     target: 'background',
                     action: 'reportHealth',
-                    data: { platform: Platforms.Epic, problem, detail },
+                    data: { platform: Platforms.Epic, problem, detailKey },
                 });
             } catch (error: unknown) {
                 console.error('[claimer] Could not report the claim outcome:', error);
@@ -173,7 +174,7 @@ export default defineContentScript({
         // the popup. Never throws: the claim carries on either way.
         async function announceCaptcha() {
             console.warn('[claimer] Epic wants a captcha solved; waiting for the user');
-            await reportHealth('captcha', 'Epic wants a captcha solved in its open tab to finish a claim');
+            await reportHealth('captcha', 'healthEpicCaptcha');
             try {
                 await browser.runtime.sendMessage({ target: 'background', action: 'bringTabToFront' });
             } catch (error: unknown) {

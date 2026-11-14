@@ -26,7 +26,9 @@ function HealthStatus({ platform }: HealthStatusProps) {
     const problem = newer(activeProblem(check), activeProblem(claim));
     if (!problem) return null;
 
-    const tooltipParts = [problem.detail, new Date(problem.at).toLocaleString(uiLocale())];
+    // An explanation a claim tab gave is a key; a check's own error stays as it was.
+    const detail = (problem.detailKey && t(problem.detailKey)) || problem.detail;
+    const tooltipParts = [detail, new Date(problem.at).toLocaleString(uiLocale())];
     if (problem.problem === "changed") {
         return (
             <a className="health-status" href={ISSUES_URL} target="_blank" rel="noopener noreferrer"
