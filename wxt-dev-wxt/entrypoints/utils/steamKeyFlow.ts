@@ -7,14 +7,13 @@ import {
   IndieGalaGift,
   isSteamKeyPrize,
 } from "@/entrypoints/utils/indieGalaGifts.ts";
-import { addPendingRedemption, removePendingRedemption } from "@/entrypoints/utils/pendingRedemptions.ts";
+import { addPendingRedemption, PendingReasonKey, removePendingRedemption } from "@/entrypoints/utils/pendingRedemptions.ts";
 import {
   isSteamKeyDone,
   pendingReasonKey,
   SteamKeyOutcome,
   steamActivationUrl,
 } from "@/entrypoints/utils/steamKeyActivation.ts";
-import type { MessageKey } from "@/entrypoints/utils/i18n.ts";
 
 // State for taking a Steam key won on IndieGala's wheel to Steam: which
 // G. Giveaway gifts were already there (so only a new one is opened), and
@@ -108,7 +107,7 @@ export async function recordSteamKeyResult(report: SteamKeyReport): Promise<"don
 
 // Not taken to Steam: the entry keeps the IndieGala page the key is on, and
 // the key itself when there is one (e.g. a key for another store).
-export async function recordUnreadGiftKey(title: string, pageUrl: string, reasonKey: MessageKey, code: string = ""): Promise<void> {
+export async function recordUnreadGiftKey(title: string, pageUrl: string, reasonKey: PendingReasonKey, code: string = ""): Promise<void> {
   await addPendingRedemption({
     code,
     platform: "IndieGala",

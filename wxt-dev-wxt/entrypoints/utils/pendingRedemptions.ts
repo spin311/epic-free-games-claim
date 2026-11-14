@@ -5,6 +5,27 @@ import type { MessageKey } from "@/entrypoints/utils/i18n.ts";
 // key couldn't be read, kept as the IndieGala page it's on.
 export type RedeemPlatform = "GOG" | "Windows" | "Legacy" | "Steam" | "IndieGala";
 
+// Every reason that can be stored with a pending redemption, as message keys.
+// Entries outlive releases, so a key here must not be renamed: see
+// entrypoints/tests/storedMessageKeys.test.ts.
+export const PENDING_REASON_KEYS = [
+    "pendingReasonSteamInvalid",
+    "pendingReasonSteamUsed",
+    "pendingReasonSteamRateLimited",
+    "pendingReasonSteamRegion",
+    "pendingReasonSteamNeedsBaseGame",
+    "pendingReasonSteamSignedOut",
+    "pendingReasonSteamFailed",
+    "pendingReasonSteamUnfinished",
+    "pendingReasonGiftNotShown",
+    "pendingReasonGiftPageNotOpened",
+    "pendingReasonGiftNoKey",
+    "pendingReasonNotSteamKey",
+    "pendingReasonKeyNotShown",
+] as const satisfies readonly MessageKey[];
+
+export type PendingReasonKey = (typeof PENDING_REASON_KEYS)[number];
+
 export interface PendingRedemption {
     code: string;
     platform: RedeemPlatform;
@@ -13,7 +34,7 @@ export interface PendingRedemption {
     addedAt: string;
     // Why it wasn't redeemed, when known, as a message key: the popup
     // translates it when it shows the list.
-    reasonKey?: MessageKey;
+    reasonKey?: PendingReasonKey;
     // The same in English, as versions before reasonKey stored it; shown as is.
     reason?: string;
 }

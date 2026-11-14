@@ -4,7 +4,7 @@
 // #receipt_form; a refusal shows a message in #error_display, one per
 // purchase result code (texts from Steam's registerkey.js).
 
-import type { MessageKey } from "@/entrypoints/utils/i18n.ts";
+import type { PendingReasonKey } from "@/entrypoints/utils/pendingRedemptions.ts";
 
 export const STEAM_ACTIVATION_PAGE = "https://store.steampowered.com/account/registerkey";
 
@@ -71,7 +71,7 @@ export function isSteamKeyDone(outcome: SteamKeyOutcome): outcome is DoneSteamKe
 
 // Why a key is still pending, as a message key: the popup translates it
 // when it shows the pending list.
-const PENDING_REASON_KEYS: Record<PendingSteamKeyOutcome, MessageKey> = {
+const OUTCOME_REASON_KEYS: Record<PendingSteamKeyOutcome, PendingReasonKey> = {
   invalid: "pendingReasonSteamInvalid",
   used: "pendingReasonSteamUsed",
   "rate-limited": "pendingReasonSteamRateLimited",
@@ -81,8 +81,8 @@ const PENDING_REASON_KEYS: Record<PendingSteamKeyOutcome, MessageKey> = {
   failed: "pendingReasonSteamFailed",
 };
 
-export function pendingReasonKey(outcome: PendingSteamKeyOutcome): MessageKey {
-  return PENDING_REASON_KEYS[outcome];
+export function pendingReasonKey(outcome: PendingSteamKeyOutcome): PendingReasonKey {
+  return OUTCOME_REASON_KEYS[outcome];
 }
 
 // Runs in the page's MAIN world via scripting.executeScript (Steam's button

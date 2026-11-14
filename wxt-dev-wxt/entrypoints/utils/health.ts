@@ -19,7 +19,8 @@ export type HealthStage = "check" | "claim";
 
 // What a claim tab can give as its explanation, as message keys: the popup
 // translates one when it shows it, so nothing is stored in whatever language
-// the tab happened to run in.
+// the tab happened to run in. Stored, so a key here must not be renamed: see
+// entrypoints/tests/storedMessageKeys.test.ts.
 export const HEALTH_DETAIL_KEYS = [
     "healthEpicGetButtonMissing",
     "healthEpicCheckoutUnfinished",
