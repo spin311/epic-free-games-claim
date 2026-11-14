@@ -7,6 +7,7 @@ import {
   shouldClaimSteamGame,
   STEAM_REVIEW_TIERS,
   findTierLabelForThreshold,
+  isCustomThreshold,
   parsePagePositivePercent,
   resolvePositivePercent,
 } from './steamReviews';
@@ -104,6 +105,19 @@ describe('findTierLabelForThreshold', () => {
 
   it('is blank when no threshold is set', () => {
     expect(findTierLabelForThreshold(null)).toBe('');
+  });
+});
+
+// Decided by the number, never by the (translated) label text.
+describe('isCustomThreshold', () => {
+  it('is false for every preset and for no threshold', () => {
+    for (const tier of STEAM_REVIEW_TIERS) expect(isCustomThreshold(tier.threshold)).toBe(false);
+    expect(isCustomThreshold(null)).toBe(false);
+  });
+
+  it('is true for a number no preset uses', () => {
+    expect(isCustomThreshold(73)).toBe(true);
+    expect(isCustomThreshold(0)).toBe(true);
   });
 });
 

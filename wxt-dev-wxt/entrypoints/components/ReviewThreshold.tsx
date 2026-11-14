@@ -1,5 +1,5 @@
 import { ChangeEvent } from "react";
-import { STEAM_REVIEW_TIERS, findTierLabelForThreshold } from "@/entrypoints/utils/steamReviews.ts";
+import { STEAM_REVIEW_TIERS, findTierLabelForThreshold, isCustomThreshold } from "@/entrypoints/utils/steamReviews.ts";
 import { t } from "@/entrypoints/utils/i18n.ts";
 
 // Sentinel for a stored number that matches no Steam tier (set by the number
@@ -13,7 +13,7 @@ interface ReviewThresholdProps {
 }
 
 function ReviewThreshold({ value, onChange }: ReviewThresholdProps) {
-    const isCustom = value !== null && findTierLabelForThreshold(value) === '';
+    const isCustom = isCustomThreshold(value);
 
     function handleTierChange(e: ChangeEvent<HTMLSelectElement>) {
         // The blank "Any" option clears the gate; every other value is a number.
@@ -33,7 +33,7 @@ function ReviewThreshold({ value, onChange }: ReviewThresholdProps) {
                 <option value="">{t("steamMinRatingAny")}</option>
                 {STEAM_REVIEW_TIERS.map(tier => (
                     <option key={tier.threshold} value={tier.threshold}>
-                        {t("steamMinRatingOption", [String(tier.threshold), t(tier.labelKey)])}
+                        {t("steamMinRatingOption", [String(tier.threshold), findTierLabelForThreshold(tier.threshold)])}
                     </option>
                 ))}
                 {isCustom && (

@@ -55,6 +55,12 @@ export function findTierLabelForThreshold(threshold: number | null): string {
     return tier ? t(tier.labelKey) : '';
 }
 
+// A stored number no preset uses (the number field older versions had set
+// it), which the dropdown shows as "Custom" rather than silently as "Any".
+export function isCustomThreshold(threshold: number | null): boolean {
+    return threshold !== null && !STEAM_REVIEW_TIERS.some((tier) => tier.threshold === threshold);
+}
+
 export function parseSteamAppId(url: string): number | null {
     const match = /\/app\/(\d+)/.exec(url);
     return match ? Number(match[1]) : null;
