@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { fakeBrowser } from 'wxt/testing';
-import { formatLocale, SLOT, splitAtSlot, t, tPlural } from './i18n';
+import { applyDocumentLanguage, formatLocale, SLOT, splitAtSlot, t, tPlural } from './i18n';
 
 // The English catalog comes from the shared test setup (entrypoints/tests/setup.ts).
 const englishGetMessage = fakeBrowser.i18n.getMessage;
@@ -89,5 +89,30 @@ describe('splitAtSlot', () => {
 
   it('puts the element last when a translation leaves its placeholder out', () => {
     expect(splitAtSlot('No placeholder here')).toEqual(['No placeholder here', '']);
+  });
+});
+
+// Screen readers pick their voice, and browsers their CJK glyphs, from <html lang>.
+describe('applyDocumentLanguage', () => {
+  afterEach(() => {
+    document.documentElement.lang = 'en';
+  });
+
+  it("sets the page's language to the served catalogue's, as a BCP 47 tag", () => {
+    useCatalogLocale('zh_CN');
+    applyDocumentLanguage(document);
+    expect(document.documentElement.lang).toBe('zh-CN');
+  });
+
+  it('keeps a numeric region', () => {
+    useCatalogLocale('es_419');
+    applyDocumentLanguage(document);
+    expect(document.documentElement.lang).toBe('es-419');
+  });
+
+  it('follows the catalogue, not the browser, when the language has no translation', () => {
+    vi.spyOn(fakeBrowser.i18n, 'getUILanguage').mockReturnValue('de');
+    applyDocumentLanguage(document);
+    expect(document.documentElement.lang).toBe('en');
   });
 });

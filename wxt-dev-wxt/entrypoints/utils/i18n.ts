@@ -13,10 +13,17 @@ export function t(key: MessageKey, substitutions?: string | string[]): string {
     return browser.i18n.getMessage(key, substitutions);
 }
 
-// The catalog the browser actually serves, as a BCP 47 tag (pt_BR -> pt-BR).
-// Not the UI language: with no translation for it, the text is English.
+// The catalog the browser actually serves, as a BCP 47 tag (pt_BR -> pt-BR,
+// es_419 -> es-419). Not the UI language: with no translation for it, the
+// text is English.
 function catalogLocale(): string {
-    return t("catalogLocale").replace("_", "-");
+    return t("catalogLocale").replace(/_/g, "-");
+}
+
+// <html lang> for the popup: screen readers pick their voice, and browsers
+// their CJK glyphs, from it, so it names the language the text is in.
+export function applyDocumentLanguage(doc: Document): void {
+    doc.documentElement.lang = catalogLocale();
 }
 
 const languageOf = (tag: string): string => tag.split(/[-_]/)[0].toLowerCase();
