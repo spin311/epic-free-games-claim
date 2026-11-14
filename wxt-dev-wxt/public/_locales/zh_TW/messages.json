@@ -1,0 +1,478 @@
+{
+  "extName": {
+    "message": "Free Game Claimer：自動領取 Epic、Steam、GOG 免費遊戲"
+  },
+  "extDescription": {
+    "message": "自動領取 Epic Games Store、Steam、GOG、IndieGala 和 Prime Gaming 的免費遊戲。保持登入即可。"
+  },
+  "extActionTitle": {
+    "message": "Free Game Claimer"
+  },
+  "catalogLocale": {
+    "message": "zh_TW"
+  },
+  "headerClaimedCount_one": {
+    "message": "已領取 $COUNT$ 款遊戲",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "headerClaimedCount_other": {
+    "message": "已領取 $COUNT$ 款遊戲",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "47"
+      }
+    }
+  },
+  "headerClaimingStatus": {
+    "message": "領取中…"
+  },
+  "sponsorPill": {
+    "message": "贊助"
+  },
+  "sponsorPillTooltip": {
+    "message": "每月 $$5 起贊助，你的名字會出現在 README 中"
+  },
+  "tabsLabel": {
+    "message": "區段"
+  },
+  "settingsTab": {
+    "message": "設定"
+  },
+  "freeGamesTab": {
+    "message": "免費遊戲"
+  },
+  "autoClaimSwitch": {
+    "message": "自動領取"
+  },
+  "autoClaimPaused": {
+    "message": "已暫停"
+  },
+  "claimNowButton": {
+    "message": "立即領取"
+  },
+  "claimNowButtonBusy": {
+    "message": "領取中…"
+  },
+  "scheduleCheckLabel": {
+    "message": "檢查"
+  },
+  "scheduleAtLabel": {
+    "message": "時間"
+  },
+  "scheduleHourTooltip": {
+    "message": "當天的檢查會等到這個時間；如果那時瀏覽器沒開，會在你當天下次開啟瀏覽器時執行。"
+  },
+  "scheduleAnyTime": {
+    "message": "任何時間"
+  },
+  "frequencyBrowserStart": {
+    "message": "瀏覽器啟動時"
+  },
+  "frequencyHourly": {
+    "message": "每小時"
+  },
+  "frequencyEvery6Hours": {
+    "message": "每 6 小時"
+  },
+  "frequencyEvery12Hours": {
+    "message": "每 12 小時"
+  },
+  "frequencyDaily": {
+    "message": "每天一次"
+  },
+  "storesLabel": {
+    "message": "商店"
+  },
+  "loginLoggedIn": {
+    "message": "已登入"
+  },
+  "loginLoggedInTooltip": {
+    "message": "上次領取時已登入"
+  },
+  "loginLogIn": {
+    "message": "登入"
+  },
+  "loginSignedOutTooltip": {
+    "message": "上次領取時未登入，無法領取免費遊戲。點擊登入。"
+  },
+  "loginUncheckedTooltip": {
+    "message": "尚未檢查，點擊登入。"
+  },
+  "primeNoMembership": {
+    "message": "無 Prime"
+  },
+  "primeNoMembershipTooltip": {
+    "message": "已登入，但這個 Amazon 帳號沒有 Prime 會員，無法領取 Prime Gaming 的優惠。"
+  },
+  "healthNetwork": {
+    "message": "無法連線商店"
+  },
+  "healthChanged": {
+    "message": "商店有變動"
+  },
+  "healthCaptcha": {
+    "message": "需要驗證碼"
+  },
+  "healthUnfinished": {
+    "message": "領取未完成"
+  },
+  "healthTooltip": {
+    "message": "$DETAIL$（$TIME$）",
+    "placeholders": {
+      "detail": {
+        "content": "$1",
+        "example": "Epic's checkout didn't finish; it's retried tomorrow"
+      },
+      "time": {
+        "content": "$2",
+        "example": "11/14/2026, 9:30:00 AM"
+      }
+    }
+  },
+  "healthChangedTooltip": {
+    "message": "$DETAIL$（$TIME$）。擴充功能需要更新，點擊回報問題。",
+    "placeholders": {
+      "detail": {
+        "content": "$1",
+        "example": "Steam's search page has no result list"
+      },
+      "time": {
+        "content": "$2",
+        "example": "11/14/2026, 9:30:00 AM"
+      }
+    }
+  },
+  "healthEpicGetButtonMissing": {
+    "message": "在免費遊戲頁面上找不到「取得」按鈕"
+  },
+  "healthEpicCheckoutUnfinished": {
+    "message": "Epic 結帳未完成，明天會重試"
+  },
+  "healthEpicCaptcha": {
+    "message": "Epic 需要你在開啟的分頁中完成驗證碼才能領取"
+  },
+  "steamMinRatingLabel": {
+    "message": "最低評價"
+  },
+  "steamMinRatingTooltip": {
+    "message": "略過評價低於此標準的 Steam 免費遊戲。"
+  },
+  "steamMinRatingAny": {
+    "message": "不限"
+  },
+  "steamMinRatingOption": {
+    "message": "$PERCENT$%+ · $RATING$",
+    "placeholders": {
+      "percent": {
+        "content": "$1",
+        "example": "80"
+      },
+      "rating": {
+        "content": "$2",
+        "example": "Very Positive"
+      }
+    }
+  },
+  "steamMinRatingCustom": {
+    "message": "$PERCENT$%+ · 自訂",
+    "placeholders": {
+      "percent": {
+        "content": "$1",
+        "example": "73"
+      }
+    }
+  },
+  "steamRatingVeryPositive": {
+    "message": "極度好評"
+  },
+  "steamRatingMostlyPositive": {
+    "message": "大多好評"
+  },
+  "steamRatingMixed": {
+    "message": "褒貶不一"
+  },
+  "steamRatingMostlyNegative": {
+    "message": "大多負評"
+  },
+  "indieGalaWheel": {
+    "message": "幸運轉盤"
+  },
+  "indieGalaLastPrize": {
+    "message": "上次獎品：$PRIZE$（$DATE$）",
+    "placeholders": {
+      "prize": {
+        "content": "$1",
+        "example": "50 Galasilver"
+      },
+      "date": {
+        "content": "$2",
+        "example": "11/14/2026"
+      }
+    }
+  },
+  "indieGalaSteamKeyActivated": {
+    "message": "Steam 序號已啟用：$GAME$（$DATE$）",
+    "placeholders": {
+      "game": {
+        "content": "$1",
+        "example": "Some Game"
+      },
+      "date": {
+        "content": "$2",
+        "example": "11/14/2026"
+      }
+    }
+  },
+  "indieGalaSteamKeyOwned": {
+    "message": "已擁有該 Steam 序號的遊戲：$GAME$（$DATE$）",
+    "placeholders": {
+      "game": {
+        "content": "$1",
+        "example": "Some Game"
+      },
+      "date": {
+        "content": "$2",
+        "example": "11/14/2026"
+      }
+    }
+  },
+  "primeRegionalAccess": {
+    "message": "Amazon 會把你轉到 $HOST$。$BUTTON$，以便在那裡領取 Prime Gaming 遊戲。",
+    "placeholders": {
+      "host": {
+        "content": "$1",
+        "example": "luna.amazon.de"
+      },
+      "button": {
+        "content": "$2",
+        "example": "Allow access"
+      }
+    }
+  },
+  "primeRegionalAccessButton": {
+    "message": "允許存取"
+  },
+  "primeClaimOffersFor": {
+    "message": "領取以下商店的優惠："
+  },
+  "primePickAtLeastOne": {
+    "message": "至少選一個，否則不會領取任何內容。"
+  },
+  "legacyEmailLabel": {
+    "message": "Legacy Games 電子郵件"
+  },
+  "legacyEmailPlaceholder": {
+    "message": "you@example.com"
+  },
+  "legacyEmailInvalid": {
+    "message": "電子郵件無效：會幫你填好序號，剩下的由你完成。"
+  },
+  "legacyEmailHint": {
+    "message": "序號會寄到這個電子郵件（不訂閱電子報）。留空則每個都由你自己完成。"
+  },
+  "gamesEmpty": {
+    "message": "目前沒有免費遊戲。"
+  },
+  "gamesFilterEmpty": {
+    "message": "沒有符合此篩選條件的遊戲。"
+  },
+  "platformFilterLabel": {
+    "message": "依平台篩選"
+  },
+  "upcomingFilter": {
+    "message": "即將免費"
+  },
+  "upcomingFilterTooltip": {
+    "message": "顯示即將免費的遊戲"
+  },
+  "gameUpcoming": {
+    "message": "即將免費"
+  },
+  "gameClaimedPrime": {
+    "message": "已領取"
+  },
+  "gameInLibrary": {
+    "message": "已在收藏庫"
+  },
+  "gameFreeUntil": {
+    "message": "免費至 $DATE$",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Nov 13"
+      }
+    }
+  },
+  "gameFreeFrom": {
+    "message": "$DATE$ 起",
+    "placeholders": {
+      "date": {
+        "content": "$1",
+        "example": "Nov 13"
+      }
+    }
+  },
+  "gameDateRange": {
+    "message": "$START$ – $END$",
+    "placeholders": {
+      "start": {
+        "content": "$1",
+        "example": "Nov 13"
+      },
+      "end": {
+        "content": "$2",
+        "example": "Nov 20"
+      }
+    }
+  },
+  "pendingTitle": {
+    "message": "需要手動兌換"
+  },
+  "pendingStore": {
+    "message": "（$STORE$）",
+    "placeholders": {
+      "store": {
+        "content": "$1",
+        "example": "GOG"
+      }
+    }
+  },
+  "pendingCopy": {
+    "message": "複製"
+  },
+  "pendingCopied": {
+    "message": "已複製"
+  },
+  "pendingActivate": {
+    "message": "啟用"
+  },
+  "pendingTryAgain": {
+    "message": "重試"
+  },
+  "pendingDismiss": {
+    "message": "移除"
+  },
+  "pendingReasonSteamInvalid": {
+    "message": "Steam 表示此序號無效"
+  },
+  "pendingReasonSteamUsed": {
+    "message": "Steam 表示此序號已被其他帳號使用"
+  },
+  "pendingReasonSteamRateLimited": {
+    "message": "啟用次數過多，Steam 要求稍後再試"
+  },
+  "pendingReasonSteamRegion": {
+    "message": "Steam 表示此遊戲在你所在的國家/地區不販售"
+  },
+  "pendingReasonSteamNeedsBaseGame": {
+    "message": "Steam 表示需要先擁有本體遊戲"
+  },
+  "pendingReasonSteamSignedOut": {
+    "message": "請先登入 Steam，再啟用"
+  },
+  "pendingReasonSteamFailed": {
+    "message": "Steam 未能啟用"
+  },
+  "pendingReasonSteamUnfinished": {
+    "message": "Steam 啟用未完成"
+  },
+  "pendingReasonGiftNotShown": {
+    "message": "轉盤贏得的禮物還沒出現在 G. Giveaway 中"
+  },
+  "pendingReasonGiftPageNotOpened": {
+    "message": "禮物頁面沒有開啟"
+  },
+  "pendingReasonGiftNoKey": {
+    "message": "禮物頁面沒有顯示序號"
+  },
+  "pendingReasonNotSteamKey": {
+    "message": "不是 Steam 序號，請依 IndieGala 的說明兌換"
+  },
+  "pendingReasonKeyNotShown": {
+    "message": "IndieGala 沒有顯示序號"
+  },
+  "pendingIndieGalaKeyNotRead": {
+    "message": "沒有讀取到序號，它在 IndieGala 上。"
+  },
+  "pendingOpenOnIndieGala": {
+    "message": "在 IndieGala 開啟"
+  },
+  "pendingAmazonCodeNotRead": {
+    "message": "沒有讀取到序號，它在 Amazon 頁面上。"
+  },
+  "pendingOpenOnAmazon": {
+    "message": "在 Amazon 開啟"
+  },
+  "reviewPromptTitle": {
+    "message": "喜歡 Free Game Claimer 嗎？"
+  },
+  "reviewPromptBody_one": {
+    "message": "它已為你領取了 $COUNT$ 款遊戲。花幾秒評個分，能幫其他玩家找到它。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "reviewPromptBody_other": {
+    "message": "它已為你領取了 $COUNT$ 款遊戲。花幾秒評個分，能幫其他玩家找到它。",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "5"
+      }
+    }
+  },
+  "reviewPromptRate": {
+    "message": "去評分"
+  },
+  "promptNotNow": {
+    "message": "以後再說"
+  },
+  "reviewPromptReport": {
+    "message": "無法使用？回報問題"
+  },
+  "sponsorCardTitle_one": {
+    "message": "它已為你領取了 $COUNT$ 款遊戲",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "1"
+      }
+    }
+  },
+  "sponsorCardTitle_other": {
+    "message": "它已為你領取了 $COUNT$ 款遊戲",
+    "placeholders": {
+      "count": {
+        "content": "$1",
+        "example": "20"
+      }
+    }
+  },
+  "sponsorCardBody": {
+    "message": "免費，由我利用業餘時間開發。你的贊助能讓它在商店改版後繼續運作。"
+  },
+  "sponsorCardButton": {
+    "message": "$$2 起贊助"
+  },
+  "sponsorCardButtonTooltip": {
+    "message": "在 GitHub 上，按月或單次"
+  },
+  "footerContact": {
+    "message": "聯絡"
+  },
+  "footerDonate": {
+    "message": "捐款"
+  },
+  "badgeUpdated": {
+    "message": "新"
+  }
+}
