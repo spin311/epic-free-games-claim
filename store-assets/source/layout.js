@@ -10,6 +10,8 @@
     const LABEL_SPACING = 16;     // minimum gap between two labels
     const POPUP_INSET = 12;       // popup right edge past the toolbar button's right edge
     const ANCHOR_X = 6;           // leaders end in the popup's left margin (popup CSS px), crossing no text
+    const VISIBLE_MARGIN = 10;    // a dot stays this far above the image's bottom edge
+    const LABEL_MARGIN = 16;      // and a label this far
     const BROWSER = new URLSearchParams(location.search).get("browser") === "firefox" ? "firefox" : "chrome";
     const UI_DIR = `../raw-ui/${BROWSER}/`;
 
@@ -59,6 +61,10 @@
     // Labels sit left of the popup, each level with its element unless that would
     // overlap the label above; the leader then bends down to the element's row, and
     // ends in the popup's margin rather than running across its text.
+    // A translation can push an element lower than in English, near or past the
+    // image's bottom edge: the dot then goes to the middle of the part still in the
+    // image, and the labels move up (with the ones above them) to stay inside it.
+    // English images have nothing that low, so they come out as before.
     function drawCallouts() {
         const popup = document.querySelector(".popup");
         const callouts = [...document.querySelectorAll(".callout")];
@@ -66,22 +72,34 @@
         const rects = (window.RECTS || {})[popup.dataset.ui];
         if (!rects) throw new Error(`no rects for ${popup.dataset.ui}`);
         const box = popup.getBoundingClientRect();
+        const shot = document.querySelector(".shot").getBoundingClientRect();
+        const visibleBottom = shot.bottom - VISIBLE_MARGIN;
+        const labelBottom = shot.bottom - LABEL_MARGIN;
         const svg = document.querySelector(".leaders");
         const items = callouts.map((el) => {
             const r = rects[el.dataset.target];
             if (!r) throw new Error(`no rect for ${el.dataset.target}`);
-            return { el, x: box.left + ANCHOR_X * UI_SCALE, y: box.top + (r.y + r.h / 2) * UI_SCALE };
+            const top = box.top + r.y * UI_SCALE;
+            const bottom = top + r.h * UI_SCALE;
+            return { el, x: box.left + ANCHOR_X * UI_SCALE, y: (top + Math.min(bottom, visibleBottom)) / 2, h: el.offsetHeight };
         }).sort((a, b) => a.y - b.y);
 
         let previousBottom = -Infinity;
+        for (const item of items) {
+            item.labelY = Math.max(item.y, previousBottom + LABEL_SPACING + item.h / 2);
+            previousBottom = item.labelY + item.h / 2;
+        }
+        let nextTop = labelBottom + LABEL_SPACING;
+        for (const item of [...items].reverse()) {
+            item.labelY = Math.min(item.labelY, nextTop - LABEL_SPACING - item.h / 2);
+            nextTop = item.labelY - item.h / 2;
+        }
+
         const labelRight = box.left - LABEL_GAP;
         for (const item of items) {
-            const height = item.el.offsetHeight;
-            const labelY = Math.max(item.y, previousBottom + LABEL_SPACING + height / 2);
-            previousBottom = labelY + height / 2;
             item.el.style.left = `${labelRight - item.el.offsetWidth}px`;
-            item.el.style.top = `${labelY - height / 2}px`;
-            const d = leaderPath(labelRight, labelY, item.x, item.y);
+            item.el.style.top = `${item.labelY - item.h / 2}px`;
+            const d = leaderPath(labelRight, item.labelY, item.x, item.y);
             svg.insertAdjacentHTML("beforeend",
                 `<path class="halo" d="${d}"/><path class="line" d="${d}"/><circle cx="${item.x}" cy="${item.y}" r="5"/>`);
         }
