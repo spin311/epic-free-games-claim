@@ -49,7 +49,7 @@ function PendingRedemptions() {
                     <div className="pending-redemption" key={key}>
                         <div className="pending-redemption-info">
                             <p className="pending-redemption-title">
-                                {entry.title}
+                                <span className="pending-redemption-name">{entry.title}</span>
                                 <span className="pending-redemption-platform"> {t("pendingStore", entry.platform)}</span>
                             </p>
                             {entry.code

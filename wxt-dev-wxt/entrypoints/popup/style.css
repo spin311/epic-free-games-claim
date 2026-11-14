@@ -258,14 +258,19 @@ select {
   border-radius: var(--radius);
 }
 
+/* Wraps when a translation is long: the switch keeps its line, and Claim
+   now moves under it, flush right. */
 .setting-row {
   display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
   align-items: center;
   gap: 10px;
 }
 
 .switch-label {
   flex: 1;
+  min-width: max-content;
   display: flex;
   align-items: center;
   gap: 6px;
@@ -293,6 +298,35 @@ select {
 
 .schedule-row select {
   flex: 1;
+}
+
+/* A label and its dropdown. Layout-neutral unless field-sizing is there. */
+.schedule-pair {
+  display: contents;
+}
+
+/* Each dropdown at least as wide as its chosen option, so a translation too
+   long for one row moves "at [hour]" to its own line instead of cutting the
+   text. The 8.5em floor is above English's chosen options ("Once a day",
+   "Any time", the hours), so both dropdowns stay the same width as without
+   this. Browsers without field-sizing keep the plain one-line row. */
+@supports (field-sizing: content) {
+  .schedule-row {
+    flex-wrap: wrap;
+  }
+
+  .schedule-pair {
+    flex: 1 1 auto;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .schedule-pair select {
+    flex: 1 1 auto;
+    min-width: 8.5em;
+    field-sizing: content;
+  }
 }
 
 .claim-now {
@@ -354,6 +388,13 @@ select {
   min-height: 22px;
 }
 
+/* A store's row: when its status labels don't fit beside the name, they
+   move to a second line, flush right, and the name stays on one line. */
+.platform-group > .check-row {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 .check-row input[type="checkbox"] {
   flex: none;
   width: 15px;
@@ -370,6 +411,7 @@ select {
 }
 
 .platform-group > .check-row label {
+  min-width: max-content;
   font-weight: 600;
 }
 
@@ -389,13 +431,17 @@ select {
 
 .sub-row {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
   color: var(--muted);
 }
 
+/* Never narrower than its widest option: a long label moves the dropdown
+   to its own line instead of cutting the text. */
 .sub-row select {
-  flex: 1;
+  flex: 1 1 auto;
+  min-width: auto;
 }
 
 .hint {
@@ -520,8 +566,10 @@ a.health-status:hover {
   color: var(--muted);
 }
 
+/* Wraps: a report link that doesn't fit drops to its own line. */
 .prompt-actions {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   gap: 8px;
 }
@@ -757,8 +805,10 @@ a.health-status:hover {
   font-weight: 650;
 }
 
+/* The actions move under the text when they'd leave it less than 8em. */
 .pending-redemption {
   display: flex;
+  flex-wrap: wrap;
   align-items: center;
   justify-content: space-between;
   gap: 10px;
@@ -768,19 +818,27 @@ a.health-status:hover {
 }
 
 .pending-redemption-info {
+  flex: 1 1 8em;
   min-width: 0;
 }
 
+/* The game's title is shortened before the store after it is. */
 .pending-redemption-title {
-  overflow: hidden;
+  display: flex;
   font-weight: 650;
-  text-overflow: ellipsis;
   white-space: nowrap;
 }
 
+.pending-redemption-name {
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
 .pending-redemption-platform {
+  flex: none;
   color: var(--faint);
   font-weight: 400;
+  white-space: pre;
 }
 
 .pending-redemption-code {
@@ -790,6 +848,7 @@ a.health-status:hover {
 
 .pending-redemption-actions {
   flex: none;
+  margin-left: auto;
   display: flex;
   align-items: center;
   gap: 6px;

@@ -18,24 +18,28 @@ function hourLabel(hour: number): string {
     return new Date(2000, 0, 1, hour).toLocaleTimeString(uiLocale(), { hour: "numeric", minute: "2-digit" });
 }
 
-// One row: "Check [Once a day] at [Any time]".
+// One row: "Check [Once a day] at [Any time]". Each label and its dropdown
+// form a pair, which moves to a line of its own when a translation is too
+// long for one row (see .schedule-pair).
 function FrequencySelect({ value, onChange, claimHour, onClaimHourChange }: FrequencySelectProps) {
     return (
         <div className="schedule-row">
-            <label htmlFor="frequency-select">{t("scheduleCheckLabel")}</label>
-            <select
-                id="frequency-select"
-                value={value}
-                onChange={(e) => onChange(e.target.value as ClaimFrequency)}
-            >
-                {Object.values(ClaimFrequency).map((frequency) => (
-                    <option key={frequency} value={frequency}>
-                        {t(ClaimFrequencyLabelKeys[frequency])}
-                    </option>
-                ))}
-            </select>
+            <span className="schedule-pair">
+                <label htmlFor="frequency-select">{t("scheduleCheckLabel")}</label>
+                <select
+                    id="frequency-select"
+                    value={value}
+                    onChange={(e) => onChange(e.target.value as ClaimFrequency)}
+                >
+                    {Object.values(ClaimFrequency).map((frequency) => (
+                        <option key={frequency} value={frequency}>
+                            {t(ClaimFrequencyLabelKeys[frequency])}
+                        </option>
+                    ))}
+                </select>
+            </span>
             {value === ClaimFrequency.DAILY && (
-                <>
+                <span className="schedule-pair">
                     <label htmlFor="claim-hour-select">{t("scheduleAtLabel")}</label>
                     <select
                         id="claim-hour-select"
@@ -48,7 +52,7 @@ function FrequencySelect({ value, onChange, claimHour, onClaimHourChange }: Freq
                             <option key={hour} value={hour}>{hourLabel(hour)}</option>
                         ))}
                     </select>
-                </>
+                </span>
             )}
         </div>
     );
