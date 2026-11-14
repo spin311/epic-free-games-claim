@@ -3,6 +3,9 @@
 // elements recorded in ../raw-ui/<browser>/rects.js (?browser=firefox picks Firefox's
 // captures; Chrome's otherwise). Sets body[data-ready] to "1" when done,
 // or to an error message (tools/render.mjs fails on that).
+// ?locale=<name> uses the captures in ../raw-ui/<browser>/<name>/ and the captions
+// tools/render.mjs hands over in window.STORE_I18N (from source/i18n/<name>.json),
+// and shrinks a headline or subline that would wrap until it fits one line.
 (() => {
     const UI_SCALE = 1.05;        // popup CSS px -> image px
     const CAPTURE_SCALE = 2;      // captures are taken at 2x
@@ -13,7 +16,10 @@
     const VISIBLE_MARGIN = 10;    // a dot stays this far above the image's bottom edge
     const LABEL_MARGIN = 16;      // and a label this far
     const BROWSER = new URLSearchParams(location.search).get("browser") === "firefox" ? "firefox" : "chrome";
-    const UI_DIR = `../raw-ui/${BROWSER}/`;
+    const LOCALE = new URLSearchParams(location.search).get("locale");
+    const UI_DIR = LOCALE ? `../raw-ui/${BROWSER}/${LOCALE}/` : `../raw-ui/${BROWSER}/`;
+    const MIN_HEADLINE_PX = 36;   // a localized headline shrinks to one line, not below this
+    const MIN_SUBLINE_PX = 17;
 
     const ICONS = {
         back: '<path d="M15 5l-7 7 7 7"/>',
@@ -105,16 +111,62 @@
         }
     }
 
+    // The locale's captions replace the English ones in the page.
+    function applyCaptions() {
+        const i18n = window.STORE_I18N;
+        if (!i18n?.captions) throw new Error(`no captions for ${LOCALE}: render it with tools/render.mjs --locale ${LOCALE}`);
+        const { h, s, c } = i18n.captions;
+        const callouts = [...document.querySelectorAll(".callout")];
+        if (callouts.length !== c.length) throw new Error(`${callouts.length} callouts in the page, ${c.length} captions`);
+        document.documentElement.lang = i18n.lang;
+        document.title = h;
+        document.querySelector(".caption h1").textContent = h;
+        document.querySelector(".caption p").textContent = s;
+        callouts.forEach((el, i) => { el.textContent = c[i]; });
+    }
+
+    // Shrinks a caption line in 0.5px steps until it fits the caption's width on one line.
+    function fitOneLine(el, minPx) {
+        const max = parseFloat(getComputedStyle(el.parentElement).maxWidth);
+        el.style.whiteSpace = "nowrap";
+        const start = parseFloat(getComputedStyle(el).fontSize);
+        let size = start;
+        while (el.scrollWidth > max + 0.5 && size > minPx) {
+            size -= 0.5;
+            el.style.fontSize = `${size}px`;
+        }
+        if (el.scrollWidth > max + 0.5) throw new Error(`"${el.textContent}" doesn't fit one line even at ${minPx}px: shorten it`);
+        return size === start ? null : `${start}px -> ${size}px`;
+    }
+
+    function fitCaptions() {
+        const shrunk = {
+            headline: fitOneLine(document.querySelector(".caption h1"), MIN_HEADLINE_PX),
+            subline: fitOneLine(document.querySelector(".caption p"), MIN_SUBLINE_PX),
+        };
+        document.body.dataset.shrunk = JSON.stringify(shrunk);
+    }
+
     function start() {
+        try {
+            if (LOCALE) applyCaptions();
+        } catch (e) {
+            fail(e.message);
+            return;
+        }
         document.querySelectorAll(".browser").forEach(buildBrowser);
         const images = [...document.querySelectorAll("img[data-ui]")];
         images.forEach((img) => { img.src = UI_DIR + img.dataset.ui; });
         const script = document.createElement("script");
         script.src = `${UI_DIR}rects.js`;
         script.onerror = () => fail(`${UI_DIR}rects.js missing: run the ${BROWSER} capture first`);
+        // Lay out now, so the fonts the captions need are already loading when
+        // fonts.ready is read.
+        void document.body.offsetHeight;
         script.onload = () => Promise.all([...[...document.images].map((img) => img.decode()), document.fonts.ready])
             .then(() => {
                 if (!document.fonts.check('700 46px "Mona Sans"')) throw new Error("Mona Sans not loaded");
+                if (LOCALE) fitCaptions();
                 sizeCaptures(images);
                 placePopup();
                 drawCallouts();
