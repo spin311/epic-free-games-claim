@@ -1,0 +1,44 @@
+{
+  "screenshot-1-games": {
+    "h": "Juegos gratis, reclamados para ti",
+    "s": "Epic Games, Prime Gaming, GOG, IndieGala y Steam. Mantén la sesión iniciada y hace el resto.",
+    "c": [
+      "Filtra por tienda",
+      "Adónde va cada juego de Prime"
+    ]
+  },
+  "screenshot-2-settings": {
+    "h": "Configúralo una vez y olvídate",
+    "s": "Busca juegos gratis una vez al día a la hora que elijas, o incluso cada hora.",
+    "c": [
+      "Pausa cuando quieras",
+      "Elige cuándo revisa",
+      "Omite juegos de Steam mal valorados",
+      "Te avisa cuándo iniciar sesión"
+    ]
+  },
+  "screenshot-3-prime": {
+    "h": "Prime Gaming, enviado adonde quieras",
+    "s": "Elige adónde van los juegos de Prime Gaming: Amazon Games, Epic, GOG, Microsoft Store o Legacy Games.",
+    "c": [
+      "Estado de sesión de cada tienda",
+      "Elige las tiendas de las ofertas Prime"
+    ]
+  },
+  "screenshot-4-library": {
+    "h": "Descubre qué es gratis ahora y qué viene después",
+    "s": "Cuándo termina cada juego gratis, el de la próxima semana y los que ya están en tu biblioteca.",
+    "c": [
+      "Cuándo termina",
+      "Ya en tu biblioteca",
+      "El juego gratis de la próxima semana"
+    ]
+  },
+  "screenshot-5-pending": {
+    "h": "No se pierde ningún código",
+    "s": "Si una tienda pide un captcha o iniciar sesión, el código espera en la ventana hasta que lo canjees.",
+    "c": [
+      "Cópialo o reinténtalo"
+    ]
+  }
+}

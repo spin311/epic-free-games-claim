@@ -1,0 +1,36 @@
+{
+  "screenshot-1-games": {
+    "h": "Game miễn phí, tự động nhận giúp bạn",
+    "s": "Epic Games, Prime Gaming, GOG, IndieGala và Steam. Chỉ cần giữ đăng nhập, tiện ích lo phần còn lại.",
+    "c": [
+      "Lọc theo cửa hàng",
+      "Mỗi game Prime về đâu"
+    ]
+  },
+  "screenshot-2-settings": {
+    "h": "Cài một lần rồi quên đi",
+    "s": "Kiểm tra game miễn phí mới mỗi ngày một lần vào giờ bạn chọn, hoặc thậm chí mỗi giờ.",
+    "c": [
+      "Tạm dừng bất cứ lúc nào",
+      "Chọn thời điểm kiểm tra",
+      "Bỏ qua game Steam bị đánh giá thấp",
+      "Nhắc bạn khi cần đăng nhập"
+    ]
+  },
+  "screenshot-4-library": {
+    "h": "Biết game nào đang và sắp miễn phí",
+    "s": "Khi nào mỗi đợt miễn phí kết thúc, game miễn phí tuần sau, và những game đã có trong thư viện.",
+    "c": [
+      "Khi nào hết miễn phí",
+      "Đã có trong thư viện",
+      "Game miễn phí tuần sau"
+    ]
+  },
+  "screenshot-5-pending": {
+    "h": "Không bỏ sót mã nào",
+    "s": "Nếu cửa hàng yêu cầu captcha hoặc đăng nhập, mã sẽ chờ trong cửa sổ tiện ích cho đến khi bạn đổi.",
+    "c": [
+      "Sao chép hoặc thử lại"
+    ]
+  }
+}

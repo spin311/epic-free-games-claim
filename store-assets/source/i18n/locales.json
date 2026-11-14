@@ -1,0 +1,38 @@
+{
+  "_note": "Localized Chrome Web Store screenshots. tag: the Chrome UI language the popup is captured in. skip: screenshots this locale doesn't get. copies: locales whose images are copied from another one. Captions are in <locale>.json, keyed by the page in source/ (h = headline, s = subline, c = callouts in the page's order); English stays in the HTML.",
+  "locales": {
+    "zh_CN": {
+      "tag": "zh-CN",
+      "skip": [
+        "screenshot-3-prime"
+      ]
+    },
+    "zh_TW": {
+      "tag": "zh-TW",
+      "skip": [
+        "screenshot-3-prime"
+      ]
+    },
+    "pt_BR": {
+      "tag": "pt-BR"
+    },
+    "es": {
+      "tag": "es"
+    },
+    "fr": {
+      "tag": "fr"
+    },
+    "vi": {
+      "tag": "vi",
+      "skip": [
+        "screenshot-3-prime"
+      ]
+    }
+  },
+  "skipReasons": {
+    "screenshot-3-prime": "Prime Gaming isn't offered in mainland China, Taiwan or Vietnam."
+  },
+  "copies": {
+    "es_419": "es"
+  }
+}

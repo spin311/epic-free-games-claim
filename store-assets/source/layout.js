@@ -3,6 +3,9 @@
 // elements recorded in ../raw-ui/<browser>/rects.js (?browser=firefox picks Firefox's
 // captures; Chrome's otherwise). Sets body[data-ready] to "1" when done,
 // or to an error message (tools/render.mjs fails on that).
+// ?locale=<name> uses the captures in ../raw-ui/<browser>/<name>/ and the captions
+// tools/render.mjs hands over in window.STORE_I18N (from source/i18n/<name>.json),
+// and shrinks a headline or subline that would wrap until it fits one line.
 (() => {
     const UI_SCALE = 1.05;        // popup CSS px -> image px
     const CAPTURE_SCALE = 2;      // captures are taken at 2x
@@ -10,8 +13,13 @@
     const LABEL_SPACING = 16;     // minimum gap between two labels
     const POPUP_INSET = 12;       // popup right edge past the toolbar button's right edge
     const ANCHOR_X = 6;           // leaders end in the popup's left margin (popup CSS px), crossing no text
+    const VISIBLE_MARGIN = 10;    // a dot stays this far above the image's bottom edge
+    const LABEL_MARGIN = 16;      // and a label this far
     const BROWSER = new URLSearchParams(location.search).get("browser") === "firefox" ? "firefox" : "chrome";
-    const UI_DIR = `../raw-ui/${BROWSER}/`;
+    const LOCALE = new URLSearchParams(location.search).get("locale");
+    const UI_DIR = LOCALE ? `../raw-ui/${BROWSER}/${LOCALE}/` : `../raw-ui/${BROWSER}/`;
+    const MIN_HEADLINE_PX = 36;   // a localized headline shrinks to one line, not below this
+    const MIN_SUBLINE_PX = 17;
 
     const ICONS = {
         back: '<path d="M15 5l-7 7 7 7"/>',
@@ -59,6 +67,10 @@
     // Labels sit left of the popup, each level with its element unless that would
     // overlap the label above; the leader then bends down to the element's row, and
     // ends in the popup's margin rather than running across its text.
+    // A translation can push an element lower than in English, near or past the
+    // image's bottom edge: the dot then goes to the middle of the part still in the
+    // image, and the labels move up (with the ones above them) to stay inside it.
+    // English images have nothing that low, so they come out as before.
     function drawCallouts() {
         const popup = document.querySelector(".popup");
         const callouts = [...document.querySelectorAll(".callout")];
@@ -66,37 +78,95 @@
         const rects = (window.RECTS || {})[popup.dataset.ui];
         if (!rects) throw new Error(`no rects for ${popup.dataset.ui}`);
         const box = popup.getBoundingClientRect();
+        const shot = document.querySelector(".shot").getBoundingClientRect();
+        const visibleBottom = shot.bottom - VISIBLE_MARGIN;
+        const labelBottom = shot.bottom - LABEL_MARGIN;
         const svg = document.querySelector(".leaders");
         const items = callouts.map((el) => {
             const r = rects[el.dataset.target];
             if (!r) throw new Error(`no rect for ${el.dataset.target}`);
-            return { el, x: box.left + ANCHOR_X * UI_SCALE, y: box.top + (r.y + r.h / 2) * UI_SCALE };
+            const top = box.top + r.y * UI_SCALE;
+            const bottom = top + r.h * UI_SCALE;
+            return { el, x: box.left + ANCHOR_X * UI_SCALE, y: (top + Math.min(bottom, visibleBottom)) / 2, h: el.offsetHeight };
         }).sort((a, b) => a.y - b.y);
 
         let previousBottom = -Infinity;
+        for (const item of items) {
+            item.labelY = Math.max(item.y, previousBottom + LABEL_SPACING + item.h / 2);
+            previousBottom = item.labelY + item.h / 2;
+        }
+        let nextTop = labelBottom + LABEL_SPACING;
+        for (const item of [...items].reverse()) {
+            item.labelY = Math.min(item.labelY, nextTop - LABEL_SPACING - item.h / 2);
+            nextTop = item.labelY - item.h / 2;
+        }
+
         const labelRight = box.left - LABEL_GAP;
         for (const item of items) {
-            const height = item.el.offsetHeight;
-            const labelY = Math.max(item.y, previousBottom + LABEL_SPACING + height / 2);
-            previousBottom = labelY + height / 2;
             item.el.style.left = `${labelRight - item.el.offsetWidth}px`;
-            item.el.style.top = `${labelY - height / 2}px`;
-            const d = leaderPath(labelRight, labelY, item.x, item.y);
+            item.el.style.top = `${item.labelY - item.h / 2}px`;
+            const d = leaderPath(labelRight, item.labelY, item.x, item.y);
             svg.insertAdjacentHTML("beforeend",
                 `<path class="halo" d="${d}"/><path class="line" d="${d}"/><circle cx="${item.x}" cy="${item.y}" r="5"/>`);
         }
     }
 
+    // The locale's captions replace the English ones in the page.
+    function applyCaptions() {
+        const i18n = window.STORE_I18N;
+        if (!i18n?.captions) throw new Error(`no captions for ${LOCALE}: render it with tools/render.mjs --locale ${LOCALE}`);
+        const { h, s, c } = i18n.captions;
+        const callouts = [...document.querySelectorAll(".callout")];
+        if (callouts.length !== c.length) throw new Error(`${callouts.length} callouts in the page, ${c.length} captions`);
+        document.documentElement.lang = i18n.lang;
+        document.title = h;
+        document.querySelector(".caption h1").textContent = h;
+        document.querySelector(".caption p").textContent = s;
+        callouts.forEach((el, i) => { el.textContent = c[i]; });
+    }
+
+    // Shrinks a caption line in 0.5px steps until it fits the caption's width on one line.
+    function fitOneLine(el, minPx) {
+        const max = parseFloat(getComputedStyle(el.parentElement).maxWidth);
+        el.style.whiteSpace = "nowrap";
+        const start = parseFloat(getComputedStyle(el).fontSize);
+        let size = start;
+        while (el.scrollWidth > max + 0.5 && size > minPx) {
+            size -= 0.5;
+            el.style.fontSize = `${size}px`;
+        }
+        if (el.scrollWidth > max + 0.5) throw new Error(`"${el.textContent}" doesn't fit one line even at ${minPx}px: shorten it`);
+        return size === start ? null : `${start}px -> ${size}px`;
+    }
+
+    function fitCaptions() {
+        const shrunk = {
+            headline: fitOneLine(document.querySelector(".caption h1"), MIN_HEADLINE_PX),
+            subline: fitOneLine(document.querySelector(".caption p"), MIN_SUBLINE_PX),
+        };
+        document.body.dataset.shrunk = JSON.stringify(shrunk);
+    }
+
     function start() {
+        try {
+            if (LOCALE) applyCaptions();
+        } catch (e) {
+            fail(e.message);
+            return;
+        }
         document.querySelectorAll(".browser").forEach(buildBrowser);
         const images = [...document.querySelectorAll("img[data-ui]")];
         images.forEach((img) => { img.src = UI_DIR + img.dataset.ui; });
         const script = document.createElement("script");
         script.src = `${UI_DIR}rects.js`;
         script.onerror = () => fail(`${UI_DIR}rects.js missing: run the ${BROWSER} capture first`);
+        // Lay out now, so the fonts the captions need are already loading when
+        // fonts.ready is read.
+        void document.body.offsetHeight;
         script.onload = () => Promise.all([...[...document.images].map((img) => img.decode()), document.fonts.ready])
             .then(() => {
                 if (!document.fonts.check('700 46px "Mona Sans"')) throw new Error("Mona Sans not loaded");
+                if (LOCALE) fitCaptions();
                 sizeCaptures(images);
                 placePopup();
                 drawCallouts();

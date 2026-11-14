@@ -1,0 +1,44 @@
+{
+  "screenshot-1-games": {
+    "h": "Des jeux gratuits, récupérés pour vous",
+    "s": "Epic Games, Prime Gaming, GOG, IndieGala et Steam. Restez connecté, il s'occupe du reste.",
+    "c": [
+      "Filtrer par boutique",
+      "Où va chaque jeu Prime"
+    ]
+  },
+  "screenshot-2-settings": {
+    "h": "Réglez-le une fois, puis oubliez-le",
+    "s": "Il cherche les nouveaux jeux offerts une fois par jour à l'heure choisie, ou jusqu'à toutes les heures.",
+    "c": [
+      "Mettez en pause à tout moment",
+      "Choisissez quand il vérifie",
+      "Ignorez les jeux Steam mal notés",
+      "Vous dit quand vous connecter"
+    ]
+  },
+  "screenshot-3-prime": {
+    "h": "Prime Gaming, envoyé où vous voulez",
+    "s": "Choisissez où vont les jeux Prime Gaming : Amazon Games, Epic, GOG, Microsoft Store ou Legacy Games.",
+    "c": [
+      "État de connexion de chaque boutique",
+      "Choisissez les boutiques des offres Prime"
+    ]
+  },
+  "screenshot-4-library": {
+    "h": "Voyez ce qui est gratuit maintenant et ensuite",
+    "s": "La fin de chaque offre, le jeu gratuit de la semaine prochaine et ceux déjà dans votre bibliothèque.",
+    "c": [
+      "Fin de l'offre",
+      "Déjà dans votre bibliothèque",
+      "Le jeu gratuit de la semaine prochaine"
+    ]
+  },
+  "screenshot-5-pending": {
+    "h": "Aucun code ne se perd",
+    "s": "Si une boutique demande un captcha ou une connexion, le code attend dans la fenêtre jusqu'à ce que vous l'utilisiez.",
+    "c": [
+      "Copiez-le ou réessayez"
+    ]
+  }
+}
