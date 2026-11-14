@@ -3,7 +3,7 @@
     "message": "Free Game Claimer: game miễn phí Epic, Steam"
   },
   "extDescription": {
-    "message": "Tự động nhận game miễn phí từ Epic Games Store, Steam, GOG, IndieGala và Prime Gaming. Chỉ cần giữ đăng nhập."
+    "message": "Tự động nhận game miễn phí từ Epic Games Store, Steam, GOG, IndieGala và Prime Gaming. Chỉ cần luôn đăng nhập."
   },
   "extActionTitle": {
     "message": "Free Game Claimer"
@@ -192,13 +192,13 @@
     "message": "Rất tích cực"
   },
   "steamRatingMostlyPositive": {
-    "message": "Phần lớn tích cực"
+    "message": "Khá tích cực"
   },
   "steamRatingMixed": {
-    "message": "Hỗn hợp"
+    "message": "Trái chiều"
   },
   "steamRatingMostlyNegative": {
-    "message": "Phần lớn tiêu cực"
+    "message": "Khá tiêu cực"
   },
   "indieGalaWheel": {
     "message": "Vòng quay may mắn"
@@ -356,7 +356,7 @@
     "message": "Thử lại"
   },
   "pendingDismiss": {
-    "message": "Bỏ qua"
+    "message": "Xóa"
   },
   "pendingReasonSteamInvalid": {
     "message": "Steam báo key không hợp lệ"

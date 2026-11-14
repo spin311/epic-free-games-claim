@@ -48,7 +48,7 @@
     "message": "Juegos gratis"
   },
   "autoClaimSwitch": {
-    "message": "Reclamo automático"
+    "message": "Auto-reclamar"
   },
   "autoClaimPaused": {
     "message": "en pausa"
@@ -111,7 +111,7 @@
     "message": "Sesión iniciada, pero esta cuenta de Amazon no tiene Prime, así que no se pueden reclamar las ofertas de Prime Gaming."
   },
   "healthNetwork": {
-    "message": "Tienda sin conexión"
+    "message": "Tienda inaccesible"
   },
   "healthChanged": {
     "message": "La tienda cambió"
@@ -120,7 +120,7 @@
     "message": "Requiere captcha"
   },
   "healthUnfinished": {
-    "message": "Reclamo incompleto"
+    "message": "Sin completar"
   },
   "healthTooltip": {
     "message": "$DETAIL$ ($TIME$)",
@@ -149,13 +149,13 @@
     }
   },
   "healthEpicGetButtonMissing": {
-    "message": "No se encontró el botón \"Obtener\" en la página de un juego gratis"
+    "message": "No se encontró el botón \"Get\" en la página de un juego gratis"
   },
   "healthEpicCheckoutUnfinished": {
-    "message": "El pago de Epic no terminó; se reintentará mañana"
+    "message": "El pedido en Epic no se completó; se reintentará mañana"
   },
   "healthEpicCaptcha": {
-    "message": "Epic pide resolver un captcha en su pestaña abierta para terminar el reclamo"
+    "message": "Epic pide resolver un captcha en su pestaña abierta para terminar de reclamar el juego"
   },
   "steamMinRatingLabel": {
     "message": "Valoración mín."

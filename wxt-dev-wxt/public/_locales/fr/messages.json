@@ -149,7 +149,7 @@
     }
   },
   "healthEpicGetButtonMissing": {
-    "message": "Bouton « Obtenir » introuvable sur la page d’un jeu gratuit"
+    "message": "Bouton « Get » introuvable sur la page d’un jeu gratuit"
   },
   "healthEpicCheckoutUnfinished": {
     "message": "La commande Epic n’a pas abouti ; nouvel essai demain"
@@ -356,7 +356,7 @@
     "message": "Réessayer"
   },
   "pendingDismiss": {
-    "message": "Ignorer"
+    "message": "Retirer"
   },
   "pendingReasonSteamInvalid": {
     "message": "Steam indique que la clé n’est pas valide"
@@ -458,7 +458,7 @@
     }
   },
   "sponsorCardBody": {
-    "message": "Gratuit et développé sur mon temps libre. Votre soutien le fait fonctionner quand les boutiques changent."
+    "message": "Gratuit et développé sur mon temps libre. Votre soutien permet de le maintenir à jour quand les boutiques changent."
   },
   "sponsorCardButton": {
     "message": "Soutenir dès 2 $$ US"

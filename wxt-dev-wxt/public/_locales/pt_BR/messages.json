@@ -111,7 +111,7 @@
     "message": "Conectado, mas esta conta da Amazon não tem Prime, então as ofertas do Prime Gaming não podem ser resgatadas."
   },
   "healthNetwork": {
-    "message": "Loja fora do ar"
+    "message": "Loja inacessível"
   },
   "healthChanged": {
     "message": "A loja mudou"
@@ -149,10 +149,10 @@
     }
   },
   "healthEpicGetButtonMissing": {
-    "message": "Não encontrou o botão \"Obter\" na página de um jogo grátis"
+    "message": "Não foi possível encontrar o botão \"Get\" na página de um jogo grátis"
   },
   "healthEpicCheckoutUnfinished": {
-    "message": "O checkout da Epic não terminou; tenta de novo amanhã"
+    "message": "O checkout da Epic não terminou; nova tentativa amanhã"
   },
   "healthEpicCaptcha": {
     "message": "A Epic quer que você resolva um captcha na aba aberta para concluir o resgate"
@@ -192,13 +192,13 @@
     "message": "Muito positivas"
   },
   "steamRatingMostlyPositive": {
-    "message": "Ligeiramente positivas"
+    "message": "Bem positivas"
   },
   "steamRatingMixed": {
-    "message": "Neutras"
+    "message": "Mistas"
   },
   "steamRatingMostlyNegative": {
-    "message": "Ligeiramente negativas"
+    "message": "Bem negativas"
   },
   "indieGalaWheel": {
     "message": "Roda da Fortuna"

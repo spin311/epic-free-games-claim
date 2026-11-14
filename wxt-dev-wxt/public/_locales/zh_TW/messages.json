@@ -149,7 +149,7 @@
     }
   },
   "healthEpicGetButtonMissing": {
-    "message": "在免費遊戲頁面上找不到「取得」按鈕"
+    "message": "在免費遊戲頁面上找不到「Get」按鈕"
   },
   "healthEpicCheckoutUnfinished": {
     "message": "Epic 結帳未完成，明天會重試"
